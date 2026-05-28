@@ -53,29 +53,51 @@ export class MatrixSource implements Source {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    await this.client.startClient({ initialSyncLimit: 20 });
+    // Wire the sync listener BEFORE startClient so we don't miss the first
+    // PREPARED. Log every transition so the browser console tells us where
+    // we get stuck if sync never lands.
     const ready = ['PREPARED', 'SYNCING'];
-    if (ready.includes(this.client.getSyncState() ?? '')) return;
-    // Wait for the first sync, but don't hang forever — surface a real error
-    // if the homeserver never reaches PREPARED within 30s.
-    await new Promise<void>((resolve, reject) => {
+    const startedAt = performance.now();
+    let resolved = false;
+    const ready$ = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.client.removeListener('sync' as never, handler as never);
-        reject(new Error(`Matrix sync timeout (state: ${this.client.getSyncState() ?? 'null'})`));
-      }, 30_000);
-      const handler = (state: string) => {
+        if (resolved) return;
+        const state = this.client.getSyncState() ?? 'null';
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail] Matrix sync timeout', {
+          state,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        });
+        reject(new Error(`Matrix sync timeout (state: ${state}) — check browser console for SDK errors.`));
+      }, 45_000);
+      const handler = (state: string, prev: string | null, data: unknown) => {
+        // eslint-disable-next-line no-console
+        console.info('[wukkiemail] sync ->', state, { prev, data });
         if (ready.includes(state)) {
+          resolved = true;
           clearTimeout(timer);
           this.client.removeListener('sync' as never, handler as never);
           resolve();
         } else if (state === 'ERROR') {
+          resolved = true;
           clearTimeout(timer);
           this.client.removeListener('sync' as never, handler as never);
-          reject(new Error('Matrix sync entered ERROR state — homeserver unreachable?'));
+          const err = (data as { error?: { message?: string } })?.error?.message ?? 'unknown';
+          reject(new Error(`Matrix sync ERROR: ${err}`));
         }
       };
       this.client.on('sync' as never, handler as never);
     });
+
+    try {
+      await this.client.startClient({ initialSyncLimit: 1 });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[wukkiemail] startClient threw', e);
+      throw e;
+    }
+    if (ready.includes(this.client.getSyncState() ?? '')) return;
+    await ready$;
   }
 
   async stop(): Promise<void> {

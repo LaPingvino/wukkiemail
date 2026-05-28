@@ -2,7 +2,7 @@
 // Homeserver discovered via /.well-known/matrix/client per the spec.
 // Credentials persisted in localStorage; the client is rebuilt on reload.
 
-import { createClient, type MatrixClient } from 'matrix-js-sdk';
+import { createClient, MemoryStore, type MatrixClient } from 'matrix-js-sdk';
 
 export interface MatrixCreds {
   homeserverUrl: string;
@@ -82,11 +82,15 @@ export async function loginWithPassword(
 }
 
 export function buildClient(creds: MatrixCreds): MatrixClient {
+  // Explicit MemoryStore avoids any "store not initialised" surprises some
+  // SDK versions have after a bare createClient(); we'll add an IndexedDB
+  // store later for persistence.
   return createClient({
     baseUrl: creds.homeserverUrl,
     accessToken: creds.accessToken,
     userId: creds.userId,
     deviceId: creds.deviceId,
+    store: new MemoryStore({ localStorage: window.localStorage }),
     // We don't enable crypto in v0 — read-only triage of plaintext rooms first.
     // Encrypted rooms will show "(encrypted)" placeholders until crypto lands.
   });
