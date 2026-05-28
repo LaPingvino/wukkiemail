@@ -9,6 +9,9 @@ import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 import { expandShortcodes } from './emoji';
 import { CollapsibleBody } from './CollapsibleBody';
 
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 export function RoomPanel({
   matrix,
   roomId,
@@ -43,6 +46,43 @@ export function RoomPanel({
   };
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+
+  // ── @-mention autocomplete ──
+  // `mention` is the active trailing "@query" being typed (null when none).
+  // We keep refs in sync so the imperative composer listeners (attached
+  // once) always read the latest values without stale closures.
+  const [mention, setMention] = useState<{ query: string; index: number } | null>(null);
+  const membersRef = useRef<{ userId: string; name: string; avatarUrl?: string }[]>([]);
+  const mentionRef = useRef<{ query: string; index: number } | null>(null);
+  mentionRef.current = mention;
+  const composeTextRef = useRef('');
+  composeTextRef.current = composeText;
+  // Display name → userId for mentions the user picked, so send() can build
+  // matrix.to pills + m.mentions even though the composer is plain text.
+  const acceptedMentions = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    membersRef.current = matrix.getRoomMembers(roomId);
+  }, [matrix, roomId, snap]);
+
+  const TRAILING_MENTION = /(^|\s)@([^\s@]{0,30})$/;
+  const computeMatches = (query: string) => {
+    const q = query.toLowerCase();
+    return membersRef.current
+      .filter((m) => m.name.toLowerCase().includes(q) || m.userId.slice(1).toLowerCase().includes(q))
+      .slice(0, 8);
+  };
+  const mentionMatches = mention ? computeMatches(mention.query) : [];
+
+  const acceptMention = (member: { userId: string; name: string }, fieldEl: { value: string } & HTMLElement) => {
+    const v = composeTextRef.current;
+    const newV = v.replace(TRAILING_MENTION, (_full, lead: string) => `${lead}@${member.name} `);
+    acceptedMentions.current.set(member.name, member.userId);
+    fieldEl.value = newV;
+    setComposeText(newV);
+    setMention(null);
+    fieldEl.focus();
+  };
 
   useEffect(() => {
     const unsub = matrix.subscribe(() => {
@@ -98,13 +138,24 @@ export function RoomPanel({
     setSending(true);
     setSendError(null);
     try {
+      // Turn accepted @mentions still present in the body into matrix.to
+      // pills and collect their user ids for m.mentions.
+      let html = markdownToHtml(body);
+      const mentionIds: string[] = [];
+      for (const [name, uid] of acceptedMentions.current) {
+        if (!body.includes(`@${name}`)) continue;
+        mentionIds.push(uid);
+        const pill = `<a href="https://matrix.to/#/${uid}">@${escapeHtml(name)}</a>`;
+        if (html) html = html.split(`@${escapeHtml(name)}`).join(pill);
+      }
       if (editing) {
-        await matrix.editMessage(roomId, editing.eventId, body, markdownToHtml(body));
+        await matrix.editMessage(roomId, editing.eventId, body, html);
         setEditing(null);
       } else {
-        await matrix.sendMessage(roomId, body, markdownToHtml(body), replyTo);
+        await matrix.sendMessage(roomId, body, html, replyTo, mentionIds);
         setReplyTo(null);
       }
+      acceptedMentions.current.clear();
       setComposeText('');
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
@@ -116,6 +167,10 @@ export function RoomPanel({
       setSending(false);
     }
   };
+  // The composer listeners are attached once (guarded), so route send()
+  // through a ref to always invoke the latest closure.
+  const sendRef = useRef(send);
+  sendRef.current = send;
 
   if (!snap) {
     return (
@@ -302,12 +357,43 @@ export function RoomPanel({
             Send failed: {sendError}
           </p>
         )}
+        {mention && mentionMatches.length > 0 && (
+          <div className="mention-menu" role="listbox">
+            {mentionMatches.map((m, i) => (
+              <button
+                key={m.userId}
+                type="button"
+                role="option"
+                aria-selected={i === mention.index}
+                className={`mention-item ${i === mention.index ? 'active' : ''}`}
+                // Use mousedown so it fires before the field's blur.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+                  if (field) acceptMention(m, field);
+                }}
+              >
+                {m.avatarUrl
+                  ? <img className="mention-avatar" src={m.avatarUrl} alt="" />
+                  : <span className="mention-avatar mention-avatar-fallback">{m.name.slice(0, 1).toUpperCase()}</span>}
+                <span className="mention-name">{m.name}</span>
+                <span className="mention-mxid">{m.userId}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <md-outlined-text-field
           label="Reply"
           placeholder="Type a message…"
           value={composeText}
           ref={(el: HTMLElement | null) => {
             if (!el) return;
+            // Attach listeners ONCE per element; re-running on every render
+            // would stack duplicates (and double-fire send). Handlers read
+            // live state through refs, so a single attach stays correct.
+            const guard = el as unknown as { _wmComposerInit?: boolean };
+            if (guard._wmComposerInit) return;
+            guard._wmComposerInit = true;
             el.addEventListener('input', (ev) => {
               const target = ev.target as HTMLInputElement & { value: string };
               let v = target.value;
@@ -317,13 +403,44 @@ export function RoomPanel({
                 target.value = v;
               }
               setComposeText(v);
+              // Detect a trailing "@query" to drive the mention dropdown.
+              const m = v.match(TRAILING_MENTION);
+              setMention(m ? { query: m[2], index: 0 } : null);
               void matrix.sendTyping(roomId, v.length > 0, 30_000);
             });
             el.addEventListener('keydown', (ev: Event) => {
               const ke = ev as KeyboardEvent;
+              const target = ev.target as HTMLInputElement & { value: string };
+              // Mention navigation takes precedence over send / newline.
+              const men = mentionRef.current;
+              if (men) {
+                const matches = computeMatches(men.query);
+                if (matches.length > 0) {
+                  if (ke.key === 'ArrowDown') {
+                    ev.preventDefault();
+                    setMention({ ...men, index: (men.index + 1) % matches.length });
+                    return;
+                  }
+                  if (ke.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    setMention({ ...men, index: (men.index - 1 + matches.length) % matches.length });
+                    return;
+                  }
+                  if (ke.key === 'Enter' || ke.key === 'Tab') {
+                    ev.preventDefault();
+                    acceptMention(matches[men.index], target);
+                    return;
+                  }
+                  if (ke.key === 'Escape') {
+                    ev.preventDefault();
+                    setMention(null);
+                    return;
+                  }
+                }
+              }
               if (ke.key === 'Enter' && !ke.shiftKey) {
                 ev.preventDefault();
-                void send();
+                void sendRef.current();
                 void matrix.sendTyping(roomId, false);
               }
             });
