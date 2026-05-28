@@ -16,7 +16,7 @@ Inbox-by-Google was killed in 2019. Email is still the universal sink (bills, sh
 | Hosting | Cloudflare Pages | Same shape as `devotional-pwa` |
 | Server-side glue | Cloudflare Pages Functions | Only what the browser *can't* do — Gmail OAuth token exchange (client secret), refresh |
 | Sources | adapter interface in `src/sources/` | `GmailSource`, `MatrixSource`. Both optional. UI features turn on/off based on what's connected. |
-| Matrix | `matrix-js-sdk` (LaPingvino fork, `wally/v38.2.0`) | Same SDK Wally uses, so fixes flow both ways. Direct client login, homeserver-agnostic. |
+| Matrix | `matrix-js-sdk` (LaPingvino fork, `wally-dist` branch) | Same SDK Wally uses, so fixes flow both ways. `wally-dist` is a build-artifact branch with `lib/` committed so consumers don't need yarn at install time (Wally builds from `wally/vX.Y.Z`; WukkieMail and any other consumer pulls `wally-dist`). |
 | Bridges | client-side detection of `mautrix-*` users / rooms | WhatsApp / IRC / Signal / Meta surface with native-looking avatars + provenance tags |
 | Issues | `eu.kiefte.issues` state events | Same primitives as the cinny widget — inbox shows issue activity as first-class items |
 | Storage | IndexedDB | Local cache for offline; nothing about your accounts touches Cloudflare except the OAuth code↔token swap |
