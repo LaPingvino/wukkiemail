@@ -32,6 +32,8 @@ export interface InboxItem {
   avatarUrl?: string; // resolved HTTPS thumbnail; falls back to initials when absent
   statusValue?: string; // for issue items: their kanban_group status value
   userValues?: string[]; // for issue items: values of all schema user-typed fields (e.g. assignee), for the "assigned to me" filter
+  accountId?: string;   // which account/source this came from (mxid, email). For the combined multi-account view.
+  originLabel?: string; // short human label of that account (e.g. localpart) — shown on the row when >1 source is active
   eventCategory?: string; // coarse category of the room's latest event (message/image/membership/…), for per-type tuning
   // route the UI uses to open the thing:
   openPath: string;      // e.g. /m/!roomid/$eventid or /g/<gmail-thread-id>

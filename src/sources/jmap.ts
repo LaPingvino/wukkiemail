@@ -200,6 +200,8 @@ export class JmapSource implements Source {
       // Unread floats; flagged floats higher. Mirrors the Matrix weighting
       // spirit so email and chat interleave sanely in the All view.
       priority: (unread ? 1 : 0) + (flagged ? 3 : 0),
+      accountId: this.id,
+      originLabel: this.creds.email ?? 'Mail',
       openPath: `/mail/${encodeURIComponent(e.id)}`,
     };
   }

@@ -451,6 +451,15 @@ function Inbox({
     [items],
   );
 
+  // In a combined multi-account / multi-source inbox, show each row's
+  // origin so it's clear which inbox an item came from. Only when more
+  // than one distinct account is actually present (single-account =
+  // redundant, so hidden).
+  const showOrigin = useMemo(
+    () => new Set(items.map((it) => it.accountId).filter(Boolean)).size > 1,
+    [items],
+  );
+
   // Status counts for the Tasks-header status chips. Computed across every
   // task visible in the current bundle (not just the Issues bundle) so the
   // chips work in the All view too. Counts ignore the status filter itself
@@ -893,6 +902,9 @@ function Inbox({
                     <div className="from">
                       {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
                       {it.from}
+                      {showOrigin && it.originLabel && (
+                        <span className="origin-tag" title={it.accountId}>{it.originLabel}</span>
+                      )}
                     </div>
                     <div className="subj">
                       <strong>{it.subject}</strong> — {it.snippet}

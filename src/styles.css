@@ -584,6 +584,17 @@ body {
 }
 .section-sweep:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
 .section-sweep .material-symbols-outlined { font-size: 18px; }
+/* Per-row account/source origin tag, shown only in a combined inbox. */
+.origin-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high, var(--md-sys-color-surface-container));
+  color: var(--muted);
+  font-size: 10px; font-weight: 600;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .section-filters::-webkit-scrollbar { display: none; }
 /* Per-room done-status editor rows. */
 .done-room {
