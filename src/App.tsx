@@ -292,6 +292,7 @@ function Inbox({
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<BundleKey>('all');
+  const [query, setQuery] = useState('');
 
   const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
   const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
@@ -335,9 +336,18 @@ function Inbox({
   }, [items]);
 
   const visible = useMemo(() => {
-    if (bundle === 'all') return items;
-    return items.filter((it) => it.flavor === bundle);
-  }, [items, bundle]);
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      if (bundle !== 'all' && it.flavor !== bundle) return false;
+      if (!q) return true;
+      return (
+        it.subject.toLowerCase().includes(q) ||
+        it.from.toLowerCase().includes(q) ||
+        it.snippet.toLowerCase().includes(q) ||
+        (it.fromAddress?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [items, bundle, query]);
 
   return (
     <div className="app">
@@ -399,6 +409,18 @@ function Inbox({
         </button>
       </aside>
       <main className="main">
+        <div className="toolbar">
+          <md-outlined-text-field
+            label="Search"
+            placeholder="Filter inbox…"
+            value={query}
+            ref={fieldRef((v) => setQuery(v))}
+            style={{ width: '100%', maxWidth: 600 }}
+          />
+          {query && (
+            <md-text-button onClick={() => setQuery('')}>Clear</md-text-button>
+          )}
+        </div>
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (
