@@ -9,6 +9,7 @@ import { NewTaskSheet } from './NewTaskSheet';
 import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet } from './EncryptionSetupSheet';
 import { VerificationSheet } from './VerificationSheet';
+import { DoneValuesSheet } from './DoneValuesSheet';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -223,6 +224,7 @@ function Inbox({
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [doneValuesOpen, setDoneValuesOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
@@ -330,7 +332,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -340,6 +342,7 @@ function Inbox({
         else if (newDmOpen) setNewDmOpen(false);
         else if (newGroupOpen) setNewGroupOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
+        else if (doneValuesOpen) setDoneValuesOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
         else if (addAccountOpen) setAddAccountOpen(false);
         else if (selectedIssue) setSelectedIssue(null);
@@ -570,6 +573,16 @@ function Inbox({
           }}
         >
           Priority tuning…
+        </button>
+        <button
+          onClick={() => { setDoneValuesOpen(true); setSidebarOpen(false); }}
+          style={{
+            marginTop: 8, width: '100%', padding: '8px',
+            background: 'transparent', border: '1px solid var(--border)',
+            borderRadius: 8, color: 'var(--muted)',
+          }}
+        >
+          Task "done" statuses…
         </button>
         {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
           <button
@@ -901,6 +914,9 @@ function Inbox({
       )}
       {encryptionOpen && matrixSrc && (
         <EncryptionSetupSheet matrix={matrixSrc} onClose={() => setEncryptionOpen(false)} />
+      )}
+      {doneValuesOpen && matrixSrc && (
+        <DoneValuesSheet matrix={matrixSrc} onClose={() => setDoneValuesOpen(false)} />
       )}
       {matrixSrc && <VerificationSheet matrix={matrixSrc} />}
       {addAccountOpen && (

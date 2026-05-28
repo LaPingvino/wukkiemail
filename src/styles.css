@@ -572,6 +572,17 @@ body {
   padding-bottom: 2px;
 }
 .section-filters::-webkit-scrollbar { display: none; }
+/* Per-room done-status editor rows. */
+.done-room {
+  display: grid; gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.done-room:last-child { border-bottom: none; }
+.done-room-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.done-room .mini-chip .material-symbols-outlined { margin-right: -2px; }
 /* Compact filter chips that live inline with a section header. */
 .mini-chip {
   flex: 0 0 auto;
