@@ -307,18 +307,22 @@ function Inbox({
       return;
     }
     const refresh = () => {
-      Promise.all(sources.map((s) => s.listItems(null).catch(() => [] as InboxItem[]))).then(
-        (batches) => {
-          if (cancelled) return;
-          const merged = batches.flat().sort((a, b) => b.ts - a.ts);
-          setItems(merged);
-          setLoading(false);
-        },
-      );
+      Promise.all(sources.map((s) =>
+        s.listItems(null).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn('[wukkiemail] listItems failed for', s.kind, e);
+          return [] as InboxItem[];
+        }),
+      )).then((batches) => {
+        if (cancelled) return;
+        const merged = batches.flat().sort((a, b) => b.ts - a.ts);
+        setItems(merged);
+        setLoading(false);
+      });
     };
     refresh();
-    // Matrix source emits change events as rooms arrive — re-poll on each.
-    // Debounced via a rAF batch so a flurry of sync events doesn't thrash.
+    // Subscribers re-poll on any source change. rAF-debounce so a burst
+    // of sync events doesn't thrash render.
     let pending = false;
     const onChange = () => {
       if (pending) return;
@@ -327,7 +331,19 @@ function Inbox({
     };
     const unsubMatrix = matrixSrc?.subscribe(onChange);
     const unsubGmail = gmailSrc?.subscribe(onChange);
-    return () => { cancelled = true; unsubMatrix?.(); unsubGmail?.(); };
+    // Belt-and-suspenders: tick a 5s poll for the first 60s after mount,
+    // so a missed subscribe event (e.g. PREPARED firing before subscribe
+    // attaches) still gets surfaced. Stops once 60s have passed —
+    // by then the subscribe path should be the source of truth.
+    const startedAt = Date.now();
+    const poller = setInterval(() => {
+      if (cancelled || Date.now() - startedAt > 60_000) {
+        clearInterval(poller);
+        return;
+      }
+      refresh();
+    }, 5_000);
+    return () => { cancelled = true; unsubMatrix?.(); unsubGmail?.(); clearInterval(poller); };
   }, [matrixSrc, gmailSrc]);
 
   // Bundles derive from items — only bundles that have at least one item show up.
