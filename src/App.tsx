@@ -326,7 +326,8 @@ function Inbox({
       requestAnimationFrame(() => { pending = false; refresh(); });
     };
     const unsubMatrix = matrixSrc?.subscribe(onChange);
-    return () => { cancelled = true; unsubMatrix?.(); };
+    const unsubGmail = gmailSrc?.subscribe(onChange);
+    return () => { cancelled = true; unsubMatrix?.(); unsubGmail?.(); };
   }, [matrixSrc, gmailSrc]);
 
   // Bundles derive from items — only bundles that have at least one item show up.
@@ -376,29 +377,23 @@ function Inbox({
           );
         })}
         {gmail.kind === 'none' && (
-          <button
+          <md-outlined-button
             onClick={onGmailLogin}
-            style={{
-              marginTop: 16, width: '100%', padding: '8px',
-              background: 'transparent', border: '1px solid var(--border)',
-              borderRadius: 8, color: 'var(--fg)',
-            }}
+            style={{ marginTop: 16, width: '100%' }}
           >
             + Connect Gmail
-          </button>
+          </md-outlined-button>
         )}
-        {gmail.kind === 'syncing' && (
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>Gmail loading…</p>
-        )}
-        {gmail.kind === 'error' && (
-          <p style={{ color: '#e57373', fontSize: 12, marginTop: 16 }}>Gmail: {gmail.error}</p>
-        )}
-        {matrix.kind === 'syncing' && (
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>Matrix syncing…</p>
-        )}
-        {matrix.kind === 'error' && (
-          <p style={{ color: '#e57373', fontSize: 12, marginTop: 8 }}>Matrix: {matrix.error}</p>
-        )}
+        <SourceStatus
+          label="Matrix"
+          loading={matrix.kind === 'connecting' || matrix.kind === 'syncing'}
+          error={matrix.kind === 'error' ? matrix.error : null}
+        />
+        <SourceStatus
+          label="Gmail"
+          loading={gmail.kind === 'syncing' || (gmailSrc?.getStatus() === 'syncing')}
+          error={gmail.kind === 'error' ? gmail.error : null}
+        />
         <button
           onClick={onSignOutAll}
           style={{
@@ -468,6 +463,17 @@ function Inbox({
       )}
     </div>
   );
+}
+
+function SourceStatus({ label, loading, error }: { label: string; loading: boolean; error: string | null }) {
+  if (error) return <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, marginTop: 8 }}>{label}: {error}</p>;
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, color: 'var(--muted)', fontSize: 12 }}>
+      <md-circular-progress indeterminate aria-label={`${label} syncing`} style={{ width: 14, height: 14 }} />
+      <span>{label} syncing…</span>
+    </div>
+  );
+  return null;
 }
 
 function formatTs(ts: number): string {

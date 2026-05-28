@@ -11,6 +11,9 @@ export class GmailSource implements Source {
   id = 'gmail:pending';
   private client: GmailClient;
   private email: string | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private listeners = new Set<() => void>();
+  private status: 'idle' | 'syncing' | 'error' = 'idle';
 
   constructor(creds: GmailCreds) {
     this.client = new GmailClient(creds);
@@ -21,17 +24,30 @@ export class GmailSource implements Source {
     return creds ? new GmailSource(creds) : null;
   }
 
+  subscribe(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => { this.listeners.delete(cb); };
+  }
+  private notify() { for (const cb of this.listeners) cb(); }
+  getStatus(): 'idle' | 'syncing' | 'error' { return this.status; }
+
   async start(): Promise<void> {
-    // Resolve the account email so we can build deep links into Gmail.
-    // Failure here means the credentials are stale — let the caller
-    // surface an error and trigger a re-login.
     const info = await this.client.userinfo();
     this.email = info.email;
     this.id = `gmail:${info.email}`;
+    // Auto-refresh inbox every 60s. Gmail metadata scope doesn't get push
+    // notifications, so polling is the simplest path. Pause when the tab
+    // is hidden so we don't waste tokens on background tabs.
+    // Just notify; the App's listItems() call sets status via listItems().
+    this.pollTimer = setInterval(() => {
+      if (document.hidden) return;
+      this.notify();
+    }, 60_000);
   }
 
   async stop(): Promise<void> {
-    // Nothing to dispose — the client is a stateless wrapper.
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
   }
 
   async listBundles(): Promise<BundleSpec[]> {
@@ -39,7 +55,18 @@ export class GmailSource implements Source {
   }
 
   async listItems(_bundleId: string | null): Promise<InboxItem[]> {
-    const threads = await this.client.listInboxThreads(30);
+    this.status = 'syncing';
+    this.notify();
+    let threads;
+    try {
+      threads = await this.client.listInboxThreads(30);
+      this.status = 'idle';
+    } catch (e) {
+      this.status = 'error';
+      this.notify();
+      throw e;
+    }
+    this.notify();
     const email = this.email ?? '';
     return threads.map((t) => ({
       id: `gmail:${t.id}`,
