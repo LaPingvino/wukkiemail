@@ -11,6 +11,8 @@ import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet } from './EncryptionSetupSheet';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
+import { BundleSheet } from './BundleSheet';
+import type { ManualBundle } from './sources/matrix';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -238,6 +240,9 @@ function Inbox({
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   // The config bundle (settings + accounts) at the top of the stream.
   const [configOpen, setConfigOpen] = useState(false);
+  // User-authored bundles (saved filters), and the create/edit sheet.
+  const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
+  const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -301,6 +306,7 @@ function Inbox({
         },
       );
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
+      if (!cancelled) setManualBundles(matrixSrc.getManualBundles());
     };
     refresh();
     let pending = false;
@@ -364,7 +370,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -377,6 +383,7 @@ function Inbox({
         else if (doneValuesOpen) setDoneValuesOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
         else if (addAccountOpen) setAddAccountOpen(false);
+        else if (bundleSheet) setBundleSheet(null);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
       };
@@ -567,28 +574,46 @@ function Inbox({
   // The bundled stream for the All view: loose (important) items shown
   // directly; everything else grouped into fold-open bundles. Built on the
   // already-filtered `visible`, so search/read/status/mine still apply.
+  // Manual bundles (saved filters) take precedence over auto-grouping and
+  // always appear (even when empty) so they stay findable/editable.
   const bundled = useMemo(() => {
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
+    const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
+    const assign = (it: InboxItem): string => {
+      for (const { b, f } of manualParsed) {
+        if (matchItem(f, it, { selfMxid })) return `manual:${b.id}`;
+      }
+      return primaryKey(it);
+    };
     const loose: InboxItem[] = [];
     const groups = new Map<string, InboxItem[]>();
     for (const it of visible) {
       if (it.priority >= topLevel || it.bundles.includes('pinned')) { loose.push(it); continue; }
-      const k = primaryKey(it);
+      const k = assign(it);
       const arr = groups.get(k);
       if (arr) arr.push(it); else groups.set(k, [it]);
     }
     loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
-    const list = [...groups.entries()].map(([key, gItems]) => ({
+    const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+    // Manual bundles first, in user order, always present.
+    const manualList = manualBundles.map((b) => {
+      const gItems = sortItems(groups.get(`manual:${b.id}`) ?? []);
+      groups.delete(`manual:${b.id}`);
+      return { key: `manual:${b.id}`, label: b.label, flavor: 'matrix' as ItemFlavor, manual: b, items: gItems, unread: gItems.filter((g) => g.unread).length };
+    });
+    // Then the auto-bundles, sorted by activity.
+    const autoList = [...groups.entries()].map(([key, gItems]) => ({
       key,
       label: bundleLabel(key as BundleKey, spaceBundles),
-      flavor: key.startsWith('flavor:') ? (key.slice(7) as ItemFlavor) : ('matrix' as ItemFlavor),
-      items: gItems.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)),
+      flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
+      manual: undefined as ManualBundle | undefined,
+      items: sortItems(gItems),
       unread: gItems.filter((g) => g.unread).length,
     }));
-    list.sort((a, b) => (b.unread - a.unread) || (b.items.length - a.items.length) || a.label.localeCompare(b.label));
-    return { loose, groups: list };
+    autoList.sort((a, b) => (b.unread - a.unread) || (b.items.length - a.items.length) || a.label.localeCompare(b.label));
+    return { loose, groups: [...manualList, ...autoList] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, matrixSrc, items]);
+  }, [visible, spaceBundles, matrixSrc, items, manualBundles, selfMxid]);
 
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
@@ -863,11 +888,24 @@ function Inbox({
                         <span className="material-symbols-outlined bundle-chevron">
                           {open ? 'expand_more' : 'chevron_right'}
                         </span>
-                        <span className={`src ${g.flavor}`} />
+                        {g.manual
+                          ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>bookmark</span>
+                          : <span className={`src ${g.flavor}`} />}
                         <span className="bundle-label">{g.label}</span>
                         <span className="bundle-count">
                           {g.unread > 0 ? `${g.unread} unread · ` : ''}{g.items.length}
                         </span>
+                        {g.manual && (
+                          <span
+                            className="section-sweep"
+                            role="button"
+                            aria-label="Edit bundle"
+                            title="Edit bundle"
+                            onClick={(e) => { e.stopPropagation(); setBundleSheet({ editing: g.manual }); }}
+                          >
+                            <span className="material-symbols-outlined">edit</span>
+                          </span>
+                        )}
                       </button>
                       {open && (
                         <div className="bundle-body">
@@ -877,11 +915,28 @@ function Inbox({
                             g.items,
                           )}
                           {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, idx++))}
+                          {g.items.length === 0 && (
+                            <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
+                              <p>Nothing matches this bundle right now.</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>,
                   );
                 }
+                // New-bundle entry at the end of the stream.
+                rendered.push(
+                  <button
+                    key="new-bundle"
+                    type="button"
+                    className="config-btn"
+                    style={{ marginTop: 4 }}
+                    onClick={() => setBundleSheet({ initialQuery: query.trim() || undefined })}
+                  >
+                    + New bundle{query.trim() ? ' from this search' : ''}
+                  </button>,
+                );
                 if (bundled.loose.length === 0 && bundled.groups.length === 0) {
                   rendered.push(
                     <div key="empty-inline" className="empty" style={{ height: 'auto', padding: 24 }}>
@@ -987,6 +1042,28 @@ function Inbox({
         <DoneValuesSheet matrix={matrixSrc} onClose={() => setDoneValuesOpen(false)} />
       )}
       {matrixSrc && <VerificationSheet matrix={matrixSrc} />}
+      {bundleSheet && matrixSrc && (
+        <BundleSheet
+          items={items}
+          selfMxid={selfMxid}
+          initial={bundleSheet.editing}
+          initialQuery={bundleSheet.initialQuery}
+          onSave={async (b) => {
+            const others = manualBundles.filter((x) => x.id !== b.id);
+            const next = bundleSheet.editing ? manualBundles.map((x) => (x.id === b.id ? b : x)) : [...others, b];
+            setManualBundles(next);
+            setBundleSheet(null);
+            await matrixSrc.setManualBundles(next);
+          }}
+          onDelete={async (id) => {
+            const next = manualBundles.filter((x) => x.id !== id);
+            setManualBundles(next);
+            setBundleSheet(null);
+            await matrixSrc.setManualBundles(next);
+          }}
+          onClose={() => setBundleSheet(null)}
+        />
+      )}
       {addAccountOpen && (
         <AddAccountSheet
           onClose={() => setAddAccountOpen(false)}
