@@ -111,6 +111,23 @@ export class MatrixSource implements Source {
       }
     }, 2000);
 
+    // Try to initialise Rust crypto before startClient. Without crypto,
+    // encrypted rooms stay placeholder-only; with it, recent messages
+    // decrypt automatically (older history needs key backup, which we
+    // don't wire UX for yet). Continue without crypto if init fails so
+    // unencrypted rooms still work.
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nocrypto')) {
+      try {
+        await client.initRustCrypto();
+        // eslint-disable-next-line no-console
+        console.info('[wukkiemail] crypto initialised');
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail] initRustCrypto failed, continuing without crypto', e);
+      }
+    }
+
     try {
       // lazyLoadMembers cuts initial /sync payload dramatically on heavy
       // accounts — members for a room only arrive when we touch the room.
