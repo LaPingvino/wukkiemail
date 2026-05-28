@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { SavedView } from './sources/matrix';
+import type { MessageHit } from './search';
 import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
@@ -210,6 +211,7 @@ function Inbox({
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
+  const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
@@ -327,6 +329,20 @@ function Inbox({
   }, [items]);
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
+
+  // Full-text message search via the off-thread index. Debounced so we
+  // don't query on every keystroke. Cleared when the search box empties.
+  useEffect(() => {
+    const q = query.trim();
+    if (!matrixSrc || q.length < 2) { setMsgHits([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      matrixSrc.searchMessages(q, 50)
+        .then((hits) => { if (!cancelled) setMsgHits(hits); })
+        .catch(() => { if (!cancelled) setMsgHits([]); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, matrixSrc]);
 
   // Android back / browser back closes the topmost modal-ish layer
   // instead of leaving the SPA. Each open pushes a history state; popstate
@@ -718,7 +734,7 @@ function Inbox({
         )}
         {loading ? (
           <div className="empty">Loading…</div>
-        ) : visible.length === 0 ? (
+        ) : visible.length === 0 && msgHits.length === 0 ? (
           <div className="empty">
             <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>
             {matrixSrc && (
@@ -890,6 +906,27 @@ function Inbox({
               >
                 Show unread only
               </button>
+            )}
+            {query.trim().length >= 2 && msgHits.length > 0 && (
+              <>
+                <div className="section-header">
+                  <span className="section-header-label">In messages</span>
+                </div>
+                {msgHits.map((hit) => (
+                  <a
+                    key={hit.id}
+                    className="item msg-hit"
+                    href={`/m/${encodeURIComponent(hit.roomId)}`}
+                    onClick={(e) => { e.preventDefault(); setSelectedRoom(hit.roomId); }}
+                    style={{ color: 'inherit', textDecoration: 'none' }}
+                  >
+                    <Avatar name={hit.sender} flavor="matrix" />
+                    <div className="from">{hit.roomName}</div>
+                    <div className="subj">{hit.body}</div>
+                    <div className="ts">{formatTs(hit.ts)}</div>
+                  </a>
+                ))}
+              </>
             )}
           </div>
         )}
