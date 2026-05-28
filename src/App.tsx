@@ -20,15 +20,16 @@ type SourceState =
 export function App() {
   const [matrix, setMatrix] = useState<SourceState>({ kind: 'none' });
 
-  // Restore on boot.
+  // Restore on boot. Flip to 'ready' optimistically as soon as the
+  // MatrixSource exists so the inbox shell renders instantly on reload.
+  // The Inbox effect listens for change events from the source, so as
+  // rooms hydrate from IndexedDB and the delta /sync lands they appear
+  // without a separate transition.
   useEffect(() => {
     const m = MatrixSource.tryRestore();
     if (m) {
-      setMatrix({ kind: 'syncing', source: m });
-      m.start().then(
-        () => setMatrix({ kind: 'ready', source: m }),
-        (e: Error) => setMatrix({ kind: 'error', error: e.message }),
-      );
+      setMatrix({ kind: 'ready', source: m });
+      m.start().catch((e: Error) => setMatrix({ kind: 'error', error: e.message }));
     }
   }, []);
 
