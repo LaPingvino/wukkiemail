@@ -17,7 +17,8 @@ export type ItemFlavor =
 export interface InboxItem {
   id: string;            // stable across sessions; "<source>:<native-id>"
   flavor: ItemFlavor;
-  bundleId: string | null;
+  bundles: string[];     // bundle keys this item belongs to (e.g. "flavor:matrix",
+                         // "dm", "space:<roomId>", "issue"). 'all' is implicit.
   from: string;          // display name of the most recent contributor
   fromAddress?: string;  // mxid or email
   subject: string;       // for email = Subject; for chat = thread topic or last line
@@ -29,11 +30,14 @@ export interface InboxItem {
   openPath: string;      // e.g. /m/!roomid/$eventid or /g/<gmail-thread-id>
 }
 
+export type BundleKind = 'all' | 'flavor' | 'dm' | 'space';
+
 export interface BundleSpec {
-  id: string;            // unique per-source
+  id: string;            // e.g. 'all' | 'flavor:matrix' | 'dm' | 'space:<id>'
   label: string;
   count: number;         // unread count
   flavor: ItemFlavor;    // representative flavor — drives the dot color
+  kind: BundleKind;
 }
 
 // Lifecycle: callers create a source once it's connected; the source streams items.

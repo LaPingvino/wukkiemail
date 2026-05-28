@@ -135,25 +135,59 @@ export class MatrixSource implements Source {
 
   async listBundles(): Promise<BundleSpec[]> {
     if (!this.client) return [];
-    const rooms = this.client.getRooms();
-    const spaces = rooms.filter((r) => isSpace(r));
+    const spaces = this.client.getRooms().filter((r) => isSpace(r));
     return spaces.map((s) => ({
       id: `space:${s.roomId}`,
       label: s.name || s.roomId,
       count: 0,
-      flavor: 'matrix',
+      flavor: 'matrix' as const,
+      kind: 'space' as const,
     }));
+  }
+
+  // Map roomId → set of bundle keys it belongs to. Computed once per
+  // listItems call. DMs come from m.direct account data; space membership
+  // from m.space.child state events on the space room.
+  private buildBundleIndex(): Map<string, string[]> {
+    const idx = new Map<string, string[]>();
+    if (!this.client) return idx;
+    const dmEvt = this.client.getAccountData('m.direct' as never);
+    const dmContent = (dmEvt?.getContent() ?? {}) as Record<string, string[]>;
+    const dmRoomIds = new Set<string>();
+    for (const ids of Object.values(dmContent)) {
+      for (const id of ids ?? []) dmRoomIds.add(id);
+    }
+    for (const space of this.client.getRooms().filter(isSpace)) {
+      const children = space.currentState.getStateEvents('m.space.child');
+      for (const ev of children) {
+        const childRoomId = ev.getStateKey();
+        // Only count if `via` is present — empty content means the child was removed.
+        const content = ev.getContent() as { via?: string[] };
+        if (!childRoomId || !content.via || content.via.length === 0) continue;
+        const arr = idx.get(childRoomId) ?? [];
+        arr.push(`space:${space.roomId}`);
+        idx.set(childRoomId, arr);
+      }
+    }
+    for (const id of dmRoomIds) {
+      const arr = idx.get(id) ?? [];
+      arr.push('dm');
+      idx.set(id, arr);
+    }
+    return idx;
   }
 
   async listItems(_bundleId: string | null): Promise<InboxItem[]> {
     if (!this.client) return [];
     const selfId = this.client.getUserId() ?? '';
+    const bundleIndex = this.buildBundleIndex();
     const rooms = this.client.getRooms().filter((r) => !isSpace(r));
     const items: InboxItem[] = [];
     for (const room of rooms) {
-      const summary = roomToItem(room, selfId);
+      const extra = bundleIndex.get(room.roomId) ?? [];
+      const summary = roomToItem(room, selfId, extra);
       if (summary) items.push(summary);
-      items.push(...issueItemsForRoom(room));
+      items.push(...issueItemsForRoom(room, extra));
     }
     return items.sort((a, b) => b.ts - a.ts);
   }
@@ -293,7 +327,7 @@ function isSpace(room: Room): boolean {
   return type === 'm.space';
 }
 
-function roomToItem(room: Room, selfId: string): InboxItem | null {
+function roomToItem(room: Room, selfId: string, extraBundles: string[] = []): InboxItem | null {
   const memberIds = room.getJoinedMembers().map((m) => m.userId);
   const flavor = flavorForRoomMembers(memberIds.filter((id) => id !== selfId));
 
@@ -311,7 +345,7 @@ function roomToItem(room: Room, selfId: string): InboxItem | null {
   return {
     id: `matrix:${room.roomId}`,
     flavor,
-    bundleId: null,
+    bundles: [`flavor:${flavor}`, ...extraBundles],
     from: fromName,
     fromAddress: senderId,
     subject: room.name || room.roomId,
@@ -330,7 +364,7 @@ function getSchema(room: Room): IssueSchema {
   return DEFAULT_SCHEMA;
 }
 
-function issueItemsForRoom(room: Room): InboxItem[] {
+function issueItemsForRoom(room: Room, extraBundles: string[] = []): InboxItem[] {
   const events = room.currentState.getStateEvents(ISSUE_EVENT);
   if (!events.length) return [];
   const schema = getSchema(room);
@@ -355,7 +389,7 @@ function issueItemsForRoom(room: Room): InboxItem[] {
     items.push({
       id: `matrix:${room.roomId}:issue:${issueId}`,
       flavor: 'issue',
-      bundleId: null,
+      bundles: ['flavor:issue', ...extraBundles],
       from: fromName,
       fromAddress: senderId,
       subject: `${room.name || room.roomId} · ${title}`,

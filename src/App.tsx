@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import type { ItemFlavor } from './sources/types';
+import type { BundleSpec, ItemFlavor } from './sources/types';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
@@ -157,10 +157,12 @@ const sectionHead: React.CSSProperties = {
 
 const errStyle: React.CSSProperties = { color: 'var(--md-sys-color-error)', margin: 0, fontSize: 13 };
 
-type BundleKey = 'all' | ItemFlavor;
+// Bundles are now keyed by string. Standard keys: 'all', 'dm',
+// 'flavor:<flavor>', 'space:<roomId>'. Source-provided space bundles
+// arrive via matrixSrc.listBundles().
+type BundleKey = string;
 
-const BUNDLE_LABELS: Record<BundleKey, string> = {
-  all: 'Inbox',
+const FLAVOR_LABELS: Record<ItemFlavor, string> = {
   gmail: 'Mail',
   matrix: 'Matrix',
   whatsapp: 'WhatsApp',
@@ -170,9 +172,23 @@ const BUNDLE_LABELS: Record<BundleKey, string> = {
   issue: 'Issues',
 };
 
-const BUNDLE_ORDER: BundleKey[] = [
-  'all', 'matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue', 'gmail',
-];
+const FLAVOR_ORDER: ItemFlavor[] = ['matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue', 'gmail'];
+
+function flavorBundleKey(f: ItemFlavor): BundleKey { return `flavor:${f}`; }
+
+function bundleLabel(key: BundleKey, spaceBundles: BundleSpec[]): string {
+  if (key === 'all') return 'Inbox';
+  if (key === 'dm') return 'DMs';
+  if (key.startsWith('flavor:')) {
+    const f = key.slice(7) as ItemFlavor;
+    return FLAVOR_LABELS[f] ?? f;
+  }
+  if (key.startsWith('space:')) {
+    return spaceBundles.find((b) => b.id === key)?.label ?? 'Space';
+  }
+  return key;
+}
+
 
 function Inbox({
   matrix,
@@ -182,6 +198,7 @@ function Inbox({
   onSignOut: () => void;
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
@@ -211,6 +228,7 @@ function Inbox({
           if (!cancelled) setLoading(false);
         },
       );
+      matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
     };
     refresh();
     let pending = false;
@@ -239,10 +257,10 @@ function Inbox({
     const bump = (m: Map<BundleKey, number>, k: BundleKey) => m.set(k, (m.get(k) ?? 0) + 1);
     for (const it of items) {
       bump(total, 'all');
-      bump(total, it.flavor);
-      if (it.unread) {
-        bump(unread, 'all');
-        bump(unread, it.flavor);
+      if (it.unread) bump(unread, 'all');
+      for (const b of it.bundles) {
+        bump(total, b);
+        if (it.unread) bump(unread, b);
       }
     }
     return { total, unread };
@@ -253,7 +271,7 @@ function Inbox({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
-      if (bundle !== 'all' && it.flavor !== bundle) return false;
+      if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -324,31 +342,28 @@ function Inbox({
         <div className="accounts">
           {matrixSrc && <AccountChip flavor="matrix" label={matrixSrc.id} />}
         </div>
-        {BUNDLE_ORDER.map((key) => {
+        <BundleRow id="all" label="Inbox" total={counts.total.get('all') ?? 0} unread={counts.unread.get('all') ?? 0} active={bundle === 'all'} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
+        {(counts.total.get('dm') ?? 0) > 0 && (
+          <BundleRow id="dm" label="DMs" flavor="matrix" total={counts.total.get('dm') ?? 0} unread={counts.unread.get('dm') ?? 0} active={bundle === 'dm'} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
+        )}
+        {FLAVOR_ORDER.map((f) => {
+          const key = flavorBundleKey(f);
           const total = counts.total.get(key) ?? 0;
-          const unread = counts.unread.get(key) ?? 0;
-          if (key !== 'all' && total === 0) return null;
+          if (total === 0) return null;
           return (
-            <div
-              key={key}
-              className={`bundle ${bundle === key ? 'active' : ''} ${unread > 0 ? 'has-unread' : ''}`}
-              onClick={() => { setBundle(key); setSidebarOpen(false); }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setBundle(key); setSidebarOpen(false); } }}
-            >
-              <span>
-                {key !== 'all' && <span className={`src ${key}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
-                {BUNDLE_LABELS[key]}
-              </span>
-              <span className="count">
-                {unread > 0 ? <strong>{unread}</strong> : null}
-                {unread > 0 && total > unread && <span style={{ opacity: 0.5 }}> / {total}</span>}
-                {unread === 0 && total}
-              </span>
-            </div>
+            <BundleRow key={key} id={key} label={FLAVOR_LABELS[f]} flavor={f} total={total} unread={counts.unread.get(key) ?? 0} active={bundle === key} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
           );
         })}
+        {spaceBundles.length > 0 && (
+          <>
+            <div style={{ margin: '12px 16px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)' }}>Spaces</div>
+            {spaceBundles
+              .filter((b) => (counts.total.get(b.id) ?? 0) > 0)
+              .map((b) => (
+                <BundleRow key={b.id} id={b.id} label={b.label} flavor="matrix" total={counts.total.get(b.id) ?? 0} unread={counts.unread.get(b.id) ?? 0} active={bundle === b.id} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
+              ))}
+          </>
+        )}
         <SourceStatus
           label="Matrix"
           loading={matrix.kind === 'connecting' || matrix.kind === 'syncing'}
@@ -390,7 +405,7 @@ function Inbox({
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (
           <div className="empty">
-            <p>{bundle === 'all' ? 'No items yet.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</p>
+            <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>
             {matrixSrc && (
               <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
                 Matrix: sync={String(matrixSrc.describe().state)},
@@ -446,7 +461,40 @@ function Inbox({
           onClose={() => setSelectedRoom(null)}
         />
       )}
-      <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} />
+      <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
+    </div>
+  );
+}
+
+function BundleRow({
+  id, label, flavor, total, unread, active, onSelect,
+}: {
+  id: BundleKey;
+  label: string;
+  flavor?: ItemFlavor;
+  total: number;
+  unread: number;
+  active: boolean;
+  onSelect: (k: BundleKey) => void;
+}) {
+  return (
+    <div
+      className={`bundle ${active ? 'active' : ''} ${unread > 0 ? 'has-unread' : ''}`}
+      onClick={() => onSelect(id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(id); }}
+      title={label}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {flavor && <span className={`src ${flavor}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
+        {label}
+      </span>
+      <span className="count">
+        {unread > 0 ? <strong>{unread}</strong> : null}
+        {unread > 0 && total > unread && <span style={{ opacity: 0.5 }}> / {total}</span>}
+        {unread === 0 && total}
+      </span>
     </div>
   );
 }
@@ -455,29 +503,42 @@ function BottomNav({
   bundle,
   setBundle,
   counts,
+  spaceBundles,
 }: {
   bundle: BundleKey;
   setBundle: (k: BundleKey) => void;
   counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
+  spaceBundles: BundleSpec[];
 }) {
-  const populated = BUNDLE_ORDER
-    .filter((k) => k === 'all' || (counts.total.get(k) ?? 0) > 0)
-    .slice(0, 5);
+  // Top 5 most populated bundles (Inbox always first) — flavors and DMs
+  // first since they're most-used; spaces are usually accessed less often.
+  const candidates: { id: BundleKey; label: string; flavor: ItemFlavor | null }[] = [
+    { id: 'all', label: 'Inbox', flavor: null },
+  ];
+  if ((counts.total.get('dm') ?? 0) > 0) candidates.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
+  for (const f of FLAVOR_ORDER) {
+    const k = flavorBundleKey(f);
+    if ((counts.total.get(k) ?? 0) > 0) candidates.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
+  }
+  for (const b of spaceBundles) {
+    if ((counts.total.get(b.id) ?? 0) > 0) candidates.push({ id: b.id, label: b.label, flavor: 'matrix' });
+  }
+  const populated = candidates.slice(0, 5);
   return (
     <nav className="bottom-nav" aria-label="Inbox bundles">
-      {populated.map((key) => {
-        const unread = counts.unread.get(key) ?? 0;
+      {populated.map(({ id, label, flavor }) => {
+        const unread = counts.unread.get(id) ?? 0;
         return (
           <button
-            key={key}
-            className={`tab ${bundle === key ? 'active' : ''}`}
-            onClick={() => setBundle(key)}
-            aria-label={BUNDLE_LABELS[key]}
-            aria-current={bundle === key ? 'page' : undefined}
+            key={id}
+            className={`tab ${bundle === id ? 'active' : ''}`}
+            onClick={() => setBundle(id)}
+            aria-label={label}
+            aria-current={bundle === id ? 'page' : undefined}
           >
-            <span className={`src ${key === 'all' ? '' : key}`} />
+            <span className={`src ${flavor ?? ''}`} />
             {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-            <span>{BUNDLE_LABELS[key]}</span>
+            <span>{label}</span>
           </button>
         );
       })}
