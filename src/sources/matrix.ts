@@ -39,6 +39,8 @@ export class MatrixSource implements Source {
   readonly id: string;
   private client: MatrixClient;
   private started = false;
+  private listeners = new Set<() => void>();
+  private syncState: string | null = null;
 
   constructor(creds: MatrixCreds) {
     this.client = buildClient(creds);
@@ -50,44 +52,37 @@ export class MatrixSource implements Source {
     return creds ? new MatrixSource(creds) : null;
   }
 
+  // Subscribe to "something changed, re-render". Fires on every sync
+  // transition; consumers should debounce if needed.
+  subscribe(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => { this.listeners.delete(cb); };
+  }
+  private notify() { for (const cb of this.listeners) cb(); }
+
+  getSyncState(): string | null { return this.syncState; }
+  isInitialSyncComplete(): boolean {
+    return this.syncState === 'PREPARED' || this.syncState === 'SYNCING';
+  }
+
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    // Wire the sync listener BEFORE startClient so we don't miss the first
-    // PREPARED. Log every transition so the browser console tells us where
-    // we get stuck if sync never lands.
-    const ready = ['PREPARED', 'SYNCING'];
-    const startedAt = performance.now();
-    let resolved = false;
-    const ready$ = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (resolved) return;
-        const state = this.client.getSyncState() ?? 'null';
+    // Sync listener stays attached for the lifetime of the source.
+    // Every transition pings subscribers so the inbox redraws as
+    // rooms arrive — we don't block on PREPARED any more.
+    const onSync = (state: string, prev: string | null, data: unknown) => {
+      // eslint-disable-next-line no-console
+      console.info('[wukkiemail] sync ->', state, { prev });
+      this.syncState = state;
+      this.notify();
+      if (state === 'ERROR') {
+        const err = (data as { error?: { message?: string } })?.error?.message ?? 'unknown';
         // eslint-disable-next-line no-console
-        console.warn('[wukkiemail] Matrix sync timeout', {
-          state,
-          elapsedMs: Math.round(performance.now() - startedAt),
-        });
-        reject(new Error(`Matrix sync timeout (state: ${state}) — check browser console for SDK errors.`));
-      }, 120_000);
-      const handler = (state: string, prev: string | null, data: unknown) => {
-        // eslint-disable-next-line no-console
-        console.info('[wukkiemail] sync ->', state, { prev, data });
-        if (ready.includes(state)) {
-          resolved = true;
-          clearTimeout(timer);
-          this.client.removeListener('sync' as never, handler as never);
-          resolve();
-        } else if (state === 'ERROR') {
-          resolved = true;
-          clearTimeout(timer);
-          this.client.removeListener('sync' as never, handler as never);
-          const err = (data as { error?: { message?: string } })?.error?.message ?? 'unknown';
-          reject(new Error(`Matrix sync ERROR: ${err}`));
-        }
-      };
-      this.client.on('sync' as never, handler as never);
-    });
+        console.warn('[wukkiemail] sync ERROR:', err);
+      }
+    };
+    this.client.on('sync' as never, onSync as never);
 
     try {
       // lazyLoadMembers cuts initial /sync payload dramatically on heavy
@@ -102,8 +97,8 @@ export class MatrixSource implements Source {
       console.error('[wukkiemail] startClient threw', e);
       throw e;
     }
-    if (ready.includes(this.client.getSyncState() ?? '')) return;
-    await ready$;
+    // start() resolves now — UI can render whatever rooms are available,
+    // and re-render as the sync stream lands more.
   }
 
   async stop(): Promise<void> {

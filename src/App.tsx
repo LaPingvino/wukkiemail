@@ -286,16 +286,27 @@ function Inbox({
       setItems([]); setLoading(false);
       return;
     }
-    setLoading(true);
-    Promise.all(sources.map((s) => s.listItems(null).catch(() => [] as InboxItem[]))).then(
-      (batches) => {
-        if (cancelled) return;
-        const merged = batches.flat().sort((a, b) => b.ts - a.ts);
-        setItems(merged);
-        setLoading(false);
-      },
-    );
-    return () => { cancelled = true; };
+    const refresh = () => {
+      Promise.all(sources.map((s) => s.listItems(null).catch(() => [] as InboxItem[]))).then(
+        (batches) => {
+          if (cancelled) return;
+          const merged = batches.flat().sort((a, b) => b.ts - a.ts);
+          setItems(merged);
+          setLoading(false);
+        },
+      );
+    };
+    refresh();
+    // Matrix source emits change events as rooms arrive — re-poll on each.
+    // Debounced via a rAF batch so a flurry of sync events doesn't thrash.
+    let pending = false;
+    const onChange = () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; refresh(); });
+    };
+    const unsubMatrix = matrixSrc?.subscribe(onChange);
+    return () => { cancelled = true; unsubMatrix?.(); };
   }, [matrixSrc, gmailSrc]);
 
   return (
