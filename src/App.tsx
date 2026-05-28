@@ -217,6 +217,9 @@ function Inbox({
   const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+  );
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -444,6 +447,23 @@ function Inbox({
         >
           Priority tuning…
         </button>
+        {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
+          <button
+            onClick={async () => {
+              if (!matrixSrc) return;
+              const p = await matrixSrc.requestNotificationPermission();
+              setNotifPerm(p);
+            }}
+            style={{
+              marginTop: 8, width: '100%', padding: '8px',
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 8, color: 'var(--muted)',
+            }}
+            disabled={notifPerm === 'granted'}
+          >
+            {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
+          </button>
+        )}
         <button
           onClick={onSignOut}
           style={{
