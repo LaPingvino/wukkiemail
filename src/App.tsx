@@ -296,6 +296,7 @@ function Inbox({
   const [query, setQuery] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [cursor, setCursor] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
   const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
@@ -434,7 +435,7 @@ function Inbox({
   }, [cursor]);
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
       <aside className="sidebar">
         <h1>WukkieMail</h1>
         <div className="accounts">
@@ -449,10 +450,10 @@ function Inbox({
             <div
               key={key}
               className={`bundle ${bundle === key ? 'active' : ''} ${unread > 0 ? 'has-unread' : ''}`}
-              onClick={() => setBundle(key)}
+              onClick={() => { setBundle(key); setSidebarOpen(false); }}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setBundle(key); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setBundle(key); setSidebarOpen(false); } }}
             >
               <span>
                 {key !== 'all' && <span className={`src ${key}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
@@ -495,8 +496,16 @@ function Inbox({
           Sign out
         </button>
       </aside>
+      {sidebarOpen && <div className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
       <main className="main">
         <div className="toolbar">
+          <md-icon-button
+            className="hamburger"
+            aria-label="Menu"
+            onClick={() => setSidebarOpen((o) => !o)}
+          >
+            <md-icon>menu</md-icon>
+          </md-icon-button>
           <md-outlined-text-field
             label="Search"
             placeholder="Filter inbox…"
