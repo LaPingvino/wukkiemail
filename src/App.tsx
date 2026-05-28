@@ -425,6 +425,29 @@ function Inbox({
           </div>
         </div>
         <BundleChips bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
+        {bundle !== 'all' && visible.length > 0 && matrixSrc && (
+          <div className="sweep-bar">
+            <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+              {visible.length} item{visible.length === 1 ? '' : 's'} in {bundleLabel(bundle, spaceBundles)}
+            </span>
+            <button
+              type="button"
+              className="sweep-btn"
+              onClick={async () => {
+                if (!matrixSrc) return;
+                if (!confirm(`Mark all ${visible.length} items in ${bundleLabel(bundle, spaceBundles)} as done?`)) return;
+                for (const it of visible) {
+                  const m = it.id.match(/^matrix:([^:]+)$/);
+                  if (m) await matrixSrc.markRoomRead(m[1]);
+                  await matrixSrc.setManuallyUnread(it.id, false);
+                }
+              }}
+            >
+              <span className="material-symbols-outlined">cleaning_services</span>
+              Sweep
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (

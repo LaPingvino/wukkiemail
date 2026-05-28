@@ -100,6 +100,24 @@ body {
 /* bottom-nav removed in favor of inline chip bar */
 .bottom-nav { display: none !important; }
 
+.sweep-bar {
+  max-width: 820px; margin: 0 auto;
+  width: 100%;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 24px 12px;
+}
+.sweep-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit; font-size: 13px;
+}
+.sweep-btn .material-symbols-outlined { font-size: 18px; }
+
 /* FAB (New task) */
 .fab {
   position: fixed;
