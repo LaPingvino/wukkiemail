@@ -33,9 +33,10 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - Non-text last-event snippets show humanized labels (🖼️ image, joined, etc.) instead of `[m.foo]`
 - Inline filter chips: Tasks header carries multi-select status chips (counts span the whole bundle, ignore the active filter, incl. a "None" chip for unset-status tasks), Messages header carries an Unread/All toggle. Headers + controls show in every view, not just All. Replaced the floating chip-bar that covered mobile content. (`.mini-chip` / `.section-filters` in styles.css)
 - Per-event-type tuning: each room's latest event → `eventCategory` (message/image/membership/roomstate/call/sticker/…). Settings "By event type" section enumerates detected categories (counts) with a -5..+5 priority slider + Hide toggle each. Stored in synced weights `eventTypeAdjust`. Hiding is by latest event (room reappears when a real message lands); pinned rooms always stay. (`eventCategory`/`EVENT_CATEGORY_LABELS`/`getDetectedEventCategories` in matrix.ts)
+- Tri-state read filter on the Messages header: Unread / Read / All (was a boolean). Saved views carry `readFilter` (legacy `showRead` kept in sync).
+- SAS emoji verification (both directions): MatrixSource verification controller (`startSelfVerification`/`confirmVerification`/`cancelVerification`/`resetVerification`/`onVerification`), inbound caught via `CryptoEvent.VerificationRequestReceived`. `VerificationSheet` renders whenever a verification is in flight; EncryptionSetupSheet has a third "Verify with another device" mode. NB: verification enums/types imported from deep `matrix-js-sdk/lib/crypto-api/*` paths — NOT re-exported from the package root.
 
 ## What's queued
-- **SAS emoji verification**: device-to-device verification flow (matrix-js-sdk `requestDeviceVerification`)
 - **Per-room done-values editor**: small UI to override which kanban values count as done per room (data layer already there: `triage.doneValuesByRoom`)
 - **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
 - **Search secondary index**: full-text Web Worker + IndexedDB index for message bodies
