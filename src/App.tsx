@@ -240,6 +240,8 @@ function Inbox({
   const [mineOnly, setMineOnly] = useState(false);
   // Bundled-stream view: which bundles are folded open (accordion).
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+  // The config bundle (settings + accounts) at the top of the stream.
+  const [configOpen, setConfigOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -953,6 +955,62 @@ function Inbox({
               const isBundled = bundle === 'all' && !query.trim();
 
               if (isBundled) {
+                // Config bundle at the very top — folds open to settings +
+                // accounts (the sidebar's non-space controls live here now).
+                rendered.push(
+                  <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
+                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)}>
+                      <span className="material-symbols-outlined bundle-chevron">
+                        {configOpen ? 'expand_more' : 'chevron_right'}
+                      </span>
+                      <span className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>settings</span>
+                      <span className="bundle-label">Settings &amp; accounts</span>
+                      {cryptoStatus !== 'verified' && hasEncRoom && (
+                        <span className="bundle-count" style={{ color: 'var(--md-sys-color-primary)' }}>encryption ●</span>
+                      )}
+                    </button>
+                    {configOpen && (
+                      <div className="bundle-body config-body">
+                        <div className="accounts">
+                          {slots.map((slot) => (
+                            <button
+                              key={slot}
+                              type="button"
+                              className={`config-account ${slot === activeSlot ? 'active' : ''}`}
+                              onClick={() => { if (slot !== activeSlot) { setActiveSlot(slot); window.location.reload(); } }}
+                            >
+                              <span className="src matrix" style={{ marginRight: 6 }} />
+                              {slot}
+                            </button>
+                          ))}
+                          <button type="button" className="config-btn" onClick={() => setAddAccountOpen(true)}>+ Add account</button>
+                        </div>
+                        {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
+                          <button type="button" className="crypto-banner" onClick={() => setEncryptionOpen(true)} title="Set up encryption">
+                            <span className="material-symbols-outlined">lock_open</span>
+                            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                              <strong>Set up encryption</strong>
+                              <div style={{ fontSize: 11, opacity: 0.8 }}>Cross-signing + recovery key for encrypted history.</div>
+                            </div>
+                          </button>
+                        )}
+                        <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
+                        <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
+                        {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
+                          <button
+                            type="button"
+                            className="config-btn"
+                            disabled={notifPerm === 'granted'}
+                            onClick={async () => { if (matrixSrc) setNotifPerm(await matrixSrc.requestNotificationPermission()); }}
+                          >
+                            {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
+                          </button>
+                        )}
+                        <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
+                      </div>
+                    )}
+                  </div>,
+                );
                 // Loose (important) items shown directly at the top level.
                 for (const it of bundled.loose) rendered.push(renderItem(it, idx++));
                 // Everything else folds into bundles, opened in place.

@@ -55,7 +55,7 @@ export function SettingsSheet({
     return [...items].filter((it) => !hidden(it)).sort((a, b) => (score(b) - score(a)) || (b.ts - a.ts)).slice(0, 5);
   }, [items, w]);
 
-  type NumericWeightKey = 'unread' | 'mention' | 'recent' | 'dm' | 'bridgeChat' | 'bot';
+  type NumericWeightKey = 'unread' | 'mention' | 'recent' | 'dm' | 'bridgeChat' | 'bot' | 'topLevel';
   const slider = (key: NumericWeightKey, label: string, hint: string) => (
     <label className="slider-row" key={key}>
       <div className="slider-head">
@@ -102,6 +102,7 @@ export function SettingsSheet({
           {slider('recent', 'Recent', 'Activity within the last 24 hours')}
           {slider('bridgeChat', 'Bridge group penalty', 'How much group chats from bridges (WhatsApp/IRC/etc.) are demoted')}
           {slider('bot', 'Bot sender penalty', 'How much bot-looking senders are demoted')}
+          {slider('topLevel', 'Top-level threshold', 'Items at or above this priority show loose at the top of the inbox; everything below folds into bundles')}
 
           <label className="sheet-label">
             <span>Statuses that count as "done"</span>
