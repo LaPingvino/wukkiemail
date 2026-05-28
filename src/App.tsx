@@ -14,6 +14,7 @@ import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
 import { QueryChips } from './QueryChips';
 import { JmapLoginSheet } from './JmapLoginSheet';
+import { EmailView } from './EmailView';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode } from './sources/matrix';
 import type { InboxItem } from './sources/types';
@@ -264,6 +265,7 @@ function Inbox({
   // Optional JMAP mail source, multiplexed into the inbox alongside Matrix.
   const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const jmapEmail = loadJmapCreds()?.email ?? loadJmapCreds()?.sessionUrl ?? null;
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
@@ -427,7 +429,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom || !!selectedEmail;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -443,6 +445,7 @@ function Inbox({
         else if (addAccountOpen) setAddAccountOpen(false);
         else if (jmapLoginOpen) setJmapLoginOpen(false);
         else if (bundleSheet) setBundleSheet(null);
+        else if (selectedEmail) setSelectedEmail(null);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
       };
@@ -770,6 +773,8 @@ function Inbox({
       href={it.openPath}
       onClick={(e) => {
         e.preventDefault();
+        const jm = it.id.match(/^jmap:(.+)$/);
+        if (jm) { setSelectedEmail(jm[1]); return; }
         if (it.flavor === 'issue') {
           const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
           if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
@@ -1343,6 +1348,9 @@ function Inbox({
           onClose={() => setJmapLoginOpen(false)}
           onConnected={() => window.location.reload()}
         />
+      )}
+      {selectedEmail && jmapSrc && (
+        <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
       )}
       {bundleSheet && matrixSrc && (
         <BundleSheet

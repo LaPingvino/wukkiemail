@@ -41,6 +41,16 @@ interface JmapEmail {
   keywords?: Record<string, boolean>;
   mailboxIds?: Record<string, boolean>;
 }
+export interface JmapEmailFull {
+  id: string;
+  subject: string;
+  from: JmapEmailAddress[];
+  to: JmapEmailAddress[];
+  receivedAt?: string;
+  html?: string;
+  text?: string;
+}
+
 interface JmapMailbox {
   id: string;
   name: string;
@@ -142,6 +152,46 @@ export class JmapSource implements Source {
     ]);
     const args = resp.methodResponses[0]?.[1] as { list?: JmapMailbox[] } | undefined;
     this.mailboxes = args?.list ?? [];
+  }
+
+  // Fetch one email in full (headers + best body), for the viewer.
+  async getEmail(id: string): Promise<JmapEmailFull | null> {
+    const session = await this.ensureSession();
+    const resp = await this.request([
+      ['Email/get', {
+        accountId: session.accountId,
+        ids: [id],
+        properties: ['id', 'subject', 'from', 'to', 'cc', 'receivedAt', 'bodyValues', 'textBody', 'htmlBody'],
+        fetchHTMLBodyValues: true,
+        fetchTextBodyValues: true,
+        bodyProperties: ['partId', 'type'],
+      }, '0'],
+    ]);
+    const args = resp.methodResponses.find((r) => r[0] === 'Email/get')?.[1] as
+      { list?: (JmapEmail & { bodyValues?: Record<string, { value: string }>; textBody?: { partId?: string }[]; htmlBody?: { partId?: string }[]; to?: JmapEmailAddress[] })[] } | undefined;
+    const e = args?.list?.[0];
+    if (!e) return null;
+    const bodyValues = e.bodyValues ?? {};
+    const htmlPart = e.htmlBody?.find((p) => p.partId && bodyValues[p.partId]);
+    const textPart = e.textBody?.find((p) => p.partId && bodyValues[p.partId]);
+    return {
+      id: e.id,
+      subject: e.subject ?? '(no subject)',
+      from: e.from ?? [],
+      to: e.to ?? [],
+      receivedAt: e.receivedAt,
+      html: htmlPart?.partId ? bodyValues[htmlPart.partId]?.value : undefined,
+      text: textPart?.partId ? bodyValues[textPart.partId]?.value : undefined,
+    };
+  }
+
+  // Mark an email read ($seen) via Email/set.
+  async markEmailSeen(id: string): Promise<void> {
+    const session = await this.ensureSession();
+    await this.request([
+      ['Email/set', { accountId: session.accountId, update: { [id]: { 'keywords/$seen': true } } }, '0'],
+    ]);
+    this.notify();
   }
 
   async listBundles(): Promise<BundleSpec[]> {

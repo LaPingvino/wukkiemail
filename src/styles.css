@@ -104,6 +104,11 @@ body {
 .next-btn-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
 .next-btn-label { font-size: 11px; color: var(--muted); font-weight: 600; }
 .next-btn-sub { font-size: 12px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Email body rendering in the JMAP viewer. */
+.email-html { line-height: 1.5; overflow-wrap: anywhere; }
+.email-html a { color: var(--md-sys-color-primary); }
+.email-html table { max-width: 100%; }
+.email-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
 /* Matrix custom emoji rendered inline in message HTML. */
 .inline-emoji {
   height: 1.4em; width: auto; vertical-align: -0.28em;
