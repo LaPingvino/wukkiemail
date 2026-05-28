@@ -549,6 +549,17 @@ body {
 .avatar-badge.irc { background: #6b7280; }
 .avatar-badge.signal { background: #3a76f0; }
 .avatar-badge.issue { background: #f9ab00; }
+.avatar-presence {
+  position: absolute;
+  top: -2px; right: -2px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--card);
+  background: var(--muted);
+}
+.avatar-presence.online { background: #22c55e; }
+.avatar-presence.unavailable { background: #eab308; }
+.avatar-presence.offline { background: #6b7280; }
 
 /* Legacy .src dots still used in the sidebar account chips and bundle row */
 .item .src, .src { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }

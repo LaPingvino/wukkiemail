@@ -492,7 +492,7 @@ function Inbox({
                 }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
               >
-                <Avatar name={it.from} flavor={it.flavor} />
+                <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} />
                 <div className="from">
                   {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
                   {it.from}
@@ -741,12 +741,13 @@ function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-function Avatar({ name, flavor }: { name: string; flavor: string }) {
+function Avatar({ name, flavor, presence }: { name: string; flavor: string; presence?: 'online' | 'unavailable' | 'offline' }) {
   const hue = hashHue(name);
   return (
     <div className="avatar" style={{ background: `hsl(${hue} 55% 50%)` }}>
       <span>{initials(name)}</span>
       <span className={`avatar-badge ${flavor}`} title={flavor} />
+      {presence && <span className={`avatar-presence ${presence}`} title={presence} />}
     </div>
   );
 }

@@ -28,6 +28,7 @@ export interface InboxItem {
   threadCount: number;
   priority: number;      // higher = more important; sorted desc with ts as tie-break
   snoozedUntil?: number; // ms epoch when this item wakes from snooze
+  senderPresence?: 'online' | 'unavailable' | 'offline';
   // route the UI uses to open the thing:
   openPath: string;      // e.g. /m/!roomid/$eventid or /g/<gmail-thread-id>
 }
