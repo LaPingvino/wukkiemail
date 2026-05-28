@@ -142,6 +142,11 @@ body {
   transition: background 0.1s ease;
 }
 .item:hover { background: var(--md-sys-color-surface-container); }
+.item.cursor {
+  background: var(--md-sys-color-primary-container);
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -2px;
+}
 
 .item .src { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .item .src.gmail { background: #ea4335; }

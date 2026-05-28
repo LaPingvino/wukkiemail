@@ -295,6 +295,7 @@ function Inbox({
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
+  const [cursor, setCursor] = useState(0);
 
   const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
   const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
@@ -364,6 +365,9 @@ function Inbox({
     return { total, unread };
   }, [items]);
 
+  // Reset cursor when the filter changes so we don't point past the end.
+  useEffect(() => { setCursor(0); }, [bundle, query]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
@@ -377,6 +381,57 @@ function Inbox({
       );
     });
   }, [items, bundle, query]);
+
+  // Keyboard navigation, Inbox-style.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) {
+        if (e.key === 'Escape') (t as HTMLInputElement).blur();
+        return;
+      }
+      const ae = document.activeElement;
+      if (ae?.tagName?.toLowerCase().includes('text-field')) return;
+
+      if (e.key === '/') {
+        e.preventDefault();
+        const field = document.querySelector('.toolbar md-outlined-text-field') as HTMLElement | null;
+        field?.focus();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (selectedIssue) { setSelectedIssue(null); return; }
+        if (query) { setQuery(''); return; }
+      }
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCursor((c) => Math.min(c + 1, visible.length - 1));
+        return;
+      }
+      if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCursor((c) => Math.max(c - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter') {
+        const it = visible[cursor];
+        if (!it) return;
+        if (it.flavor === 'issue') {
+          const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+          if (m) { setSelectedIssue({ roomId: m[1], issueId: m[2] }); e.preventDefault(); }
+        } else if (it.flavor === 'gmail') {
+          window.open(it.openPath, '_blank', 'noopener,noreferrer');
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, cursor, query, selectedIssue]);
+
+  useEffect(() => {
+    const el = document.querySelector(`.item[data-idx="${cursor}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [cursor]);
 
   return (
     <div className="app">
@@ -468,10 +523,11 @@ function Inbox({
           </div>
         ) : (
           <div className="item-list">
-            {visible.slice(0, 200).map((it) => (
+            {visible.slice(0, 200).map((it, i) => (
               <a
                 key={it.id}
-                className="item"
+                data-idx={i}
+                className={`item ${i === cursor ? 'cursor' : ''}`}
                 href={it.openPath}
                 target={it.flavor === 'gmail' ? '_blank' : '_self'}
                 rel={it.flavor === 'gmail' ? 'noopener noreferrer' : undefined}
