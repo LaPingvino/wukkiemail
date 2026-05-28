@@ -80,6 +80,11 @@ body {
   flex: 0 0 auto;
 }
 .hamburger:hover { background: var(--md-sys-color-surface-container); }
+.toolbar-brand {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: 0 0 auto;
+}
+.toolbar-brand img { display: block; }
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;

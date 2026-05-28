@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
-import type { SavedView } from './sources/matrix';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem } from './filter';
 import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
@@ -181,9 +180,7 @@ const FLAVOR_LABELS: Record<ItemFlavor, string> = {
   issue: 'Issues',
 };
 
-const FLAVOR_ORDER: ItemFlavor[] = ['matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue', 'gmail'];
 
-function flavorBundleKey(f: ItemFlavor): BundleKey { return `flavor:${f}`; }
 
 // Does a task's user-field set reference me? User fields may hold a full
 // mxid, a bare localpart, or a display name, so match loosely: equal to
@@ -222,15 +219,14 @@ function Inbox({
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
-  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bundle, setBundle] = useState<BundleKey>('all');
+  // The bundled stream is the only view now; bundle scoping is always 'all'.
+  const bundle: BundleKey = 'all';
   const [query, setQuery] = useState('');
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   // Read-state filter for messages: unread-only (default), read-only, or all.
   const [readFilter, setReadFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
@@ -305,7 +301,6 @@ function Inbox({
         },
       );
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
-      if (!cancelled) setSavedViews(matrixSrc.getSavedViews());
     };
     refresh();
     let pending = false;
@@ -369,7 +364,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -384,7 +379,6 @@ function Inbox({
         else if (addAccountOpen) setAddAccountOpen(false);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
-        else if (sidebarOpen) setSidebarOpen(false);
       };
       window.addEventListener('popstate', onPop);
       return () => {
@@ -747,151 +741,16 @@ function Inbox({
   );
 
   return (
-    <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
-      <aside className="sidebar">
-        <h1>WukkieMail</h1>
-        <div className="accounts">
-          {slots.map((slot) => (
-            <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (slot === activeSlot) return;
-                  setActiveSlot(slot);
-                  window.location.reload();
-                }}
-                style={{
-                  flex: 1, minWidth: 0, padding: '6px 10px',
-                  background: slot === activeSlot ? 'var(--md-sys-color-primary-container)' : 'transparent',
-                  color: slot === activeSlot ? 'var(--md-sys-color-on-primary-container)' : 'var(--fg)',
-                  border: 'none', borderRadius: 8, cursor: slot === activeSlot ? 'default' : 'pointer',
-                  font: 'inherit', fontSize: 12, textAlign: 'left',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                <span className="src matrix" style={{ display: 'inline-block', marginRight: 6 }} />
-                {slot}
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => { setAddAccountOpen(true); setSidebarOpen(false); }}
-            style={{
-              padding: '6px 10px', background: 'transparent', color: 'var(--muted)',
-              border: '1px dashed var(--border)', borderRadius: 8,
-              font: 'inherit', fontSize: 12, cursor: 'pointer', textAlign: 'left',
-            }}
-          >
-            + Add account
-          </button>
-        </div>
-        <BundleRow id="all" label="Inbox" total={counts.total.get('all') ?? 0} unread={counts.unread.get('all') ?? 0} active={bundle === 'all'} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
-        {(counts.total.get('dm') ?? 0) > 0 && (
-          <BundleRow id="dm" label="DMs" flavor="matrix" total={counts.total.get('dm') ?? 0} unread={counts.unread.get('dm') ?? 0} active={bundle === 'dm'} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
-        )}
-        {FLAVOR_ORDER.map((f) => {
-          const key = flavorBundleKey(f);
-          const total = counts.total.get(key) ?? 0;
-          if (total === 0) return null;
-          return (
-            <BundleRow key={key} id={key} label={FLAVOR_LABELS[f]} flavor={f} total={total} unread={counts.unread.get(key) ?? 0} active={bundle === key} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
-          );
-        })}
-        {spaceBundles.length > 0 && (
-          <>
-            <div style={{ margin: '12px 16px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)' }}>Spaces</div>
-            {spaceBundles
-              .filter((b) => (counts.total.get(b.id) ?? 0) > 0)
-              .map((b) => (
-                <BundleRow key={b.id} id={b.id} label={b.label} flavor="matrix" total={counts.total.get(b.id) ?? 0} unread={counts.unread.get(b.id) ?? 0} active={bundle === b.id} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
-              ))}
-          </>
-        )}
-        <SourceStatus
-          label="Matrix"
-          loading={matrix.kind === 'connecting' || matrix.kind === 'syncing'}
-          error={matrix.kind === 'error' ? matrix.error : null}
-        />
-        <button
-          onClick={() => { setSettingsOpen(true); setSidebarOpen(false); }}
-          style={{
-            marginTop: 16, width: '100%', padding: '8px',
-            background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 8, color: 'var(--muted)',
-          }}
-        >
-          Priority tuning…
-        </button>
-        <button
-          onClick={() => { setDoneValuesOpen(true); setSidebarOpen(false); }}
-          style={{
-            marginTop: 8, width: '100%', padding: '8px',
-            background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 8, color: 'var(--muted)',
-          }}
-        >
-          Task "done" statuses…
-        </button>
-        {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
-          <button
-            className="crypto-banner"
-            type="button"
-            onClick={() => { setEncryptionOpen(true); setSidebarOpen(false); }}
-            title="Set up encryption"
-          >
-            <span className="material-symbols-outlined">lock_open</span>
-            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <strong>Set up encryption</strong>
-              <div style={{ fontSize: 11, opacity: 0.8 }}>
-                Bootstrap cross-signing + recovery key so encrypted history is readable on new devices.
-              </div>
-            </div>
-          </button>
-        )}
-        {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
-          <button
-            onClick={async () => {
-              if (!matrixSrc) return;
-              const p = await matrixSrc.requestNotificationPermission();
-              setNotifPerm(p);
-            }}
-            style={{
-              marginTop: 8, width: '100%', padding: '8px',
-              background: 'transparent', border: '1px solid var(--border)',
-              borderRadius: 8, color: 'var(--muted)',
-            }}
-            disabled={notifPerm === 'granted'}
-          >
-            {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
-          </button>
-        )}
-        <button
-          onClick={onSignOut}
-          style={{
-            marginTop: 8, width: '100%', padding: '8px',
-            background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 8, color: 'var(--muted)',
-          }}
-        >
-          Sign out
-        </button>
-      </aside>
-      {sidebarOpen && <div className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
+    <div className="app no-sidebar">
       <main className="main">
         <div className="toolbar">
           <div className="toolbar-inner">
-            <button
-              type="button"
-              className="hamburger"
-              aria-label="Menu"
-              onClick={() => setSidebarOpen((o) => !o)}
-            >
-              <span className="material-symbols-outlined">menu</span>
-            </button>
+            <span className="toolbar-brand" title="WukkieMail">
+              <img src="/icons/wukkie.svg" alt="" width={24} height={24} />
+            </span>
             <md-outlined-text-field
               label="Search"
-              placeholder="Filter inbox…"
+              placeholder="Search — try is:unread or flavor:whatsapp"
               value={query}
               ref={fieldRef((v) => setQuery(v))}
               style={{ flex: 1 }}
@@ -908,40 +767,6 @@ function Inbox({
             )}
           </div>
         </div>
-        <BundleChips
-          bundle={bundle} setBundle={setBundle}
-          counts={counts} spaceBundles={spaceBundles}
-          savedViews={savedViews}
-          applyView={(v) => {
-            setBundle(v.bundle);
-            setQuery(v.query ?? '');
-            setIssueStatusFilter(v.issueStatus ? new Set(v.issueStatus.split(',')) : new Set());
-            setReadFilter(v.readFilter ?? (v.showRead ? 'all' : 'unread'));
-          }}
-          saveCurrentView={async () => {
-            if (!matrixSrc) return;
-            const name = prompt('Name this view');
-            if (!name?.trim()) return;
-            const view: SavedView = {
-              id: crypto.randomUUID(),
-              name: name.trim(),
-              bundle,
-              query: query || undefined,
-              issueStatus: issueStatusFilter.size > 0 ? [...issueStatusFilter].join(',') : undefined,
-              readFilter: readFilter !== 'unread' ? readFilter : undefined,
-              showRead: readFilter === 'all' || undefined, // keep legacy field in sync for old clients
-            };
-            const next = [...savedViews, view];
-            setSavedViews(next);
-            await matrixSrc.setSavedViews(next);
-          }}
-          deleteView={async (id) => {
-            if (!matrixSrc) return;
-            const next = savedViews.filter((v) => v.id !== id);
-            setSavedViews(next);
-            await matrixSrc.setSavedViews(next);
-          }}
-        />
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 && msgHits.length === 0 ? (
@@ -1332,114 +1157,6 @@ function nextDayAt(hour: number, addDays = 1): number {
   return d.getTime();
 }
 
-function BundleChips({
-  bundle, setBundle, counts, spaceBundles, savedViews, applyView, saveCurrentView, deleteView,
-}: {
-  bundle: BundleKey;
-  setBundle: (k: BundleKey) => void;
-  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number>; active: Map<BundleKey, number> };
-  spaceBundles: BundleSpec[];
-  savedViews: SavedView[];
-  applyView: (v: SavedView) => void;
-  saveCurrentView: () => void;
-  deleteView: (id: string) => void;
-}) {
-  // Inline horizontal chip bar for the main bundles. Always shows All;
-  // then DMs and each populated flavor; then space bundles. Click to
-  // filter. The drawer remains for full nav.
-  const chips: { id: BundleKey; label: string; flavor: ItemFlavor | null }[] = [
-    { id: 'all', label: 'Inbox', flavor: null },
-  ];
-  // Show a chip when the bundle has anything *active* — i.e. items the
-  // user might still want to do. Bundles whose items are all read /
-  // all done get hidden so the bar stays tight. Snoozed is special:
-  // it shows whenever there's at least one snoozed item (the whole
-  // point of going there is to wake them). The currently-selected bundle
-  // always stays visible, so finishing the last task in it doesn't yank
-  // the chip (and the whole view) out from under you.
-  const isActive = (k: BundleKey) =>
-    k === bundle ? true
-      : k === 'snoozed' ? (counts.total.get(k) ?? 0) > 0
-        : (counts.active.get(k) ?? 0) > 0;
-  if (isActive('dm')) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
-  if (isActive('snoozed')) chips.push({ id: 'snoozed', label: 'Snoozed', flavor: null });
-  for (const f of FLAVOR_ORDER) {
-    const k = flavorBundleKey(f);
-    if (isActive(k)) chips.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
-  }
-  for (const b of spaceBundles) {
-    if (isActive(b.id)) chips.push({ id: b.id, label: b.label, flavor: 'matrix' });
-  }
-  return (
-    <div className="chip-bar">
-      <div className="chip-bar-inner">
-        {chips.map(({ id, label, flavor }) => {
-          const unread = counts.unread.get(id) ?? 0;
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`chip ${bundle === id ? 'active' : ''}`}
-              onClick={() => setBundle(id)}
-            >
-              {flavor && <span className={`src ${flavor}`} />}
-              <span>{label}</span>
-              {unread > 0 && <span className="chip-badge">{unread > 99 ? '99+' : unread}</span>}
-            </button>
-          );
-        })}
-        {savedViews.map((v) => (
-          <span key={v.id} className="chip saved" title={`Saved view: ${v.name}`}>
-            <button type="button" className="saved-apply" onClick={() => applyView(v)}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4 }}>bookmark</span>
-              {v.name}
-            </button>
-            <button type="button" className="saved-del" aria-label="Delete view" onClick={() => deleteView(v.id)}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
-            </button>
-          </span>
-        ))}
-        <button type="button" className="chip" onClick={saveCurrentView} title="Save current view">
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function BundleRow({
-  id, label, flavor, total, unread, active, onSelect,
-}: {
-  id: BundleKey;
-  label: string;
-  flavor?: ItemFlavor;
-  total: number;
-  unread: number;
-  active: boolean;
-  onSelect: (k: BundleKey) => void;
-}) {
-  return (
-    <div
-      className={`bundle ${active ? 'active' : ''} ${unread > 0 ? 'has-unread' : ''}`}
-      onClick={() => onSelect(id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(id); }}
-      title={label}
-    >
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {flavor && <span className={`src ${flavor}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
-        {label}
-      </span>
-      <span className="count">
-        {unread > 0 ? <strong>{unread}</strong> : null}
-        {unread > 0 && total > unread && <span style={{ opacity: 0.5 }}> / {total}</span>}
-        {unread === 0 && total}
-      </span>
-    </div>
-  );
-}
-
 function hashHue(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -1615,17 +1332,6 @@ function AddAccountSheet({
       </div>
     </div>
   );
-}
-
-function SourceStatus({ label, loading, error }: { label: string; loading: boolean; error: string | null }) {
-  if (error) return <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, marginTop: 8 }}>{label}: {error}</p>;
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, color: 'var(--muted)', fontSize: 12 }}>
-      <md-circular-progress indeterminate aria-label={`${label} syncing`} style={{ width: 14, height: 14 }} />
-      <span>{label} syncing…</span>
-    </div>
-  );
-  return null;
 }
 
 // Swap favicon between plain wukkie.svg and a version with a red dot
