@@ -294,7 +294,13 @@ function Inbox({
         if (isSnoozed && !q) return false;
         if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
       }
-      if (!showRead && !it.unread && !q && bundle !== 'snoozed') return false;
+      // Don't apply the hide-read filter when:
+      //   - viewing the Snoozed bundle (everything there is interesting)
+      //   - viewing the Issues bundle (todos aren't 'read' in the same sense)
+      //   - the item is an issue and we're in the All view (would otherwise hide
+      //     all your tasks because Matrix has no read receipt for state events)
+      const skipReadFilter = bundle === 'snoozed' || bundle === 'flavor:issue' || it.flavor === 'issue';
+      if (!showRead && !it.unread && !q && !skipReadFilter) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -312,13 +318,21 @@ function Inbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) {
-        if (e.key === 'Escape') (t as HTMLInputElement).blur();
-        return;
+      // Robust focus check across shadow DOM. Material text fields nest
+      // the real <input> in their shadow root, so the bare event target
+      // and document.activeElement aren't reliable on their own.
+      let node: Element | null = (e.target as Element | null) ?? document.activeElement;
+      while (node) {
+        const tag = node.tagName?.toLowerCase() ?? '';
+        if (tag === 'input' || tag === 'textarea' || (node as HTMLElement).isContentEditable) {
+          if (e.key === 'Escape') (node as HTMLInputElement).blur();
+          return;
+        }
+        if (tag.includes('text-field')) return;
+        const root = (node as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+        if (root?.activeElement) { node = root.activeElement; continue; }
+        break;
       }
-      const ae = document.activeElement;
-      if (ae?.tagName?.toLowerCase().includes('text-field')) return;
 
       if (e.key === '/') {
         e.preventDefault();

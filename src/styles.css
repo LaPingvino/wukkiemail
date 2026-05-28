@@ -470,10 +470,18 @@ body {
   transition: opacity 0.1s ease;
   pointer-events: none;
 }
-.item:hover .item-actions,
-.item.cursor .item-actions {
-  opacity: 1;
-  pointer-events: auto;
+/* Only show hover-actions on devices with real hover. On touch
+   devices the hover gets sticky and covers the row's content; we'll
+   give those a long-press or swipe affordance later. */
+@media (hover: hover) {
+  .item:hover .item-actions,
+  .item.cursor .item-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (max-width: 900px) {
+  .item-actions { display: none; }
 }
 .item-actions button {
   width: 36px; height: 36px;
