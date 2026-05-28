@@ -1,12 +1,14 @@
 {
-  // Unified Workers + assets. Worker handles /api/* (OAuth token swap,
-  // refresh); everything else hits the SPA via the ASSETS binding.
+  // Unified Workers + assets. /api/* paths run the Worker first (OAuth
+  // swap, refresh); the SPA-fallback assets handler eats everything
+  // else, so we have to opt API routes OUT of the assets-first default.
   "name": "wukkiemail",
   "compatibility_date": "2026-05-01",
   "main": "src/worker.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   }
 }

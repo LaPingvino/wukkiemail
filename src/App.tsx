@@ -440,7 +440,16 @@ function Inbox({
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (
-          <div className="empty">{bundle === 'all' ? 'No items.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</div>
+          <div className="empty">
+            <p>{bundle === 'all' ? 'No items.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</p>
+            {matrixSrc && (
+              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                Matrix: sync={String(matrixSrc.describe().state)},
+                rooms={matrixSrc.describe().rooms},
+                spaces={matrixSrc.describe().spaces}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="item-list">
             {visible.slice(0, 200).map((it) => (

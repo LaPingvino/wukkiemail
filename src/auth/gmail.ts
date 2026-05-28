@@ -95,19 +95,29 @@ export function beginLogin(): void {
 export function consumeReturnFragment(): boolean {
   if (window.location.pathname !== '/auth/gmail/return') return false;
   const frag = window.location.hash.replace(/^#/, '');
+  // eslint-disable-next-line no-console
+  console.info('[wukkiemail] gmail return', {
+    hasFragment: frag.length > 0,
+    keys: frag ? [...new URLSearchParams(frag).keys()] : [],
+  });
   if (!frag) return false;
 
   const params = new URLSearchParams(frag);
   const expectedState = sessionStorage.getItem(STATE_KEY);
   sessionStorage.removeItem(STATE_KEY);
   if (!expectedState || params.get('state') !== expectedState) {
-    // CSRF mismatch — refuse silently; the URL fragment never reached a server.
+    // eslint-disable-next-line no-console
+    console.warn('[wukkiemail] gmail return: state mismatch', { expected: expectedState, got: params.get('state') });
     return false;
   }
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token');
   const expiresInRaw = params.get('expires_in');
-  if (!accessToken || !refreshToken || !expiresInRaw) return false;
+  if (!accessToken || !refreshToken || !expiresInRaw) {
+    // eslint-disable-next-line no-console
+    console.warn('[wukkiemail] gmail return: missing tokens in fragment');
+    return false;
+  }
 
   const expiresAt = Date.now() + Number(expiresInRaw) * 1000;
   saveCreds({
@@ -116,5 +126,7 @@ export function consumeReturnFragment(): boolean {
     expiresAt,
     scope: params.get('scope') ?? '',
   });
+  // eslint-disable-next-line no-console
+  console.info('[wukkiemail] gmail return: creds saved');
   return true;
 }

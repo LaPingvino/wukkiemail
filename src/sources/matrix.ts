@@ -66,6 +66,17 @@ export class MatrixSource implements Source {
     return this.syncState === 'PREPARED' || this.syncState === 'SYNCING';
   }
 
+  // Debug snapshot — what does the client see right now?
+  describe(): { state: string | null; rooms: number; spaces: number } {
+    if (!this.client) return { state: null, rooms: 0, spaces: 0 };
+    const all = this.client.getRooms();
+    return {
+      state: this.syncState,
+      rooms: all.filter((r) => !isSpace(r)).length,
+      spaces: all.filter((r) => isSpace(r)).length,
+    };
+  }
+
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
