@@ -5,6 +5,9 @@
 
 import type { ItemFlavor } from './sources/types';
 
+// Mail (flavor:gmail) is deliberately omitted — the only mail backend is
+// JMAP (which Gmail doesn't implement) and it isn't wired up yet, so
+// offering a Mail filter would surface an always-empty predicate.
 const FLAVORS: { flavor: ItemFlavor; label: string }[] = [
   { flavor: 'matrix', label: 'Matrix' },
   { flavor: 'whatsapp', label: 'WhatsApp' },
@@ -12,7 +15,6 @@ const FLAVORS: { flavor: ItemFlavor; label: string }[] = [
   { flavor: 'signal', label: 'Signal' },
   { flavor: 'irc', label: 'IRC' },
   { flavor: 'issue', label: 'Tasks' },
-  { flavor: 'gmail', label: 'Mail' },
 ];
 
 export function QueryChips({ query, onChange }: { query: string; onChange: (q: string) => void }) {
