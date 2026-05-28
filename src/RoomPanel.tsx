@@ -21,6 +21,7 @@ export function RoomPanel({
   const [composeText, setComposeText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
@@ -78,8 +79,9 @@ export function RoomPanel({
     setSending(true);
     setSendError(null);
     try {
-      await matrix.sendMessage(roomId, body, markdownToHtml(body));
+      await matrix.sendMessage(roomId, body, markdownToHtml(body), replyTo);
       setComposeText('');
+      setReplyTo(null);
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
       const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
@@ -156,6 +158,14 @@ export function RoomPanel({
                 ) : (
                   <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
                 )}
+                <button
+                  type="button"
+                  className="msg-reply"
+                  aria-label="Reply"
+                  onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
+                >
+                  <span className="material-symbols-outlined">reply</span>
+                </button>
                 <div className="reactions">
                   {m.reactions?.map((r) => (
                     <button
@@ -177,6 +187,17 @@ export function RoomPanel({
         )}
       </div>
       <TypingLine matrix={matrix} roomId={roomId} />
+      {replyTo && (
+        <div className="reply-chip">
+          <div className="reply-chip-inner">
+            <div className="reply-chip-label">Replying to {replyTo.senderName}</div>
+            <div className="reply-chip-body">{replyTo.body.slice(0, 200)}</div>
+          </div>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      )}
       <div className="composer">
         {sendError && (
           <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, margin: '0 0 6px' }}>
