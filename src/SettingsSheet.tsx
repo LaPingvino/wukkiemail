@@ -2,10 +2,11 @@
 // Each row is a slider 0–10. Save persists to account data so the new
 // weights sync across devices (and the inbox re-sorts on the next tick).
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { PriorityWeights } from './sources/matrix';
 import { DEFAULT_WEIGHTS } from './sources/matrix';
+import type { InboxItem } from './sources/types';
 
 export function SettingsSheet({
   matrix, onClose,
@@ -15,6 +16,32 @@ export function SettingsSheet({
 }) {
   const [w, setW] = useState<PriorityWeights>(() => matrix.getWeights());
   const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState<InboxItem[]>([]);
+  useEffect(() => {
+    matrix.listItems(null).then(setItems).catch(() => setItems([]));
+  }, [matrix]);
+
+  // Re-rank using the in-flight weights. We don't persist until Save, so
+  // this is a pure client-side preview.
+  const preview = useMemo(() => {
+    const wt = w;
+    // Re-derive priority from the InboxItem signals we have. This won't
+    // perfectly match MatrixSource's view (it lacks room.memberCount) but
+    // is close enough for a directional preview.
+    const score = (it: InboxItem): number => {
+      let p = 0;
+      if (it.unread) p += wt.unread;
+      // Highlight isn't carried on InboxItem yet — approximate via priority>=5 baseline
+      if (it.priority >= wt.mention) p = Math.max(p, wt.mention);
+      if (it.bundles.includes('dm')) p += wt.dm;
+      if (Date.now() - it.ts < 24 * 3600 * 1000) p += wt.recent;
+      const isBridge = it.flavor !== 'matrix' && it.flavor !== 'issue';
+      if (isBridge) p -= wt.bridgeChat;
+      if (it.fromAddress?.toLowerCase().includes('bot')) p -= wt.bot;
+      return p;
+    };
+    return [...items].sort((a, b) => (score(b) - score(a)) || (b.ts - a.ts)).slice(0, 5);
+  }, [items, w]);
 
   const slider = (key: keyof PriorityWeights, label: string, hint: string) => (
     <label className="slider-row" key={key}>
@@ -62,6 +89,23 @@ export function SettingsSheet({
           {slider('recent', 'Recent', 'Activity within the last 24 hours')}
           {slider('bridgeChat', 'Bridge group penalty', 'How much group chats from bridges (WhatsApp/IRC/etc.) are demoted')}
           {slider('bot', 'Bot sender penalty', 'How much bot-looking senders are demoted')}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+              Live preview — your inbox top 5 with these weights:
+            </div>
+            <ol className="preview-list">
+              {preview.length === 0 ? (
+                <li style={{ color: 'var(--muted)', fontSize: 13 }}>No items yet.</li>
+              ) : preview.map((it) => (
+                <li key={it.id}>
+                  <span className={`src ${it.flavor}`} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    <strong>{it.from}</strong> — {it.subject}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
           <button
             type="button"
             onClick={() => setW(DEFAULT_WEIGHTS)}

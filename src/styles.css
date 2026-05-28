@@ -245,6 +245,22 @@ body {
 }
 .slider-row .hint { font-size: 11px; color: var(--muted); }
 
+.preview-list {
+  list-style: decimal inside;
+  padding: 0;
+  margin: 0;
+  display: grid; gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.preview-list li {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+
 @media (max-width: 900px) {
   .toolbar { padding: 8px 12px; gap: 8px; }
   .toolbar md-outlined-text-field { flex: 1; min-width: 0; }
