@@ -176,6 +176,7 @@ export function RoomPanel({
           </ul>
         )}
       </div>
+      <TypingLine matrix={matrix} roomId={roomId} />
       <div className="composer">
         {sendError && (
           <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, margin: '0 0 6px' }}>
@@ -189,17 +190,22 @@ export function RoomPanel({
           ref={(el: HTMLElement | null) => {
             if (!el) return;
             el.addEventListener('input', (ev) => {
-              setComposeText((ev.target as HTMLInputElement & { value: string }).value);
+              const v = (ev.target as HTMLInputElement & { value: string }).value;
+              setComposeText(v);
+              // Send a typing tick when the user is actively typing; the
+              // SDK will let the server know we stopped after the
+              // ~30s timeout if we don't refresh.
+              void matrix.sendTyping(roomId, v.length > 0, 30_000);
             });
             el.addEventListener('keydown', (ev: Event) => {
               const ke = ev as KeyboardEvent;
-              // Enter sends; Shift+Enter would insert a newline once we
-              // upgrade this to a textarea variant.
               if (ke.key === 'Enter' && !ke.shiftKey) {
                 ev.preventDefault();
                 void send();
+                void matrix.sendTyping(roomId, false);
               }
             });
+            el.addEventListener('blur', () => { void matrix.sendTyping(roomId, false); });
           }}
           disabled={sending || undefined}
           style={{ flex: 1, minWidth: 0 }}
@@ -254,6 +260,21 @@ function ReactionAdder({ onAdd }: { onAdd: (key: string) => void }) {
       )}
     </span>
   );
+}
+
+function TypingLine({ matrix, roomId }: { matrix: MatrixSource; roomId: string }) {
+  const [names, setNames] = useState<string[]>(() => matrix.getTypingUsers(roomId));
+  useEffect(() => {
+    const unsub = matrix.subscribe(() => setNames(matrix.getTypingUsers(roomId)));
+    return unsub;
+  }, [matrix, roomId]);
+  if (names.length === 0) return null;
+  const summary = names.length === 1
+    ? `${names[0]} is typing…`
+    : names.length === 2
+      ? `${names[0]} and ${names[1]} are typing…`
+      : `${names[0]} and ${names.length - 1} others are typing…`;
+  return <div className="typing-line">{summary}</div>;
 }
 
 function formatBytes(n: number): string {

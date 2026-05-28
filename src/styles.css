@@ -893,6 +893,13 @@ body {
 }
 .composer md-outlined-text-field { flex: 1; }
 
+.typing-line {
+  padding: 4px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* Make Material Web buttons fit the layout */
 md-filled-button, md-outlined-button, md-text-button { width: 100%; }
 md-outlined-text-field { width: 100%; }
