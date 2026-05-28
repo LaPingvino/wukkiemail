@@ -738,6 +738,10 @@ function Inbox({
           onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
           onSnooze={async (untilMs) => { setSnoozePopoverFor(null); await matrixSrc.setSnoozed(it.id, untilMs); }}
           onDone={async () => {
+            // A task is "done" by setting its kanban status; a message is
+            // "done" by marking the room read.
+            const im = it.id.match(/^matrix:(.+):issue:(.+)$/);
+            if (im) { await matrixSrc.markIssueDone(im[1], im[2]); return; }
             const m = it.id.match(/^matrix:([^:]+)$/);
             if (m) await matrixSrc.markRoomRead(m[1]);
             await matrixSrc.setManuallyUnread(it.id, false);
@@ -1364,12 +1368,22 @@ function ItemActions({
           </div>
         )}
       </div>
-      <button type="button" title={item.unread ? 'Mark read' : 'Mark unread'} onClick={(e) => { stop(e); onToggleUnread(); }}>
-        <span className="material-symbols-outlined">{item.unread ? 'mark_email_read' : 'mark_email_unread'}</span>
-      </button>
-      <button type="button" title="Done" onClick={(e) => { stop(e); onDone(); }}>
-        <span className="material-symbols-outlined">done_all</span>
-      </button>
+      {item.flavor === 'issue' ? (
+        // Tasks: a single "mark done" action.
+        <button type="button" title="Mark done" onClick={(e) => { stop(e); onDone(); }}>
+          <span className="material-symbols-outlined">done_all</span>
+        </button>
+      ) : item.unread ? (
+        // Unread message: the primary action is "done" (mark read).
+        <button type="button" title="Done (mark read)" onClick={(e) => { stop(e); onDone(); }}>
+          <span className="material-symbols-outlined">done_all</span>
+        </button>
+      ) : (
+        // Already read: the only useful toggle is back to unread.
+        <button type="button" title="Mark unread" onClick={(e) => { stop(e); onToggleUnread(); }}>
+          <span className="material-symbols-outlined">mark_email_unread</span>
+        </button>
+      )}
     </div>
   );
 }

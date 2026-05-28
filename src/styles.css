@@ -751,7 +751,10 @@ body {
   padding: 2px 4px;
   border-radius: 24px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  z-index: 3;
 }
+/* The open snooze popover's row must out-stack neighbouring rows. */
+.item:has(.snooze-popover) { z-index: 40; }
 .item:hover .ts { opacity: 0; }
 .item.cursor .ts { opacity: 0; }
 .item:hover {
@@ -863,7 +866,7 @@ body {
   display: grid;
   min-width: 180px;
   padding: 4px;
-  z-index: 5;
+  z-index: 60;
 }
 .snooze-popover button {
   background: transparent;
