@@ -3,6 +3,7 @@
 // Credentials persisted in localStorage; the client is rebuilt on reload.
 
 import { createClient, MemoryStore, type MatrixClient } from 'matrix-js-sdk';
+import { IndexedDBStore } from 'matrix-js-sdk/lib/store/indexeddb.js';
 
 export interface MatrixCreds {
   homeserverUrl: string;
@@ -81,16 +82,32 @@ export async function loginWithPassword(
   };
 }
 
-export function buildClient(creds: MatrixCreds): MatrixClient {
-  // Explicit MemoryStore avoids any "store not initialised" surprises some
-  // SDK versions have after a bare createClient(); we'll add an IndexedDB
-  // store later for persistence.
+// Build a client backed by IndexedDB so the next page load is fast.
+// dbName is per-user so multi-account works once we add it. Falls back
+// to MemoryStore on private-mode browsers (where indexedDB is blocked
+// or returns nothing usable) so the app still works, just slower.
+export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
+  const dbName = `wukkiemail:matrix:${creds.userId}`;
+  let store: IndexedDBStore | MemoryStore;
+  try {
+    const idb = new IndexedDBStore({
+      indexedDB: window.indexedDB,
+      localStorage: window.localStorage,
+      dbName,
+    });
+    await idb.startup();
+    store = idb;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[wukkiemail] IndexedDB store unavailable, falling back to MemoryStore', e);
+    store = new MemoryStore({ localStorage: window.localStorage });
+  }
   return createClient({
     baseUrl: creds.homeserverUrl,
     accessToken: creds.accessToken,
     userId: creds.userId,
     deviceId: creds.deviceId,
-    store: new MemoryStore({ localStorage: window.localStorage }),
+    store,
     // We don't enable crypto in v0 — read-only triage of plaintext rooms first.
     // Encrypted rooms will show "(encrypted)" placeholders until crypto lands.
   });

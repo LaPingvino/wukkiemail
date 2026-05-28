@@ -37,13 +37,14 @@ const DEFAULT_SCHEMA: IssueSchema = {
 export class MatrixSource implements Source {
   readonly kind = 'matrix' as const;
   readonly id: string;
-  private client: MatrixClient;
+  private creds: MatrixCreds;
+  private client: MatrixClient | null = null;
   private started = false;
   private listeners = new Set<() => void>();
   private syncState: string | null = null;
 
   constructor(creds: MatrixCreds) {
-    this.client = buildClient(creds);
+    this.creds = creds;
     this.id = creds.userId;
   }
 
@@ -68,6 +69,10 @@ export class MatrixSource implements Source {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    // Build (and IndexedDB-hydrate) the client lazily — first run takes
+    // a sync; subsequent loads hydrate from IndexedDB and are near-instant.
+    this.client = await buildClient(this.creds);
+    const client = this.client;
     // Sync listener stays attached for the lifetime of the source.
     // Every transition pings subscribers so the inbox redraws as
     // rooms arrive — we don't block on PREPARED any more.
@@ -82,13 +87,13 @@ export class MatrixSource implements Source {
         console.warn('[wukkiemail] sync ERROR:', err);
       }
     };
-    this.client.on('sync' as never, onSync as never);
+    client.on('sync' as never, onSync as never);
 
     try {
       // lazyLoadMembers cuts initial /sync payload dramatically on heavy
       // accounts — members for a room only arrive when we touch the room.
       // initialSyncLimit: 1 keeps the timeline portion tiny too.
-      await this.client.startClient({
+      await client.startClient({
         initialSyncLimit: 1,
         lazyLoadMembers: true,
       });
@@ -102,23 +107,24 @@ export class MatrixSource implements Source {
   }
 
   async stop(): Promise<void> {
-    this.client.stopClient();
+    this.client?.stopClient();
     this.started = false;
   }
 
   async listBundles(): Promise<BundleSpec[]> {
+    if (!this.client) return [];
     const rooms = this.client.getRooms();
     const spaces = rooms.filter((r) => isSpace(r));
-    const bundles: BundleSpec[] = spaces.map((s) => ({
+    return spaces.map((s) => ({
       id: `space:${s.roomId}`,
       label: s.name || s.roomId,
       count: 0,
       flavor: 'matrix',
     }));
-    return bundles;
   }
 
   async listItems(_bundleId: string | null): Promise<InboxItem[]> {
+    if (!this.client) return [];
     const selfId = this.client.getUserId() ?? '';
     const rooms = this.client.getRooms().filter((r) => !isSpace(r));
     const items: InboxItem[] = [];
