@@ -31,10 +31,10 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - Encryption: foundation banner in sidebar; EncryptionSetupSheet with two modes — Set up fresh (bootstrap cross-signing + secret storage with UIA password, returns recovery key) and I have a recovery key (verify existing). `getSecretStorageKey` callback wired via `window._wukkieKey` Uint8Array stash.
 - Per-schema done detection: defaults to LAST kanban value, per-room override in `triage.doneValuesByRoom`
 - Non-text last-event snippets show humanized labels (🖼️ image, joined, etc.) instead of `[m.foo]`
+- Inline filter chips: Tasks header carries multi-select status chips (counts span the whole bundle, ignore the active filter), Messages header carries an Unread/All toggle. Headers + controls show in every view, not just All. Replaced the floating chip-bar that covered mobile content. (`.mini-chip` / `.section-filters` in styles.css)
 
 ## What's queued
 
-- **Inline filter chips under section headers**: replace top status chip bar with toggle-style multi-select chips inline with the Tasks / Messages headers (always visible)
 - **Per-event-type priority + visibility tuning**: enumerate detected event types, surface in settings, let user dial each
 - **SAS emoji verification**: device-to-device verification flow (matrix-js-sdk `requestDeviceVerification`)
 - **Per-room done-values editor**: small UI to override which kanban values count as done per room (data layer already there: `triage.doneValuesByRoom`)
