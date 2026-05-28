@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml } from './markdown';
+import { CollapsibleBody } from './CollapsibleBody';
 
 export function RoomPanel({
   matrix,
@@ -151,9 +152,9 @@ export function RoomPanel({
                     {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
                   </a>
                 ) : m.html ? (
-                  <div className="comment-body">{renderFormattedHtml(m.html)}</div>
+                  <CollapsibleBody className="comment-body">{renderFormattedHtml(m.html)}</CollapsibleBody>
                 ) : (
-                  <div className="comment-body">{renderInline(m.body)}</div>
+                  <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
                 )}
                 <div className="reactions">
                   {m.reactions?.map((r) => (

@@ -3,10 +3,10 @@
 :root {
   color-scheme: light dark;
   font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif;
-  --md-sys-color-primary: #1a73e8;
+  --md-sys-color-primary: #0d9488;
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #d2e3fc;
-  --md-sys-color-on-primary-container: #041e49;
+  --md-sys-color-primary-container: #ccfbf1;
+  --md-sys-color-on-primary-container: #042f2e;
   --md-sys-color-secondary: #5f6368;
   --md-sys-color-surface: #ffffff;
   --md-sys-color-surface-container: #f1f3f4;
@@ -24,10 +24,10 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --md-sys-color-primary: #a8c7fa;
-    --md-sys-color-on-primary: #062e6f;
-    --md-sys-color-primary-container: #284579;
-    --md-sys-color-on-primary-container: #d2e3fc;
+    --md-sys-color-primary: #5eead4;
+    --md-sys-color-on-primary: #042f2e;
+    --md-sys-color-primary-container: #115e59;
+    --md-sys-color-on-primary-container: #ccfbf1;
     --md-sys-color-surface: #131314;
     --md-sys-color-surface-container: #1f2024;
     --md-sys-color-surface-container-low: #1a1a1c;
@@ -775,6 +775,23 @@ body {
   font-size: 0.9em;
 }
 .comment-body a { color: var(--md-sys-color-primary); }
+
+.collapsible { position: relative; }
+.collapsible.collapsed .collapsible-inner {
+  -webkit-mask-image: linear-gradient(180deg, black 60%, transparent 100%);
+  mask-image: linear-gradient(180deg, black 60%, transparent 100%);
+}
+.collapsible-toggle {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  color: var(--md-sys-color-primary);
+  cursor: pointer;
+  font: inherit; font-size: 12px;
+}
+.collapsible-toggle:hover { text-decoration: underline; }
 .msg-image {
   max-width: 100%;
   max-height: 360px;
