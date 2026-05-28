@@ -304,16 +304,22 @@ function Inbox({
   const counts = useMemo(() => {
     const total = new Map<BundleKey, number>();
     const unread = new Map<BundleKey, number>();
+    const active = new Map<BundleKey, number>();
     const bump = (m: Map<BundleKey, number>, k: BundleKey) => m.set(k, (m.get(k) ?? 0) + 1);
     for (const it of items) {
+      // Active = something the user might still want to do: unread,
+      // or a not-yet-done issue (issues have priority -3 once done).
+      const isActive = it.unread || (it.flavor === 'issue' && it.priority > -3);
       bump(total, 'all');
       if (it.unread) bump(unread, 'all');
+      if (isActive) bump(active, 'all');
       for (const b of it.bundles) {
         bump(total, b);
         if (it.unread) bump(unread, b);
+        if (isActive) bump(active, b);
       }
     }
-    return { total, unread };
+    return { total, unread, active };
   }, [items]);
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
@@ -1033,7 +1039,7 @@ function BundleChips({
 }: {
   bundle: BundleKey;
   setBundle: (k: BundleKey) => void;
-  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
+  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number>; active: Map<BundleKey, number> };
   spaceBundles: BundleSpec[];
   savedViews: SavedView[];
   applyView: (v: SavedView) => void;
@@ -1046,14 +1052,21 @@ function BundleChips({
   const chips: { id: BundleKey; label: string; flavor: ItemFlavor | null }[] = [
     { id: 'all', label: 'Inbox', flavor: null },
   ];
-  if ((counts.total.get('dm') ?? 0) > 0) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
-  if ((counts.total.get('snoozed') ?? 0) > 0) chips.push({ id: 'snoozed', label: 'Snoozed', flavor: null });
+  // Show a chip when the bundle has anything *active* — i.e. items the
+  // user might still want to do. Bundles whose items are all read /
+  // all done get hidden so the bar stays tight. Snoozed is special:
+  // it shows whenever there's at least one snoozed item (the whole
+  // point of going there is to wake them).
+  const isActive = (k: BundleKey) =>
+    k === 'snoozed' ? (counts.total.get(k) ?? 0) > 0 : (counts.active.get(k) ?? 0) > 0;
+  if (isActive('dm')) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
+  if (isActive('snoozed')) chips.push({ id: 'snoozed', label: 'Snoozed', flavor: null });
   for (const f of FLAVOR_ORDER) {
     const k = flavorBundleKey(f);
-    if ((counts.total.get(k) ?? 0) > 0) chips.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
+    if (isActive(k)) chips.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
   }
   for (const b of spaceBundles) {
-    if ((counts.total.get(b.id) ?? 0) > 0) chips.push({ id: b.id, label: b.label, flavor: 'matrix' });
+    if (isActive(b.id)) chips.push({ id: b.id, label: b.label, flavor: 'matrix' });
   }
   return (
     <div className="chip-bar">
