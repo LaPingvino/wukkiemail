@@ -278,44 +278,6 @@ export function RoomPanel({
                 ) : (
                   <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
                 )}
-                <div className="msg-actions">
-                  <button
-                    type="button"
-                    className="msg-reply"
-                    aria-label="Reply"
-                    onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
-                  >
-                    <span className="material-symbols-outlined">reply</span>
-                  </button>
-                  {m.senderId === selfId && (
-                    <>
-                      <button
-                        type="button"
-                        className="msg-reply"
-                        aria-label="Edit"
-                        onClick={() => {
-                          setEditing({ eventId: m.id, originalBody: m.body });
-                          setComposeText(m.body);
-                          setReplyTo(null);
-                        }}
-                      >
-                        <span className="material-symbols-outlined">edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-reply"
-                        aria-label="Delete"
-                        onClick={async () => {
-                          if (!confirm('Delete this message?')) return;
-                          try { await matrix.redactMessage(roomId, m.id); }
-                          catch (e) { console.warn('[wukkiemail] redact failed', e); }
-                        }}
-                      >
-                        <span className="material-symbols-outlined">delete</span>
-                      </button>
-                    </>
-                  )}
-                </div>
                 {m.edited && (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}> (edited)</span>
                 )}
@@ -335,6 +297,47 @@ export function RoomPanel({
                     </button>
                   ))}
                   <ReactionAdder onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)} />
+                  {/* Reply / edit / delete: after the react button, always shown
+                      (no hover reveal, so the message never reflows). */}
+                  <button
+                    type="button"
+                    className="msg-reply"
+                    aria-label="Reply"
+                    title="Reply"
+                    onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
+                  >
+                    <span className="material-symbols-outlined">reply</span>
+                  </button>
+                  {m.senderId === selfId && (
+                    <>
+                      <button
+                        type="button"
+                        className="msg-reply"
+                        aria-label="Edit"
+                        title="Edit"
+                        onClick={() => {
+                          setEditing({ eventId: m.id, originalBody: m.body });
+                          setComposeText(m.body);
+                          setReplyTo(null);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="msg-reply"
+                        aria-label="Delete"
+                        title="Delete"
+                        onClick={async () => {
+                          if (!confirm('Delete this message?')) return;
+                          try { await matrix.redactMessage(roomId, m.id); }
+                          catch (e) { console.warn('[wukkiemail] redact failed', e); }
+                        }}
+                      >
+                        <span className="material-symbols-outlined">delete</span>
+                      </button>
+                    </>
+                  )}
                 </div>
                 {m.readBy && m.readBy.length > 0 && (
                   <div className="read-by" aria-label={`Read by ${m.readBy.map((r) => r.name).join(', ')}`}>

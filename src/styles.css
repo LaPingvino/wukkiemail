@@ -1042,6 +1042,7 @@ body {
 .comment-list li {
   padding: 12px 14px; background: var(--md-sys-color-surface-container);
   border-radius: 12px;
+  position: relative;
 }
 .comment-head {
   display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
@@ -1245,26 +1246,20 @@ body {
 }
 .reply-chip button:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
 
-.msg-actions {
-  display: flex; gap: 4px;
-  margin-top: 4px;
-}
+/* Reply / edit / delete sit inline after the reaction button and are always
+   visible, so the message layout never shifts (the old hover reveal did). */
 .msg-reply {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 2px 6px;
   font-size: 12px;
-  display: none;
+  display: inline-flex; align-items: center;
 }
-.comment-list li:hover .msg-reply { display: inline-flex; align-items: center; gap: 4px; }
-.msg-reply .material-symbols-outlined { font-size: 14px; }
+.msg-reply .material-symbols-outlined { font-size: 15px; }
 .msg-reply:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
-@media (hover: none) {
-  .msg-reply { display: inline-flex; align-items: center; gap: 4px; }
-}
 
 .read-by {
   display: flex;
