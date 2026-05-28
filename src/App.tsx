@@ -6,6 +6,7 @@ import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
 import { NewTaskSheet } from './NewTaskSheet';
+import { SettingsSheet } from './SettingsSheet';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -215,6 +216,7 @@ function Inbox({
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -433,9 +435,19 @@ function Inbox({
           error={matrix.kind === 'error' ? matrix.error : null}
         />
         <button
+          onClick={() => { setSettingsOpen(true); setSidebarOpen(false); }}
+          style={{
+            marginTop: 16, width: '100%', padding: '8px',
+            background: 'transparent', border: '1px solid var(--border)',
+            borderRadius: 8, color: 'var(--muted)',
+          }}
+        >
+          Priority tuning…
+        </button>
+        <button
           onClick={onSignOut}
           style={{
-            marginTop: 24, width: '100%', padding: '8px',
+            marginTop: 8, width: '100%', padding: '8px',
             background: 'transparent', border: '1px solid var(--border)',
             borderRadius: 8, color: 'var(--muted)',
           }}
@@ -691,6 +703,9 @@ function Inbox({
           roomId={selectedRoom}
           onClose={() => setSelectedRoom(null)}
         />
+      )}
+      {settingsOpen && matrixSrc && (
+        <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />
       )}
       {newTaskOpen && matrixSrc && (
         <NewTaskSheet

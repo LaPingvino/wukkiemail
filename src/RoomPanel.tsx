@@ -27,11 +27,18 @@ export function RoomPanel({
     const unsub = matrix.subscribe(() => {
       setSnap(matrix.getRoomTimeline(roomId, 200));
     });
-    // Mark read on open. Fire-and-forget — the listItems poll picks up
-    // the new unread state on the next refresh tick.
     void matrix.markRoomRead(roomId);
     return unsub;
   }, [matrix, roomId]);
+
+  // Auto-scroll: on initial open jump to the bottom; on subsequent
+  // updates, stay glued to the bottom only if we were already there.
+  const stuckRef = useRef(true);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (stuckRef.current) el.scrollTop = el.scrollHeight;
+  }, [snap]);
 
   const loadOlder = async () => {
     if (loadingOlder || !hasMore) return;
@@ -54,6 +61,10 @@ export function RoomPanel({
     if (!el) return;
     const onScroll = () => {
       if (el.scrollTop < 80) void loadOlder();
+      // Track stickiness: if we're within ~80px of the bottom we stay
+      // glued; otherwise we don't yank the user back when new events arrive.
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stuckRef.current = distFromBottom < 80;
     };
     el.addEventListener('scroll', onScroll);
     return () => el.removeEventListener('scroll', onScroll);

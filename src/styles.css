@@ -206,6 +206,45 @@ body {
 .target-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .target-meta { font-size: 11px; color: var(--muted); }
 
+.slider-row {
+  display: grid; gap: 6px;
+}
+.slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+.slider-head strong { font-size: 14px; }
+.slider-head .value {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.slider-row input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  outline: none;
+}
+.slider-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary);
+  cursor: pointer;
+}
+.slider-row input[type='range']::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary);
+  cursor: pointer;
+  border: none;
+}
+.slider-row .hint { font-size: 11px; color: var(--muted); }
+
 @media (max-width: 900px) {
   .toolbar { padding: 8px 12px; gap: 8px; }
   .toolbar md-outlined-text-field { flex: 1; min-width: 0; }
