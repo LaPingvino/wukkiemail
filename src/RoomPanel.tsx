@@ -190,18 +190,32 @@ export function RoomPanel({
                     <span className="material-symbols-outlined">reply</span>
                   </button>
                   {m.senderId === selfId && (
-                    <button
-                      type="button"
-                      className="msg-reply"
-                      aria-label="Edit"
-                      onClick={() => {
-                        setEditing({ eventId: m.id, originalBody: m.body });
-                        setComposeText(m.body);
-                        setReplyTo(null);
-                      }}
-                    >
-                      <span className="material-symbols-outlined">edit</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="msg-reply"
+                        aria-label="Edit"
+                        onClick={() => {
+                          setEditing({ eventId: m.id, originalBody: m.body });
+                          setComposeText(m.body);
+                          setReplyTo(null);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="msg-reply"
+                        aria-label="Delete"
+                        onClick={async () => {
+                          if (!confirm('Delete this message?')) return;
+                          try { await matrix.redactMessage(roomId, m.id); }
+                          catch (e) { console.warn('[wukkiemail] redact failed', e); }
+                        }}
+                      >
+                        <span className="material-symbols-outlined">delete</span>
+                      </button>
+                    </>
                   )}
                 </div>
                 {m.edited && (
