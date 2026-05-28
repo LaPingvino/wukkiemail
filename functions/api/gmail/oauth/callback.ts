@@ -38,7 +38,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const text = await tokenRes.text();
     return new Response(`token exchange failed: ${text}`, { status: 502 });
   }
-  const tokens = await tokenRes.json<Record<string, unknown>>();
+  const tokens = (await tokenRes.json()) as Record<string, unknown>;
   // Hand tokens to the app via URL fragment (never hits HTTP logs).
   const frag = new URLSearchParams({
     access_token: String(tokens.access_token ?? ''),
