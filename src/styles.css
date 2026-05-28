@@ -109,6 +109,11 @@ body {
 .email-html a { color: var(--md-sys-color-primary); }
 .email-html table { max-width: 100%; }
 .email-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
+.reply-textarea {
+  flex: 1; min-width: 0; resize: vertical;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: 14px;
+}
 /* Matrix custom emoji rendered inline in message HTML. */
 .inline-emoji {
   height: 1.4em; width: auto; vertical-align: -0.28em;

@@ -15,6 +15,7 @@ import { BundleSheet } from './BundleSheet';
 import { QueryChips } from './QueryChips';
 import { JmapLoginSheet } from './JmapLoginSheet';
 import { EmailView } from './EmailView';
+import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode } from './sources/matrix';
 import type { InboxItem } from './sources/types';
@@ -266,6 +267,7 @@ function Inbox({
   const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
   const jmapEmail = loadJmapCreds()?.email ?? loadJmapCreds()?.sessionUrl ?? null;
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
@@ -429,7 +431,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom || !!selectedEmail;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom || !!selectedEmail || composeOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -445,6 +447,7 @@ function Inbox({
         else if (addAccountOpen) setAddAccountOpen(false);
         else if (jmapLoginOpen) setJmapLoginOpen(false);
         else if (bundleSheet) setBundleSheet(null);
+        else if (composeOpen) setComposeOpen(false);
         else if (selectedEmail) setSelectedEmail(null);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
@@ -1352,6 +1355,9 @@ function Inbox({
       {selectedEmail && jmapSrc && (
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
       )}
+      {composeOpen && jmapSrc && (
+        <ComposeSheet jmap={jmapSrc} onClose={() => setComposeOpen(false)} />
+      )}
       {bundleSheet && matrixSrc && (
         <BundleSheet
           items={items}
@@ -1471,6 +1477,12 @@ function Inbox({
                 <span className="material-symbols-outlined">group_add</span>
                 New group
               </button>
+              {jmapSrc && (
+                <button type="button" onClick={() => { setFabMenuOpen(false); setComposeOpen(true); }}>
+                  <span className="material-symbols-outlined">mail</span>
+                  New mail
+                </button>
+              )}
             </div>
           )}
           <button

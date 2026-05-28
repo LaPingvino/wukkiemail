@@ -24,6 +24,7 @@ export interface JmapCreds {
 
 const MAIL_CAP = 'urn:ietf:params:jmap:mail';
 const CORE_CAP = 'urn:ietf:params:jmap:core';
+const SUBMISSION_CAP = 'urn:ietf:params:jmap:submission';
 
 interface JmapSession {
   apiUrl: string;
@@ -119,7 +120,7 @@ export class JmapSource implements Source {
   }
 
   // One JMAP API request: array of [name, args, callId] method calls.
-  private async request(methodCalls: unknown[][]): Promise<{ methodResponses: unknown[][] }> {
+  private async request(methodCalls: unknown[][], using?: string[]): Promise<{ methodResponses: unknown[][] }> {
     const session = await this.ensureSession();
     const res = await fetch(session.apiUrl, {
       method: 'POST',
@@ -128,10 +129,46 @@ export class JmapSource implements Source {
         'content-type': 'application/json',
         accept: 'application/json',
       },
-      body: JSON.stringify({ using: [CORE_CAP, MAIL_CAP], methodCalls }),
+      body: JSON.stringify({ using: using ?? [CORE_CAP, MAIL_CAP], methodCalls }),
     });
     if (!res.ok) throw new Error(`JMAP api ${res.status}`);
     return (await res.json()) as { methodResponses: unknown[][] };
+  }
+
+  // Send a new message (used for both fresh compose and replies). Builds a
+  // draft, submits it via EmailSubmission, and on success files it in Sent.
+  async sendEmail(params: { to: string[]; subject: string; text: string }): Promise<void> {
+    const session = await this.ensureSession();
+    if (this.mailboxes.length === 0) await this.refreshMailboxes();
+    const using = [CORE_CAP, MAIL_CAP, SUBMISSION_CAP];
+    const idResp = await this.request([['Identity/get', { accountId: session.accountId, ids: null }, '0']], using);
+    const identities = (idResp.methodResponses[0]?.[1] as { list?: { id: string; email: string; name?: string }[] } | undefined)?.list ?? [];
+    const identity = identities[0];
+    if (!identity) throw new Error('no sending identity on this JMAP account');
+    const drafts = this.mailboxes.find((m) => m.role === 'drafts');
+    const sent = this.mailboxes.find((m) => m.role === 'sent');
+    const draft = {
+      from: [{ email: identity.email, name: identity.name }],
+      to: params.to.map((email) => ({ email })),
+      subject: params.subject,
+      keywords: { $draft: true, $seen: true },
+      mailboxIds: drafts ? { [drafts.id]: true } : {},
+      bodyValues: { body: { value: params.text } },
+      textBody: [{ partId: 'body', type: 'text/plain' }],
+    };
+    const resp = await this.request([
+      ['Email/set', { accountId: session.accountId, create: { draft } }, '0'],
+      ['EmailSubmission/set', {
+        accountId: session.accountId,
+        create: { sub: { emailId: '#draft', identityId: identity.id } },
+        onSuccessUpdateEmail: sent ? { '#sub': { mailboxIds: { [sent.id]: true }, 'keywords/$draft': null } } : undefined,
+      }, '1'],
+    ], using);
+    const emailSet = resp.methodResponses.find((r) => r[0] === 'Email/set')?.[1] as { notCreated?: Record<string, unknown> } | undefined;
+    if (emailSet?.notCreated?.draft) throw new Error(`draft rejected: ${JSON.stringify(emailSet.notCreated.draft)}`);
+    const subSet = resp.methodResponses.find((r) => r[0] === 'EmailSubmission/set')?.[1] as { notCreated?: Record<string, unknown> } | undefined;
+    if (subSet?.notCreated?.sub) throw new Error(`send rejected: ${JSON.stringify(subSet.notCreated.sub)}`);
+    this.notify();
   }
 
   async start(): Promise<void> {
