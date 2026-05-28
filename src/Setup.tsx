@@ -45,14 +45,31 @@ export function SetupScreen({ onBack }: { onBack: () => void }) {
           </li>
           <li>Pick or create a project (e.g. "WukkieMail").</li>
           <li>
-            Configure the <strong>OAuth consent screen</strong> — External, fill the bare
-            minimum (app name, your email twice). While in Testing mode, add yourself
-            (and anyone else who'll use this instance) under "Test users".
+            Configure the <strong>OAuth consent screen</strong> — External user type,
+            fill the bare minimum (app name, your email twice).
+          </li>
+          <li>
+            <strong>Add yourself as a Test User.</strong>{' '}
+            Open <ExternalLink href="https://console.cloud.google.com/auth/audience">
+              OAuth → Audience
+            </ExternalLink>{' '}
+            (it's a separate page from the consent screen wizard). Scroll to
+            "Test users" → "+ Add users" → paste your Gmail address → Save. Repeat for
+            anyone else who'll use this instance. Without this, Google rejects sign-in
+            with an "app doesn't comply with OAuth 2.0 policy" error.
           </li>
           <li>
             <ExternalLink href="https://console.cloud.google.com/apis/library/gmail.googleapis.com">
               Enable the Gmail API
             </ExternalLink>.
+          </li>
+          <li>
+            <strong>Add the scope to the consent screen.</strong>{' '}
+            On the consent screen edit flow, step "Scopes" → "Add or Remove Scopes",
+            paste <Copy value="https://www.googleapis.com/auth/gmail.metadata" /> into
+            the filter, check it (Sensitive), Update, Save. Without this step Google
+            refuses the token exchange with a "doesn't comply with OAuth 2.0 policy"
+            error.
           </li>
           <li>
             Back in Credentials → <strong>Create credentials → OAuth client ID</strong>.
