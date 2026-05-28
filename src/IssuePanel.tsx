@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import type { MatrixSource, SchemaField } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
+import { expandShortcodes } from './emoji';
 
 export function IssuePanel({
   matrix,
@@ -116,7 +117,7 @@ export function IssuePanel({
       <div className="composer">
         <textarea
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
+          onChange={(e) => setComment(expandShortcodes(e.target.value))}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();

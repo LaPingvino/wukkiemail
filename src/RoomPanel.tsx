@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
+import { expandShortcodes } from './emoji';
 import { CollapsibleBody } from './CollapsibleBody';
 
 export function RoomPanel({
@@ -294,11 +295,14 @@ export function RoomPanel({
           ref={(el: HTMLElement | null) => {
             if (!el) return;
             el.addEventListener('input', (ev) => {
-              const v = (ev.target as HTMLInputElement & { value: string }).value;
+              const target = ev.target as HTMLInputElement & { value: string };
+              let v = target.value;
+              const expanded = expandShortcodes(v);
+              if (expanded !== v) {
+                v = expanded;
+                target.value = v;
+              }
               setComposeText(v);
-              // Send a typing tick when the user is actively typing; the
-              // SDK will let the server know we stopped after the
-              // ~30s timeout if we don't refresh.
               void matrix.sendTyping(roomId, v.length > 0, 30_000);
             });
             el.addEventListener('keydown', (ev: Event) => {
