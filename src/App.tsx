@@ -238,6 +238,8 @@ function Inbox({
   const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
   // When on, hide tasks not assigned to me (matched on any schema user field).
   const [mineOnly, setMineOnly] = useState(false);
+  // Bundled-stream view: which bundles are folded open (accordion).
+  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -548,6 +550,192 @@ function Inbox({
     el?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
 
+  // Which bundle an item folds into when it isn't important enough to show
+  // loose. Precedence: space (strongest grouping) → DM → flavor. (Manual
+  // bundles will slot in ahead of these in a later step.)
+  const primaryKey = (it: InboxItem): string => {
+    const space = it.bundles.find((b) => b.startsWith('space:'));
+    if (space) return space;
+    if (it.bundles.includes('dm')) return 'dm';
+    return `flavor:${it.flavor}`;
+  };
+
+  // The bundled stream for the All view: loose (important) items shown
+  // directly; everything else grouped into fold-open bundles. Built on the
+  // already-filtered `visible`, so search/read/status/mine still apply.
+  const bundled = useMemo(() => {
+    const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
+    const loose: InboxItem[] = [];
+    const groups = new Map<string, InboxItem[]>();
+    for (const it of visible) {
+      if (it.priority >= topLevel || it.bundles.includes('pinned')) { loose.push(it); continue; }
+      const k = primaryKey(it);
+      const arr = groups.get(k);
+      if (arr) arr.push(it); else groups.set(k, [it]);
+    }
+    loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+    const list = [...groups.entries()].map(([key, gItems]) => ({
+      key,
+      label: bundleLabel(key as BundleKey, spaceBundles),
+      flavor: key.startsWith('flavor:') ? (key.slice(7) as ItemFlavor) : ('matrix' as ItemFlavor),
+      items: gItems.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)),
+      unread: gItems.filter((g) => g.unread).length,
+    }));
+    list.sort((a, b) => (b.unread - a.unread) || (b.items.length - a.items.length) || a.label.localeCompare(b.label));
+    return { loose, groups: list };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, spaceBundles, matrixSrc, items]);
+
+  // One inbox row. Shared by the flat list, the loose section, and the
+  // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
+  const renderItem = (it: InboxItem, idx: number): React.ReactNode => (
+    <a
+      key={it.id}
+      data-idx={idx}
+      className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''}`}
+      href={it.openPath}
+      onClick={(e) => {
+        e.preventDefault();
+        if (it.flavor === 'issue') {
+          const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+          if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+        } else {
+          const m = it.id.match(/^matrix:(.+)$/);
+          if (m) setSelectedRoom(m[1]);
+        }
+      }}
+      style={{ color: 'inherit', textDecoration: 'none' }}
+    >
+      <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
+      <div className="from">
+        {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
+        {it.from}
+        {showOrigin && it.originLabel && (
+          <span className="origin-tag" title={it.accountId}>{it.originLabel}</span>
+        )}
+      </div>
+      <div className="subj">
+        <strong>{it.subject}</strong> — {it.snippet}
+      </div>
+      <div className="ts">
+        {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
+      </div>
+      {matrixSrc && (
+        <button
+          type="button"
+          className="item-kebab"
+          aria-label="Actions"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActionSheetFor(it.id); }}
+        >
+          <span className="material-symbols-outlined">more_vert</span>
+        </button>
+      )}
+      {matrixSrc && (
+        <ItemActions
+          item={it}
+          isPinned={it.bundles.includes('pinned')}
+          snoozePopoverOpen={snoozePopoverFor === it.id}
+          onTogglePin={async () => { await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned')); }}
+          onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
+          onSnooze={async (untilMs) => { setSnoozePopoverFor(null); await matrixSrc.setSnoozed(it.id, untilMs); }}
+          onDone={async () => {
+            const m = it.id.match(/^matrix:([^:]+)$/);
+            if (m) await matrixSrc.markRoomRead(m[1]);
+            await matrixSrc.setManuallyUnread(it.id, false);
+          }}
+          onToggleUnread={async () => { await matrixSrc.setManuallyUnread(it.id, !it.unread); }}
+        />
+      )}
+    </a>
+  );
+
+  const toggleStatus = (status: string) =>
+    setIssueStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+
+  // The per-section / per-bundle filter controls. `items` scopes the sweep
+  // and (for the status chips inside a bundle) the available statuses.
+  const renderFilterChips = (hasIssues: boolean, hasMessages: boolean, scope: InboxItem[]): React.ReactNode => (
+    <div className="section-filters">
+      {hasIssues && (
+        <>
+          <button
+            type="button"
+            className={`mini-chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
+            onClick={() => setIssueStatusFilter(new Set())}
+          >All</button>
+          {[...issueStatusCounts.entries()].sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+            <button
+              key={status || '∅none'}
+              type="button"
+              className={`mini-chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
+              onClick={() => toggleStatus(status)}
+            >
+              {status || 'None'}
+              <span className="chip-badge">{count}</span>
+            </button>
+          ))}
+          {anyAssignableTasks && (
+            <button
+              type="button"
+              className={`mini-chip ${mineOnly ? 'active' : ''}`}
+              title="Show only tasks assigned to me"
+              onClick={() => setMineOnly((v) => !v)}
+            >Mine</button>
+          )}
+        </>
+      )}
+      {hasMessages && (['unread', 'read', 'all'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={`mini-chip ${readFilter === mode ? 'active' : ''}`}
+          onClick={() => setReadFilter(mode)}
+        >{mode === 'unread' ? 'Unread' : mode === 'read' ? 'Read' : 'All'}</button>
+      ))}
+      {hasIssues && scope.some((t) => t.flavor === 'issue' && t.priority > -1) && (
+        <button
+          type="button"
+          className="section-sweep"
+          title="Mark all tasks done"
+          onClick={async () => {
+            if (!matrixSrc) return;
+            const open = scope.filter((t) => t.flavor === 'issue' && t.priority > -1);
+            if (!confirm(`Mark all ${open.length} task${open.length === 1 ? '' : 's'} done?`)) return;
+            for (const it of open) {
+              const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+              if (m) await matrixSrc.markIssueDone(m[1], m[2]);
+            }
+          }}
+        >
+          <span className="material-symbols-outlined">done_all</span>
+        </button>
+      )}
+      {hasMessages && scope.some((m) => m.flavor !== 'issue' && m.unread) && (
+        <button
+          type="button"
+          className="section-sweep"
+          title="Mark all read"
+          onClick={async () => {
+            if (!matrixSrc) return;
+            const unread = scope.filter((m) => m.flavor !== 'issue' && m.unread);
+            if (!confirm(`Mark all ${unread.length} message${unread.length === 1 ? '' : 's'} read?`)) return;
+            for (const it of unread) {
+              const m = it.id.match(/^matrix:([^:]+)$/);
+              if (m) await matrixSrc.markRoomRead(m[1]);
+              await matrixSrc.setManuallyUnread(it.id, false);
+            }
+          }}
+        >
+          <span className="material-symbols-outlined">mark_chat_read</span>
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
       <aside className="sidebar">
@@ -761,24 +949,67 @@ function Inbox({
           <div className="item-list">
             {(() => {
               const rendered: React.ReactNode[] = [];
+              let idx = 0;
+              const isBundled = bundle === 'all' && !query.trim();
+
+              if (isBundled) {
+                // Loose (important) items shown directly at the top level.
+                for (const it of bundled.loose) rendered.push(renderItem(it, idx++));
+                // Everything else folds into bundles, opened in place.
+                for (const g of bundled.groups) {
+                  const open = expandedBundles.has(g.key);
+                  rendered.push(
+                    <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="bundle-head"
+                        onClick={() => setExpandedBundles((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
+                          return n;
+                        })}
+                      >
+                        <span className="material-symbols-outlined bundle-chevron">
+                          {open ? 'expand_more' : 'chevron_right'}
+                        </span>
+                        <span className={`src ${g.flavor}`} />
+                        <span className="bundle-label">{g.label}</span>
+                        <span className="bundle-count">
+                          {g.unread > 0 ? `${g.unread} unread · ` : ''}{g.items.length}
+                        </span>
+                      </button>
+                      {open && (
+                        <div className="bundle-body">
+                          {renderFilterChips(
+                            g.items.some((x) => x.flavor === 'issue'),
+                            g.items.some((x) => x.flavor !== 'issue'),
+                            g.items,
+                          )}
+                          {g.items.slice(0, 200).map((it) => renderItem(it, idx++))}
+                        </div>
+                      )}
+                    </div>,
+                  );
+                }
+                if (bundled.loose.length === 0 && bundled.groups.length === 0) {
+                  rendered.push(
+                    <div key="empty-inline" className="empty" style={{ height: 'auto', padding: 24 }}>
+                      <p>Nothing to triage. 🎉</p>
+                    </div>,
+                  );
+                }
+                return rendered;
+              }
+
+              // Flat mode: a focused bundle view or an active search. Keep the
+              // Tasks / Messages section headers with their inline chips.
               const shown = visible.slice(0, 200);
-              // Partition tasks above messages so each group gets a single
-              // header carrying its own inline filter controls. Inside each
-              // group the existing (priority, ts) order is retained so the
-              // user's tuning still ranks them. Headers show in every view
-              // (not just All) so the controls are always reachable.
               const tasks = shown.filter((x) => x.flavor === 'issue');
               const messages = shown.filter((x) => x.flavor !== 'issue');
               const ordered = [...tasks, ...messages];
               const showHeaders = !!matrixSrc;
-              const toggleStatus = (status: string) =>
-                setIssueStatusFilter((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(status)) next.delete(status); else next.add(status);
-                  return next;
-                });
               let lastGroup: 'issue' | 'message' | null = null;
-              ordered.forEach((it, i) => {
+              ordered.forEach((it) => {
                 const group = it.flavor === 'issue' ? 'issue' : 'message';
                 if (showHeaders && group !== lastGroup) {
                   rendered.push(
@@ -786,171 +1017,14 @@ function Inbox({
                       <span className="section-header-label">
                         {group === 'issue' ? 'Tasks' : 'Messages'}
                       </span>
-                      <div className="section-filters">
-                        {group === 'issue' ? (
-                          <>
-                            <button
-                              type="button"
-                              className={`mini-chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
-                              onClick={() => setIssueStatusFilter(new Set())}
-                            >
-                              All
-                            </button>
-                            {[...issueStatusCounts.entries()]
-                              .sort((a, b) => b[1] - a[1])
-                              .map(([status, count]) => (
-                                <button
-                                  key={status || '∅none'}
-                                  type="button"
-                                  className={`mini-chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
-                                  onClick={() => toggleStatus(status)}
-                                >
-                                  {status || 'None'}
-                                  <span className="chip-badge">{count}</span>
-                                </button>
-                              ))}
-                            {anyAssignableTasks && (
-                              <button
-                                type="button"
-                                className={`mini-chip ${mineOnly ? 'active' : ''}`}
-                                title="Show only tasks assigned to me"
-                                onClick={() => setMineOnly((v) => !v)}
-                              >
-                                Mine
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            {(['unread', 'read', 'all'] as const).map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                className={`mini-chip ${readFilter === mode ? 'active' : ''}`}
-                                onClick={() => setReadFilter(mode)}
-                              >
-                                {mode === 'unread' ? 'Unread' : mode === 'read' ? 'Read' : 'All'}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                      {group === 'issue' ? (
-                        tasks.some((t) => t.priority > -1) && (
-                          <button
-                            type="button"
-                            className="section-sweep"
-                            title="Mark all tasks done"
-                            onClick={async () => {
-                              if (!matrixSrc) return;
-                              const open = tasks.filter((t) => t.priority > -1);
-                              if (!confirm(`Mark all ${open.length} task${open.length === 1 ? '' : 's'} done?`)) return;
-                              for (const it of open) {
-                                const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
-                                if (m) await matrixSrc.markIssueDone(m[1], m[2]);
-                              }
-                            }}
-                          >
-                            <span className="material-symbols-outlined">done_all</span>
-                          </button>
-                        )
-                      ) : (
-                        messages.some((m) => m.unread) && (
-                          <button
-                            type="button"
-                            className="section-sweep"
-                            title="Mark all read"
-                            onClick={async () => {
-                              if (!matrixSrc) return;
-                              const unread = messages.filter((m) => m.unread);
-                              if (!confirm(`Mark all ${unread.length} message${unread.length === 1 ? '' : 's'} read?`)) return;
-                              for (const it of unread) {
-                                const m = it.id.match(/^matrix:([^:]+)$/);
-                                if (m) await matrixSrc.markRoomRead(m[1]);
-                                await matrixSrc.setManuallyUnread(it.id, false);
-                              }
-                            }}
-                          >
-                            <span className="material-symbols-outlined">mark_chat_read</span>
-                          </button>
-                        )
-                      )}
+                      {group === 'issue'
+                        ? renderFilterChips(true, false, tasks)
+                        : renderFilterChips(false, true, messages)}
                     </div>,
                   );
                   lastGroup = group;
                 }
-                const dim = it.priority <= -1;
-                rendered.push(
-                  <a
-                    key={it.id}
-                    data-idx={i}
-                    className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${dim ? 'dim' : ''}`}
-                    href={it.openPath}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (it.flavor === 'issue') {
-                        const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
-                        if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
-                      } else {
-                        const m = it.id.match(/^matrix:(.+)$/);
-                        if (m) setSelectedRoom(m[1]);
-                      }
-                    }}
-                    style={{ color: 'inherit', textDecoration: 'none' }}
-                  >
-                    <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
-                    <div className="from">
-                      {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
-                      {it.from}
-                      {showOrigin && it.originLabel && (
-                        <span className="origin-tag" title={it.accountId}>{it.originLabel}</span>
-                      )}
-                    </div>
-                    <div className="subj">
-                      <strong>{it.subject}</strong> — {it.snippet}
-                    </div>
-                    <div className="ts">
-                      {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
-                    </div>
-                    {matrixSrc && (
-                      <button
-                        type="button"
-                        className="item-kebab"
-                        aria-label="Actions"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setActionSheetFor(it.id);
-                        }}
-                      >
-                        <span className="material-symbols-outlined">more_vert</span>
-                      </button>
-                    )}
-                    {matrixSrc && (
-                      <ItemActions
-                        item={it}
-                        isPinned={it.bundles.includes('pinned')}
-                        snoozePopoverOpen={snoozePopoverFor === it.id}
-                        onTogglePin={async () => {
-                          await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned'));
-                        }}
-                        onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
-                        onSnooze={async (untilMs) => {
-                          setSnoozePopoverFor(null);
-                          await matrixSrc.setSnoozed(it.id, untilMs);
-                        }}
-                        onDone={async () => {
-                          const m = it.id.match(/^matrix:([^:]+)$/);
-                          if (m) await matrixSrc.markRoomRead(m[1]);
-                          await matrixSrc.setManuallyUnread(it.id, false);
-                        }}
-                        onToggleUnread={async () => {
-                          await matrixSrc.setManuallyUnread(it.id, !it.unread);
-                        }}
-                      />
-                    )}
-                  </a>,
-                );
+                rendered.push(renderItem(it, idx++));
               });
               return rendered;
             })()}

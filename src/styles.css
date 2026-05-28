@@ -584,6 +584,34 @@ body {
 }
 .section-sweep:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
 .section-sweep .material-symbols-outlined { font-size: 18px; }
+
+/* Bundled stream: a bundle renders as one list-item-like row that folds
+   open in place to reveal its filter chips + items. */
+.bundle-row {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+}
+.bundle-row.open { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.bundle-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 14px; border: none; background: transparent;
+  cursor: pointer; font: inherit; color: var(--fg); text-align: left;
+}
+.bundle-head:hover { background: var(--md-sys-color-surface-container); }
+.bundle-chevron { color: var(--muted); font-size: 22px; flex: 0 0 auto; }
+.bundle-row .src { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.bundle-label { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bundle-count { color: var(--muted); font-size: 12px; flex: 0 0 auto; }
+.bundle-body {
+  border-top: 1px solid var(--border);
+  padding: 6px 8px 10px;
+  display: grid; gap: 4px;
+}
+.bundle-body .section-filters { padding: 4px 6px 8px; }
+/* Items inside a bundle sit flush; the bundle card provides the frame. */
+.bundle-body .item { border-radius: 10px; }
 /* Per-row account/source origin tag, shown only in a combined inbox. */
 .origin-tag {
   margin-left: 6px;
