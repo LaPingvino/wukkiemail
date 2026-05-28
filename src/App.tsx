@@ -293,6 +293,16 @@ function Inbox({
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
 
+  // Tab title gets a (N) prefix when there are unread items, so the
+  // user can see backlog from another tab without switching. Restore
+  // on unmount in case the inbox component goes away (sign-out).
+  useEffect(() => {
+    const allUnread = counts.unread.get('all') ?? 0;
+    const base = 'WukkieMail';
+    document.title = allUnread > 0 ? `(${allUnread}) ${base}` : base;
+    return () => { document.title = 'WukkieMail'; };
+  }, [counts]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
