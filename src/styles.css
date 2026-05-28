@@ -743,6 +743,11 @@ body {
   overflow-x: hidden;
   min-width: 0;
 }
+.issue-body.drag-over {
+  outline: 3px dashed var(--md-sys-color-primary);
+  outline-offset: -8px;
+  background: var(--md-sys-color-surface-container);
+}
 .status-chips {
   display: flex; flex-wrap: wrap; gap: 6px;
   margin-bottom: 16px;

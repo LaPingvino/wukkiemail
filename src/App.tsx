@@ -293,6 +293,36 @@ function Inbox({
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
 
+  // Android back / browser back closes the topmost modal-ish layer
+  // instead of leaving the SPA. Each open pushes a history state; popstate
+  // dispatches based on priority: action sheet > new task > settings >
+  // issue panel > room panel > sidebar drawer.
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  useEffect(() => {
+    if (anyModalOpen) {
+      history.pushState({ wukkieModal: true }, '');
+      const onPop = () => {
+        if (actionSheetFor) setActionSheetFor(null);
+        else if (newTaskOpen) setNewTaskOpen(false);
+        else if (settingsOpen) setSettingsOpen(false);
+        else if (selectedIssue) setSelectedIssue(null);
+        else if (selectedRoom) setSelectedRoom(null);
+        else if (sidebarOpen) setSidebarOpen(false);
+      };
+      window.addEventListener('popstate', onPop);
+      return () => {
+        window.removeEventListener('popstate', onPop);
+        // If we close the modal ourselves (X button, scrim click), pop the
+        // history entry we added so the back stack stays consistent.
+        if (history.state?.wukkieModal) history.back();
+      };
+    }
+    return;
+    // We deliberately depend only on the boolean — re-running on every
+    // state change of the individual modals would push extra entries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyModalOpen]);
+
   // Tab title gets a (N) prefix when there are unread items, so the
   // user can see backlog from another tab without switching. Restore
   // on unmount in case the inbox component goes away (sign-out).

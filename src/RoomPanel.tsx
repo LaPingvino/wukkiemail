@@ -26,6 +26,7 @@ export function RoomPanel({
   const selfId = matrix.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const pickFile = () => fileInputRef.current?.click();
   const onFileSelected = async (file: File) => {
@@ -134,7 +135,19 @@ export function RoomPanel({
         subtitle={`${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
         onClose={onClose}
       />
-      <div className="issue-body" ref={bodyRef}>
+      <div
+        className={`issue-body ${dragOver ? 'drag-over' : ''}`}
+        ref={bodyRef}
+        onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void onFileSelected(f);
+        }}
+      >
         {hasMore && (
           <button
             type="button"
