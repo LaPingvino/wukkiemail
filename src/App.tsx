@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import type { ItemFlavor } from './sources/types';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
 import {
   beginLogin as beginGmailLogin,
@@ -262,6 +263,23 @@ const legendStyle: React.CSSProperties = {
 
 const errStyle: React.CSSProperties = { color: '#e57373', margin: 0, fontSize: 13 };
 
+type BundleKey = 'all' | ItemFlavor;
+
+const BUNDLE_LABELS: Record<BundleKey, string> = {
+  all: 'Inbox',
+  gmail: 'Gmail',
+  matrix: 'Matrix',
+  whatsapp: 'WhatsApp',
+  meta: 'Messenger',
+  signal: 'Signal',
+  irc: 'IRC',
+  issue: 'Issues',
+};
+
+const BUNDLE_ORDER: BundleKey[] = [
+  'all', 'gmail', 'matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue',
+];
+
 function Inbox({
   matrix,
   gmail,
@@ -275,6 +293,7 @@ function Inbox({
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bundle, setBundle] = useState<BundleKey>('all');
 
   const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
   const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
@@ -309,14 +328,43 @@ function Inbox({
     return () => { cancelled = true; unsubMatrix?.(); };
   }, [matrixSrc, gmailSrc]);
 
+  // Bundles derive from items — only bundles that have at least one item show up.
+  const counts = useMemo(() => {
+    const m = new Map<BundleKey, number>();
+    m.set('all', items.length);
+    for (const it of items) m.set(it.flavor, (m.get(it.flavor) ?? 0) + 1);
+    return m;
+  }, [items]);
+
+  const visible = useMemo(() => {
+    if (bundle === 'all') return items;
+    return items.filter((it) => it.flavor === bundle);
+  }, [items, bundle]);
+
   return (
     <div className="app">
       <aside className="sidebar">
         <h1>WukkieMail</h1>
-        <div className="bundle active">
-          <span>Inbox</span>
-          <span className="count">{items.length}</span>
-        </div>
+        {BUNDLE_ORDER.map((key) => {
+          const count = counts.get(key) ?? 0;
+          if (key !== 'all' && count === 0) return null;
+          return (
+            <div
+              key={key}
+              className={`bundle ${bundle === key ? 'active' : ''}`}
+              onClick={() => setBundle(key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setBundle(key); }}
+            >
+              <span>
+                {key !== 'all' && <span className={`src ${key}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
+                {BUNDLE_LABELS[key]}
+              </span>
+              <span className="count">{count}</span>
+            </div>
+          );
+        })}
         {gmail.kind === 'none' && (
           <button
             onClick={onGmailLogin}
@@ -355,11 +403,11 @@ function Inbox({
       <main className="main">
         {loading ? (
           <div className="empty">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="empty">No items.</div>
+        ) : visible.length === 0 ? (
+          <div className="empty">{bundle === 'all' ? 'No items.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</div>
         ) : (
           <div className="item-list">
-            {items.slice(0, 200).map((it) => (
+            {visible.slice(0, 200).map((it) => (
               <a
                 key={it.id}
                 className="item"
