@@ -383,13 +383,14 @@ function Inbox({
       {sidebarOpen && <div className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
       <main className="main">
         <div className="toolbar">
-          <md-icon-button
+          <button
+            type="button"
             className="hamburger"
             aria-label="Menu"
             onClick={() => setSidebarOpen((o) => !o)}
           >
-            <md-icon>menu</md-icon>
-          </md-icon-button>
+            <span className="material-symbols-outlined">menu</span>
+          </button>
           <md-outlined-text-field
             label="Search"
             placeholder="Filter inbox…"

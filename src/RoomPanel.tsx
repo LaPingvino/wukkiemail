@@ -16,6 +16,9 @@ export function RoomPanel({
   onClose: () => void;
 }) {
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId));
+  const [composeText, setComposeText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = matrix.subscribe(() => {
@@ -26,6 +29,25 @@ export function RoomPanel({
     void matrix.markRoomRead(roomId);
     return unsub;
   }, [matrix, roomId]);
+
+  const send = async () => {
+    const body = composeText.trim();
+    if (!body) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await matrix.sendMessage(roomId, body);
+      setComposeText('');
+      // Imperatively clear the Material field too — its `value` property
+      // doesn't track React state directly across renders.
+      const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
+      if (field) (field as unknown as { value: string }).value = '';
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
 
   if (!snap) {
     return (
@@ -62,6 +84,42 @@ export function RoomPanel({
             ))}
           </ul>
         )}
+      </div>
+      <div className="composer">
+        {sendError && (
+          <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, margin: '0 0 6px' }}>
+            Send failed: {sendError}
+          </p>
+        )}
+        <md-outlined-text-field
+          label="Reply"
+          placeholder="Type a message…"
+          value={composeText}
+          ref={(el: HTMLElement | null) => {
+            if (!el) return;
+            el.addEventListener('input', (ev) => {
+              setComposeText((ev.target as HTMLInputElement & { value: string }).value);
+            });
+            el.addEventListener('keydown', (ev: Event) => {
+              const ke = ev as KeyboardEvent;
+              // Enter sends; Shift+Enter would insert a newline once we
+              // upgrade this to a textarea variant.
+              if (ke.key === 'Enter' && !ke.shiftKey) {
+                ev.preventDefault();
+                void send();
+              }
+            });
+          }}
+          disabled={sending || undefined}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <md-icon-button
+          aria-label="Send"
+          onClick={() => void send()}
+          disabled={sending || !composeText.trim() || undefined}
+        >
+          <md-icon>send</md-icon>
+        </md-icon-button>
       </div>
     </div>
   );

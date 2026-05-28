@@ -46,7 +46,33 @@ body {
 }
 
 .app { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
-.hamburger { display: none; }
+.hamburger {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.hamburger:hover { background: var(--md-sys-color-surface-container); }
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
 .sidebar-scrim { display: none; }
 
 .bottom-nav { display: none; }
@@ -68,7 +94,6 @@ body {
     position: fixed; inset: 0; z-index: 15;
     background: rgba(0,0,0,0.4);
   }
-  .hamburger { display: inline-flex; }
   .toolbar { padding: 8px 12px; gap: 8px; }
   .toolbar md-outlined-text-field { flex: 1; min-width: 0; }
   .main {
@@ -321,6 +346,14 @@ body {
 }
 .comment-head .ts { color: var(--muted); font-size: 11px; }
 .comment-body { white-space: pre-wrap; font-size: 14px; }
+
+.composer {
+  display: flex; align-items: end; gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.composer md-outlined-text-field { flex: 1; }
 
 /* Make Material Web buttons fit the layout */
 md-filled-button, md-outlined-button, md-text-button { width: 100%; }

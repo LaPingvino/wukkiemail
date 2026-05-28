@@ -192,6 +192,13 @@ export class MatrixSource implements Source {
     return items.sort((a, b) => b.ts - a.ts);
   }
 
+  // Send a plain text message to a room. For encrypted rooms this will
+  // fail until we wire crypto — caller surfaces the error.
+  async sendMessage(roomId: string, body: string): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.sendTextMessage(roomId, body);
+  }
+
   // Mark a room read at its newest message. The SDK fires off a /receipt
   // request; on success the next listItems() will compute unread=0 for
   // this room. Fails silently if the room or messages aren't ready yet —
