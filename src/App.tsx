@@ -407,9 +407,12 @@ function Inbox({
   const issueStatusCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const it of items) {
-      if (it.flavor !== 'issue' || !it.statusValue) continue;
+      if (it.flavor !== 'issue') continue;
       if (bundle !== 'all' && !it.bundles.includes(bundle)) continue;
-      counts.set(it.statusValue, (counts.get(it.statusValue) ?? 0) + 1);
+      // Tasks with no kanban status bucket under '' so they get a "None"
+      // chip — otherwise selecting any status chip would silently hide them.
+      const key = it.statusValue ?? '';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
   }, [items, bundle]);
@@ -749,12 +752,12 @@ function Inbox({
                               .sort((a, b) => b[1] - a[1])
                               .map(([status, count]) => (
                                 <button
-                                  key={status}
+                                  key={status || '∅none'}
                                   type="button"
                                   className={`mini-chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
                                   onClick={() => toggleStatus(status)}
                                 >
-                                  {status}
+                                  {status || 'None'}
                                   <span className="chip-badge">{count}</span>
                                 </button>
                               ))}
