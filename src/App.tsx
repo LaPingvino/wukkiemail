@@ -331,11 +331,21 @@ function Inbox({
   }, [matrixSrc, gmailSrc]);
 
   // Bundles derive from items — only bundles that have at least one item show up.
+  // Track total + unread separately so the bundle pill can show a bold
+  // unread count when there's any, and a quieter total alongside.
   const counts = useMemo(() => {
-    const m = new Map<BundleKey, number>();
-    m.set('all', items.length);
-    for (const it of items) m.set(it.flavor, (m.get(it.flavor) ?? 0) + 1);
-    return m;
+    const total = new Map<BundleKey, number>();
+    const unread = new Map<BundleKey, number>();
+    const bump = (m: Map<BundleKey, number>, k: BundleKey) => m.set(k, (m.get(k) ?? 0) + 1);
+    for (const it of items) {
+      bump(total, 'all');
+      bump(total, it.flavor);
+      if (it.unread) {
+        bump(unread, 'all');
+        bump(unread, it.flavor);
+      }
+    }
+    return { total, unread };
   }, [items]);
 
   const visible = useMemo(() => {
@@ -356,13 +366,18 @@ function Inbox({
     <div className="app">
       <aside className="sidebar">
         <h1>WukkieMail</h1>
+        <div className="accounts">
+          {matrixSrc && <AccountChip flavor="matrix" label={matrixSrc.id} />}
+          {gmailSrc && <AccountChip flavor="gmail" label={gmailSrc.id.replace(/^gmail:/, '')} />}
+        </div>
         {BUNDLE_ORDER.map((key) => {
-          const count = counts.get(key) ?? 0;
-          if (key !== 'all' && count === 0) return null;
+          const total = counts.total.get(key) ?? 0;
+          const unread = counts.unread.get(key) ?? 0;
+          if (key !== 'all' && total === 0) return null;
           return (
             <div
               key={key}
-              className={`bundle ${bundle === key ? 'active' : ''}`}
+              className={`bundle ${bundle === key ? 'active' : ''} ${unread > 0 ? 'has-unread' : ''}`}
               onClick={() => setBundle(key)}
               role="button"
               tabIndex={0}
@@ -372,7 +387,11 @@ function Inbox({
                 {key !== 'all' && <span className={`src ${key}`} style={{ display: 'inline-block', width: 8, height: 8, marginRight: 8, borderRadius: 2, verticalAlign: 'middle' }} />}
                 {BUNDLE_LABELS[key]}
               </span>
-              <span className="count">{count}</span>
+              <span className="count">
+                {unread > 0 ? <strong>{unread}</strong> : null}
+                {unread > 0 && total > unread && <span style={{ opacity: 0.5 }}> / {total}</span>}
+                {unread === 0 && total}
+              </span>
             </div>
           );
         })}
@@ -461,6 +480,15 @@ function Inbox({
           onClose={() => setSelectedIssue(null)}
         />
       )}
+    </div>
+  );
+}
+
+function AccountChip({ flavor, label }: { flavor: 'matrix' | 'gmail'; label: string }) {
+  return (
+    <div className="account-chip" title={label}>
+      <span className={`src ${flavor}`} style={{ width: 8, height: 8, borderRadius: 50 }} />
+      <span className="account-label">{label}</span>
     </div>
   );
 }
