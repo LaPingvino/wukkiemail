@@ -210,6 +210,7 @@ function Inbox({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showRead, setShowRead] = useState(false);
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
+  const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
@@ -518,6 +519,20 @@ function Inbox({
                   {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
                 </div>
                 {matrixSrc && (
+                  <button
+                    type="button"
+                    className="item-kebab"
+                    aria-label="Actions"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActionSheetFor(it.id);
+                    }}
+                  >
+                    <span className="material-symbols-outlined">more_vert</span>
+                  </button>
+                )}
+                {matrixSrc && (
                   <ItemActions
                     item={it}
                     isPinned={it.bundles.includes('pinned')}
@@ -591,6 +606,54 @@ function Inbox({
           }}
         />
       )}
+      {matrixSrc && actionSheetFor && (() => {
+        const target = items.find((x) => x.id === actionSheetFor);
+        if (!target) return null;
+        const isPinned = target.bundles.includes('pinned');
+        const isSnoozed = target.bundles.includes('snoozed');
+        return (
+          <div className="sheet-scrim" onClick={() => setActionSheetFor(null)}>
+            <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="action-sheet-title">{target.from} — {target.subject}</div>
+              <button onClick={async () => { await matrixSrc.setPinned(target.id, !isPinned); setActionSheetFor(null); }}>
+                <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
+                {isPinned ? 'Unpin' : 'Pin'}
+              </button>
+              <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextHourOfDay(20)); setActionSheetFor(null); }}>
+                <span className="material-symbols-outlined">schedule</span>
+                Snooze until this evening
+              </button>
+              <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextDayAt(9)); setActionSheetFor(null); }}>
+                <span className="material-symbols-outlined">schedule</span>
+                Snooze until tomorrow 9am
+              </button>
+              <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextDayAt(9, 7)); setActionSheetFor(null); }}>
+                <span className="material-symbols-outlined">schedule</span>
+                Snooze for a week
+              </button>
+              {isSnoozed && (
+                <button onClick={async () => { await matrixSrc.setSnoozed(target.id, null); setActionSheetFor(null); }}>
+                  <span className="material-symbols-outlined">alarm_off</span>
+                  Unsnooze
+                </button>
+              )}
+              <button onClick={async () => { await matrixSrc.setManuallyUnread(target.id, !target.unread); setActionSheetFor(null); }}>
+                <span className="material-symbols-outlined">{target.unread ? 'mark_email_read' : 'mark_email_unread'}</span>
+                {target.unread ? 'Mark read' : 'Mark unread'}
+              </button>
+              <button onClick={async () => {
+                const m = target.id.match(/^matrix:([^:]+)$/);
+                if (m) await matrixSrc.markRoomRead(m[1]);
+                await matrixSrc.setManuallyUnread(target.id, false);
+                setActionSheetFor(null);
+              }}>
+                <span className="material-symbols-outlined">done_all</span>
+                Done
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {matrixSrc && (
         <button
           type="button"
