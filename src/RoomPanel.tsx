@@ -123,7 +123,24 @@ export function RoomPanel({
                   <strong>{m.senderName}</strong>
                   <span className="ts">{new Date(m.ts).toLocaleString()}</span>
                 </div>
-                <div className="comment-body">{m.body}</div>
+                {m.image ? (
+                  <a href={m.image.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={m.image.url}
+                      alt={m.image.alt}
+                      className="msg-image"
+                      loading="lazy"
+                    />
+                  </a>
+                ) : m.file ? (
+                  <a href={m.file.url} target="_blank" rel="noopener noreferrer" className="msg-file">
+                    <span className="material-symbols-outlined">attach_file</span>
+                    <span>{m.file.name}</span>
+                    {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
+                  </a>
+                ) : (
+                  <div className="comment-body">{m.body}</div>
+                )}
               </li>
             ))}
           </ul>
@@ -167,6 +184,12 @@ export function RoomPanel({
       </div>
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function Header({ title, subtitle, onClose }: { title: string; subtitle?: string; onClose: () => void }) {

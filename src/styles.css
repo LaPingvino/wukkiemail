@@ -628,6 +628,23 @@ body {
   max-width: 100%;
   min-width: 0;
 }
+.msg-image {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 8px;
+  display: block;
+}
+.msg-file {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 13px;
+}
+.msg-file:hover { background: var(--md-sys-color-surface-container); }
 .comment-list li { min-width: 0; max-width: 100%; }
 
 .composer {

@@ -420,19 +420,37 @@ export class MatrixSource implements Source {
       const ev = all[i];
       const type = ev.getType();
       if (type !== 'm.room.message' && type !== 'm.room.encrypted') continue;
-      const content = ev.getContent() as { body?: string; msgtype?: string };
+      const content = ev.getContent() as {
+        body?: string; msgtype?: string;
+        url?: string; info?: { w?: number; h?: number; mimetype?: string; size?: number };
+      };
       const senderId = ev.getSender() ?? '?';
       const senderMember = room.getMember(senderId);
-      messages.push({
+      const msgtype = content.msgtype ?? type;
+      const msg: TimelineMessage = {
         id: ev.getId() ?? String(ev.getTs()),
         senderId,
         senderName: senderMember?.name ?? senderId,
         body: type === 'm.room.encrypted'
-          ? '(encrypted — body not available, v0 has no crypto)'
-          : (content.body ?? `[${content.msgtype ?? type}]`),
+          ? '(encrypted — body not available)'
+          : (content.body ?? `[${msgtype}]`),
         ts: ev.getTs(),
-        msgtype: content.msgtype ?? type,
-      });
+        msgtype,
+      };
+      // Inline media: thumbnail-size HTTPS URL via mxcUrlToHttp.
+      if (msgtype === 'm.image' && content.url) {
+        const url = this.client.mxcUrlToHttp(content.url, 800, 800, 'scale');
+        if (url) msg.image = { url, alt: content.body ?? 'image', w: content.info?.w, h: content.info?.h };
+      } else if ((msgtype === 'm.file' || msgtype === 'm.video' || msgtype === 'm.audio') && content.url) {
+        const url = this.client.mxcUrlToHttp(content.url);
+        if (url) msg.file = {
+          url,
+          name: content.body ?? msgtype,
+          mimetype: content.info?.mimetype,
+          size: content.info?.size,
+        };
+      }
+      messages.push(msg);
     }
     messages.reverse();
     return {
@@ -520,6 +538,8 @@ export interface TimelineMessage {
   body: string;
   ts: number;
   msgtype: string;
+  image?: { url: string; alt: string; w?: number; h?: number };
+  file?: { url: string; name: string; mimetype?: string; size?: number };
 }
 
 function isSpace(room: Room): boolean {
