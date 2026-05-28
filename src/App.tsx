@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { SavedView } from './sources/matrix';
 import type { MessageHit } from './search';
+import { parseQuery, matchItem } from './filter';
 import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
@@ -407,6 +408,10 @@ function Inbox({
   }, [counts]);
 
   const selfMxid = matrixSrc?.id ?? null;
+  // Parse the search box through the shared filter system, so the box
+  // understands is:unread / flavor:x / from: / status: / is:mine alongside
+  // free text — the same predicates bundles will be built from.
+  const parsedQuery = useMemo(() => parseQuery(query), [query]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
@@ -435,14 +440,9 @@ function Inbox({
       // "Assigned to me": hide tasks whose user fields don't reference me.
       if (it.flavor === 'issue' && mineOnly && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
       if (!q) return true;
-      return (
-        it.subject.toLowerCase().includes(q) ||
-        it.from.toLowerCase().includes(q) ||
-        it.snippet.toLowerCase().includes(q) ||
-        (it.fromAddress?.toLowerCase().includes(q) ?? false)
-      );
+      return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, bundle, query, readFilter, issueStatusFilter, mineOnly, selfMxid]);
+  }, [items, bundle, query, parsedQuery, readFilter, issueStatusFilter, mineOnly, selfMxid]);
 
   // Whether any task carries user-field values — gates the "Mine" filter
   // chip so it only shows when assignment is actually in play.
