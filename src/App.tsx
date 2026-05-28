@@ -1030,6 +1030,19 @@ function Inbox({
           matrix={matrixSrc}
           roomId={selectedRoom}
           onClose={() => setSelectedRoom(null)}
+          onNext={() => {
+            // Walk to the next message conversation in the current inbox
+            // order, so the user can blow through unread quickly.
+            const order = visible
+              .filter((it) => it.flavor !== 'issue')
+              .map((it) => it.id.match(/^matrix:([^:]+)$/)?.[1])
+              .filter((id): id is string => !!id);
+            const curId = `matrix:${selectedRoom}`;
+            const i = order.indexOf(selectedRoom);
+            const next = i >= 0 ? order[i + 1] : order.find((id) => `matrix:${id}` !== curId);
+            if (next) setSelectedRoom(next);
+            else setSelectedRoom(null); // end of list → back to inbox
+          }}
         />
       )}
       {settingsOpen && matrixSrc && (
