@@ -791,6 +791,26 @@ body {
   font-size: 0.9em;
 }
 .comment-body a { color: var(--md-sys-color-primary); }
+.comment-body mx-reply {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.comment-body mx-reply blockquote {
+  margin: 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface-container);
+  border-radius: 4px 8px 8px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.comment-body mx-reply blockquote strong { color: var(--md-sys-color-primary); }
 
 .collapsible { position: relative; }
 .collapsible.collapsed .collapsible-inner {
