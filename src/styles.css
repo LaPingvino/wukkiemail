@@ -354,7 +354,13 @@ body {
   border-radius: 4px 8px 8px 4px;
   display: flex; gap: 8px; align-items: flex-start;
   font-size: 12px;
+  width: calc(100% - 16px);
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
 }
+.crypto-banner:hover { background: rgba(245, 158, 11, 0.1); }
 .crypto-banner .material-symbols-outlined { color: #f59e0b; font-size: 20px; }
 
 .accounts {

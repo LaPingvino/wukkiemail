@@ -7,6 +7,7 @@ import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
 import { NewTaskSheet } from './NewTaskSheet';
 import { SettingsSheet } from './SettingsSheet';
+import { EncryptionSetupSheet } from './EncryptionSetupSheet';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -217,6 +218,7 @@ function Inbox({
   const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   );
@@ -314,7 +316,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || encryptionOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -322,6 +324,7 @@ function Inbox({
         if (actionSheetFor) setActionSheetFor(null);
         else if (newTaskOpen) setNewTaskOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
+        else if (encryptionOpen) setEncryptionOpen(false);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
         else if (sidebarOpen) setSidebarOpen(false);
@@ -506,15 +509,20 @@ function Inbox({
           Priority tuning…
         </button>
         {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
-          <div className="crypto-banner" title="Encryption setup pending">
+          <button
+            className="crypto-banner"
+            type="button"
+            onClick={() => { setEncryptionOpen(true); setSidebarOpen(false); }}
+            title="Set up encryption"
+          >
             <span className="material-symbols-outlined">lock_open</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <strong>Encryption not fully set up</strong>
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <strong>Set up encryption</strong>
               <div style={{ fontSize: 11, opacity: 0.8 }}>
-                Encrypted history may be unreadable on new devices. Recovery key bootstrap is the next iteration.
+                Bootstrap cross-signing + recovery key so encrypted history is readable on new devices.
               </div>
             </div>
-          </div>
+          </button>
         )}
         {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
           <button
@@ -804,6 +812,9 @@ function Inbox({
       )}
       {settingsOpen && matrixSrc && (
         <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />
+      )}
+      {encryptionOpen && matrixSrc && (
+        <EncryptionSetupSheet matrix={matrixSrc} onClose={() => setEncryptionOpen(false)} />
       )}
       {newTaskOpen && matrixSrc && (
         <NewTaskSheet
