@@ -492,7 +492,7 @@ function Inbox({
                 }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
               >
-                <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} />
+                <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
                 <div className="from">
                   {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
                   {it.from}
@@ -741,11 +741,17 @@ function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-function Avatar({ name, flavor, presence }: { name: string; flavor: string; presence?: 'online' | 'unavailable' | 'offline' }) {
+function Avatar({ name, flavor, presence, url }: { name: string; flavor: string; presence?: 'online' | 'unavailable' | 'offline'; url?: string }) {
+  const [broken, setBroken] = useState(false);
   const hue = hashHue(name);
+  const showImage = url && !broken;
   return (
-    <div className="avatar" style={{ background: `hsl(${hue} 55% 50%)` }}>
-      <span>{initials(name)}</span>
+    <div className="avatar-wrap">
+      <div className="avatar" style={{ background: showImage ? 'transparent' : `hsl(${hue} 55% 50%)` }}>
+        {showImage
+          ? <img src={url} alt="" loading="lazy" onError={() => setBroken(true)} />
+          : <span>{initials(name)}</span>}
+      </div>
       <span className={`avatar-badge ${flavor}`} title={flavor} />
       {presence && <span className={`avatar-presence ${presence}`} title={presence} />}
     </div>
