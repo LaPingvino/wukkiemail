@@ -185,7 +185,7 @@ export function RoomPanel({
   }
 
   return (
-    <div className="issue-panel">
+    <div className="issue-panel room-panel">
       <Header
         title={snap.roomName}
         subtitle={`${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
