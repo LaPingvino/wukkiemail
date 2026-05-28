@@ -217,6 +217,9 @@ function Inbox({
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newDmOpen, setNewDmOpen] = useState(false);
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -319,13 +322,15 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
       const onPop = () => {
         if (actionSheetFor) setActionSheetFor(null);
         else if (newTaskOpen) setNewTaskOpen(false);
+        else if (newDmOpen) setNewDmOpen(false);
+        else if (newGroupOpen) setNewGroupOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
         else if (addAccountOpen) setAddAccountOpen(false);
@@ -872,6 +877,20 @@ function Inbox({
           }}
         />
       )}
+      {newDmOpen && matrixSrc && (
+        <NewDmSheet
+          matrix={matrixSrc}
+          onClose={() => setNewDmOpen(false)}
+          onCreated={(roomId) => { setNewDmOpen(false); setSelectedRoom(roomId); }}
+        />
+      )}
+      {newGroupOpen && matrixSrc && (
+        <NewGroupSheet
+          matrix={matrixSrc}
+          onClose={() => setNewGroupOpen(false)}
+          onCreated={(roomId) => { setNewGroupOpen(false); setSelectedRoom(roomId); }}
+        />
+      )}
       {matrixSrc && actionSheetFor && (() => {
         const target = items.find((x) => x.id === actionSheetFor);
         if (!target) return null;
@@ -921,14 +940,32 @@ function Inbox({
         );
       })()}
       {matrixSrc && (
-        <button
-          type="button"
-          className="fab"
-          aria-label="New task"
-          onClick={() => setNewTaskOpen(true)}
-        >
-          <span className="material-symbols-outlined">add</span>
-        </button>
+        <div className="fab-stack">
+          {fabMenuOpen && (
+            <div className="fab-menu">
+              <button type="button" onClick={() => { setFabMenuOpen(false); setNewTaskOpen(true); }}>
+                <span className="material-symbols-outlined">check_box</span>
+                New task
+              </button>
+              <button type="button" onClick={() => { setFabMenuOpen(false); setNewDmOpen(true); }}>
+                <span className="material-symbols-outlined">person_add</span>
+                New DM
+              </button>
+              <button type="button" onClick={() => { setFabMenuOpen(false); setNewGroupOpen(true); }}>
+                <span className="material-symbols-outlined">group_add</span>
+                New group
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            className="fab"
+            aria-label={fabMenuOpen ? 'Close menu' : 'New…'}
+            onClick={() => setFabMenuOpen((o) => !o)}
+          >
+            <span className="material-symbols-outlined">{fabMenuOpen ? 'close' : 'add'}</span>
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1115,6 +1152,91 @@ function Avatar({ name, flavor, presence, url }: { name: string; flavor: string;
       </div>
       <span className={`avatar-badge ${flavor}`} title={flavor} />
       {presence && <span className={`avatar-presence ${presence}`} title={presence} />}
+    </div>
+  );
+}
+
+function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/matrix').MatrixSource; onClose: () => void; onCreated: (roomId: string) => void }) {
+  const [mxid, setMxid] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!mxid) return;
+    setBusy(true); setError(null);
+    try { onCreated(await matrix.createDirectMessage(mxid.trim())); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New DM</div>
+        </header>
+        <div className="sheet-body">
+          <label className="sheet-label">
+            <span>Matrix ID</span>
+            <input type="text" autoFocus value={mxid}
+              onChange={(e) => setMxid(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && mxid) void submit(); }}
+              placeholder="@friend:server" />
+          </label>
+          {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
+          <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!mxid || busy} style={{ justifySelf: 'end' }}>
+            {busy ? 'Creating…' : 'Start chat'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/matrix').MatrixSource; onClose: () => void; onCreated: (roomId: string) => void }) {
+  const [name, setName] = useState('');
+  const [invitesText, setInvitesText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setError(null);
+    const invites = invitesText.split(/[,\s\n]+/).map((s) => s.trim()).filter(Boolean);
+    try { onCreated(await matrix.createGroup(name.trim(), invites)); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New group</div>
+        </header>
+        <div className="sheet-body">
+          <label className="sheet-label">
+            <span>Name</span>
+            <input type="text" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Team Foo" />
+          </label>
+          <label className="sheet-label">
+            <span>Invite (optional)</span>
+            <textarea
+              rows={3}
+              value={invitesText}
+              onChange={(e) => setInvitesText(e.target.value)}
+              placeholder="@user1:server, @user2:server"
+              style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', color: 'var(--fg)', font: 'inherit', fontSize: 14 }}
+            />
+          </label>
+          {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
+          <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!name.trim() || busy} style={{ justifySelf: 'end' }}>
+            {busy ? 'Creating…' : 'Create group'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

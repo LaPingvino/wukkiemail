@@ -118,10 +118,37 @@ body {
 }
 .sweep-btn .material-symbols-outlined { font-size: 18px; }
 
-/* FAB (New task) */
-.fab {
+.fab-stack {
   position: fixed;
   right: 24px; bottom: 24px;
+  z-index: 8;
+  display: flex; flex-direction: column;
+  align-items: flex-end; gap: 8px;
+}
+.fab-menu {
+  display: grid; gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.16);
+}
+.fab-menu button {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: 8px;
+  font: inherit; font-size: 14px;
+  color: var(--fg);
+  text-align: left;
+  white-space: nowrap;
+}
+.fab-menu button:hover { background: var(--md-sys-color-surface-container); }
+.fab-menu .material-symbols-outlined { font-size: 20px; color: var(--muted); }
+
+/* FAB (New …) */
+.fab {
+  position: relative;
   width: 56px; height: 56px;
   border-radius: 16px;
   background: var(--md-sys-color-primary);
@@ -130,7 +157,6 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   display: grid; place-items: center;
-  z-index: 8;
   transition: transform 0.1s ease;
 }
 .fab:hover { transform: translateY(-2px); }

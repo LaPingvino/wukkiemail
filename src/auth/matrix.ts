@@ -170,8 +170,19 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     userId: creds.userId,
     deviceId: creds.deviceId,
     store,
-    // We don't enable crypto in v0 — read-only triage of plaintext rooms first.
-    // Encrypted rooms will show "(encrypted)" placeholders until crypto lands.
+    cryptoCallbacks: {
+      // SDK calls this when it needs to decrypt SSSS secrets (cross-signing
+      // private keys, key backup). bootstrapEncryption / verifyWithRecoveryKey
+      // stash a Uint8Array on window._wukkieKey; we return it keyed by the
+      // server's SSSS default key id.
+      getSecretStorageKey: async ({ keys }: { keys: Record<string, unknown> }) => {
+        const stash = (window as unknown as { _wukkieKey?: Uint8Array })._wukkieKey;
+        if (!stash) return null;
+        const keyId = Object.keys(keys)[0];
+        if (!keyId) return null;
+        return [keyId, stash] as [string, Uint8Array];
+      },
+    },
   });
 
   // Now that the store has been linked to a client, hydrate it.
