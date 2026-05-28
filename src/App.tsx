@@ -243,6 +243,8 @@ function Inbox({
   const [configOpen, setConfigOpen] = useState(false);
   // Search compose helper (predicate chips under the search box).
   const [composerOpen, setComposerOpen] = useState(false);
+  // Bundle-level bulk-action sheet (keyed by bundle key).
+  const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
   const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
@@ -387,12 +389,13 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
       const onPop = () => {
         if (actionSheetFor) setActionSheetFor(null);
+        else if (bundleActionFor) setBundleActionFor(null);
         else if (newTaskOpen) setNewTaskOpen(false);
         else if (newDmOpen) setNewDmOpen(false);
         else if (newGroupOpen) setNewGroupOpen(false);
@@ -944,6 +947,15 @@ function Inbox({
                             <span className="material-symbols-outlined">edit</span>
                           </span>
                         )}
+                        <span
+                          className="section-sweep"
+                          role="button"
+                          aria-label="Bundle actions"
+                          title="Bundle actions"
+                          onClick={(e) => { e.stopPropagation(); setBundleActionFor(g.key); }}
+                        >
+                          <span className="material-symbols-outlined">more_vert</span>
+                        </span>
                       </button>
                       {open && (
                         <div className="bundle-body">
@@ -1092,6 +1104,52 @@ function Inbox({
       {doneValuesOpen && matrixSrc && (
         <DoneValuesSheet matrix={matrixSrc} onClose={() => setDoneValuesOpen(false)} />
       )}
+      {matrixSrc && bundleActionFor && (() => {
+        const g = bundled.groups.find((x) => x.key === bundleActionFor);
+        if (!g) return null;
+        const msgs = g.items.filter((i) => i.flavor !== 'issue');
+        const tasks = g.items.filter((i) => i.flavor === 'issue');
+        const roomId = (id: string) => id.match(/^matrix:([^:]+)$/)?.[1];
+        const close = () => setBundleActionFor(null);
+        const forEachMsg = async (fn: (it: InboxItem) => Promise<void>) => { for (const it of msgs) await fn(it); close(); };
+        return (
+          <div className="sheet-scrim" onClick={close}>
+            <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="action-sheet-title">{g.label} — {g.items.length} item{g.items.length === 1 ? '' : 's'}</div>
+              {msgs.length > 0 && (
+                <button onClick={() => void forEachMsg(async (it) => { const r = roomId(it.id); if (r) await matrixSrc.markRoomRead(r); await matrixSrc.setManuallyUnread(it.id, false); })}>
+                  <span className="material-symbols-outlined">mark_chat_read</span>
+                  Mark all read
+                </button>
+              )}
+              {msgs.length > 0 && (
+                <button onClick={() => void forEachMsg(async (it) => { await matrixSrc.setManuallyUnread(it.id, true); })}>
+                  <span className="material-symbols-outlined">mark_email_unread</span>
+                  Mark all unread
+                </button>
+              )}
+              {tasks.length > 0 && (
+                <button onClick={async () => { for (const it of tasks) { const m = it.id.match(/^matrix:(.+):issue:(.+)$/); if (m) await matrixSrc.markIssueDone(m[1], m[2]); } close(); }}>
+                  <span className="material-symbols-outlined">done_all</span>
+                  Mark all tasks done
+                </button>
+              )}
+              <button onClick={async () => { for (const it of g.items) await matrixSrc.setPinned(it.id, true); close(); }}>
+                <span className="material-symbols-outlined">keep</span>
+                Pin all
+              </button>
+              <button onClick={async () => { for (const it of g.items) await matrixSrc.setSnoozed(it.id, nextHourOfDay(20)); close(); }}>
+                <span className="material-symbols-outlined">schedule</span>
+                Snooze all until this evening
+              </button>
+              <button onClick={async () => { for (const it of g.items) await matrixSrc.setSnoozed(it.id, nextDayAt(9)); close(); }}>
+                <span className="material-symbols-outlined">schedule</span>
+                Snooze all until tomorrow
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {matrixSrc && <VerificationSheet matrix={matrixSrc} />}
       {bundleSheet && matrixSrc && (
         <BundleSheet
