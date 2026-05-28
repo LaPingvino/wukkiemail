@@ -400,12 +400,15 @@ function Inbox({
     });
   }, [items, bundle, query, showRead, issueStatusFilter]);
 
-  // Status counts for the Issues sub-filter.
+  // Status counts for the Tasks-header status chips. Computed across every
+  // task visible in the current bundle (not just the Issues bundle) so the
+  // chips work in the All view too. Counts ignore the status filter itself
+  // so toggling a chip never makes the other chips disappear.
   const issueStatusCounts = useMemo(() => {
-    if (bundle !== 'flavor:issue') return null;
     const counts = new Map<string, number>();
     for (const it of items) {
       if (it.flavor !== 'issue' || !it.statusValue) continue;
+      if (bundle !== 'all' && !it.bundles.includes(bundle)) continue;
       counts.set(it.statusValue, (counts.get(it.statusValue) ?? 0) + 1);
     }
     return counts;
@@ -667,36 +670,6 @@ function Inbox({
             await matrixSrc.setSavedViews(next);
           }}
         />
-        {bundle === 'flavor:issue' && issueStatusCounts && issueStatusCounts.size > 0 && (
-          <div className="chip-bar" style={{ top: 112 }}>
-            <div className="chip-bar-inner">
-              <button
-                type="button"
-                className={`chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
-                onClick={() => setIssueStatusFilter(new Set())}
-              >
-                <span>All statuses</span>
-              </button>
-              {[...issueStatusCounts.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .map(([status, count]) => (
-                  <button
-                    key={status}
-                    type="button"
-                    className={`chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
-                    onClick={() => setIssueStatusFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(status)) next.delete(status); else next.add(status);
-                      return next;
-                    })}
-                  >
-                    <span>{status}</span>
-                    <span className="chip-badge">{count}</span>
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
         {bundle !== 'all' && visible.length > 0 && matrixSrc && (
           <div className="sweep-bar">
             <span style={{ color: 'var(--muted)', fontSize: 13 }}>
@@ -738,21 +711,73 @@ function Inbox({
             {(() => {
               const rendered: React.ReactNode[] = [];
               const shown = visible.slice(0, 200);
-              // In the All view, group tasks above messages so each gets
-              // a single header. Inside each group, retain the existing
-              // (priority, ts) order so the user's tuning still ranks them.
-              const isAll = bundle === 'all';
-              const tasks = isAll ? shown.filter((x) => x.flavor === 'issue') : [];
-              const messages = isAll ? shown.filter((x) => x.flavor !== 'issue') : shown;
-              const ordered = isAll ? [...tasks, ...messages] : shown;
-              const hasBothGroups = isAll && tasks.length > 0 && messages.length > 0;
+              // Partition tasks above messages so each group gets a single
+              // header carrying its own inline filter controls. Inside each
+              // group the existing (priority, ts) order is retained so the
+              // user's tuning still ranks them. Headers show in every view
+              // (not just All) so the controls are always reachable.
+              const tasks = shown.filter((x) => x.flavor === 'issue');
+              const messages = shown.filter((x) => x.flavor !== 'issue');
+              const ordered = [...tasks, ...messages];
+              const showHeaders = !!matrixSrc;
+              const toggleStatus = (status: string) =>
+                setIssueStatusFilter((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(status)) next.delete(status); else next.add(status);
+                  return next;
+                });
               let lastGroup: 'issue' | 'message' | null = null;
               ordered.forEach((it, i) => {
                 const group = it.flavor === 'issue' ? 'issue' : 'message';
-                if (hasBothGroups && group !== lastGroup) {
+                if (showHeaders && group !== lastGroup) {
                   rendered.push(
                     <div key={`h-${group}`} className="section-header">
-                      {group === 'issue' ? 'Tasks' : 'Messages'}
+                      <span className="section-header-label">
+                        {group === 'issue' ? 'Tasks' : 'Messages'}
+                      </span>
+                      <div className="section-filters">
+                        {group === 'issue' ? (
+                          <>
+                            <button
+                              type="button"
+                              className={`mini-chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
+                              onClick={() => setIssueStatusFilter(new Set())}
+                            >
+                              All
+                            </button>
+                            {[...issueStatusCounts.entries()]
+                              .sort((a, b) => b[1] - a[1])
+                              .map(([status, count]) => (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  className={`mini-chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
+                                  onClick={() => toggleStatus(status)}
+                                >
+                                  {status}
+                                  <span className="chip-badge">{count}</span>
+                                </button>
+                              ))}
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className={`mini-chip ${!showRead ? 'active' : ''}`}
+                              onClick={() => setShowRead(false)}
+                            >
+                              Unread
+                            </button>
+                            <button
+                              type="button"
+                              className={`mini-chip ${showRead ? 'active' : ''}`}
+                              onClick={() => setShowRead(true)}
+                            >
+                              All
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>,
                   );
                   lastGroup = group;
