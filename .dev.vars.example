@@ -1,0 +1,4 @@
+# Copy to .dev.vars and fill in. Used by `wrangler pages dev` for local Pages Functions.
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8788/api/gmail/oauth/callback

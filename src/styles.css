@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --accent: #1e88e5;
+  --bg: #fafafa;
+  --fg: #1a1a1a;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --border: #e5e7eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --fg: #e5e7eb;
+    --muted: #9aa3b2;
+    --card: #181b22;
+    --border: #2a2f3a;
+  }
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); }
+button { font: inherit; cursor: pointer; }
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 100%;
+}
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  background: var(--card);
+}
+.sidebar h1 { font-size: 18px; margin: 0 0 16px 0; }
+.sidebar .bundle {
+  display: flex; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  color: var(--fg);
+}
+.sidebar .bundle:hover { background: rgba(127,127,127,0.08); }
+.sidebar .bundle.active { background: rgba(30,136,229,0.12); color: var(--accent); }
+.sidebar .bundle .count { color: var(--muted); font-size: 12px; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.empty {
+  display: grid; place-items: center; height: 100%;
+  color: var(--muted); text-align: center; padding: 24px;
+}
+.connect {
+  display: grid; gap: 12px; max-width: 420px; margin: 64px auto; padding: 24px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+}
+.connect h2 { margin: 0; }
+.connect button {
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--accent); color: white; border-color: transparent;
+}
+.connect button.secondary { background: transparent; color: var(--fg); }
+.item-list { overflow-y: auto; }
+.item {
+  display: grid; grid-template-columns: 24px 200px 1fr auto;
+  gap: 12px; padding: 12px 16px; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.item .src { width: 20px; height: 20px; border-radius: 4px; background: var(--muted); }
+.item .src.gmail { background: #ea4335; }
+.item .src.matrix { background: #0dbd8b; }
+.item .src.whatsapp { background: #25d366; }
+.item .src.irc { background: #6b7280; }
+.item .src.signal { background: #3a76f0; }
+.item .src.issue { background: #f59e0b; }
+.item .from { color: var(--fg); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .subj { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .ts { color: var(--muted); font-size: 12px; }
