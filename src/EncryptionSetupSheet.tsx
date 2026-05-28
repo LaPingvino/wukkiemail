@@ -16,10 +16,26 @@ export function EncryptionSetupSheet({
   matrix: MatrixSource;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<'bootstrap' | 'verify'>('bootstrap');
   const [password, setPassword] = useState('');
+  const [existingKey, setExistingKey] = useState('');
   const [phase, setPhase] = useState<'enter' | 'working' | 'done' | 'error'>('enter');
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const verify = async () => {
+    if (!existingKey.trim()) return;
+    setPhase('working');
+    setError(null);
+    try {
+      await matrix.verifyWithRecoveryKey(existingKey);
+      setPhase('done');
+      setRecoveryKey(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('error');
+    }
+  };
 
   const run = async () => {
     if (!password) return;
@@ -47,37 +63,96 @@ export function EncryptionSetupSheet({
         <div className="sheet-body">
           {phase === 'enter' && (
             <>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  className={`chip ${mode === 'bootstrap' ? 'active' : ''}`}
+                  onClick={() => setMode('bootstrap')}
+                >Set up fresh</button>
+                <button
+                  type="button"
+                  className={`chip ${mode === 'verify' ? 'active' : ''}`}
+                  onClick={() => setMode('verify')}
+                >I have a recovery key</button>
+              </div>
+              {mode === 'bootstrap' && (
               <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
                 Your account password is needed to upload signing keys to your
                 homeserver. We bootstrap cross-signing + secret storage in one
                 go and hand you a recovery key to save somewhere safe (1Password,
                 a piece of paper — anywhere offline).
-              </p>
-              <label className="sheet-label">
-                <span>Account password</span>
-                <input
-                  type="password"
-                  autoFocus
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && password) void run(); }}
-                />
-              </label>
-              <button
-                type="button"
-                className="sheet-submit"
-                onClick={() => void run()}
-                disabled={!password}
-                style={{ justifySelf: 'end' }}
-              >
-                Set up
-              </button>
+              </p>)}
+              {mode === 'verify' && (
+              <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+                Paste the recovery key from another device. We use it to
+                fetch your existing cross-signing keys and mark this device
+                trusted so encrypted history decrypts.
+              </p>)}
+              {mode === 'bootstrap' ? (
+                <>
+                  <label className="sheet-label">
+                    <span>Account password</span>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && password) void run(); }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="sheet-submit"
+                    onClick={() => void run()}
+                    disabled={!password}
+                    style={{ justifySelf: 'end' }}
+                  >
+                    Set up
+                  </button>
+                </>
+              ) : (
+                <>
+                  <label className="sheet-label">
+                    <span>Recovery key</span>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={existingKey}
+                      onChange={(e) => setExistingKey(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && existingKey) void verify(); }}
+                      placeholder="EsTk … "
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="sheet-submit"
+                    onClick={() => void verify()}
+                    disabled={!existingKey.trim()}
+                    style={{ justifySelf: 'end' }}
+                  >
+                    Verify
+                  </button>
+                </>
+              )}
             </>
           )}
           {phase === 'working' && (
             <p style={{ textAlign: 'center', color: 'var(--muted)' }}>
               Generating keys and uploading… (this can take a few seconds)
             </p>
+          )}
+          {phase === 'done' && !recoveryKey && (
+            <>
+              <p style={{ margin: 0, color: 'var(--md-sys-color-primary)' }}>
+                <strong>This device is verified.</strong>
+              </p>
+              <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+                Encrypted history should start decrypting as the SDK catches up.
+              </p>
+              <button type="button" className="sheet-submit" onClick={onClose} style={{ justifySelf: 'end' }}>
+                Done
+              </button>
+            </>
           )}
           {phase === 'done' && recoveryKey && (
             <>
