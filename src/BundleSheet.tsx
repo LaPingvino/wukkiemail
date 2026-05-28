@@ -6,18 +6,9 @@
 
 import { useMemo, useState } from 'react';
 import type { ManualBundle } from './sources/matrix';
-import type { InboxItem, ItemFlavor } from './sources/types';
+import type { InboxItem } from './sources/types';
 import { parseQuery, matchItem } from './filter';
-
-const FLAVORS: { flavor: ItemFlavor; label: string }[] = [
-  { flavor: 'matrix', label: 'Matrix' },
-  { flavor: 'whatsapp', label: 'WhatsApp' },
-  { flavor: 'meta', label: 'Meta' },
-  { flavor: 'signal', label: 'Signal' },
-  { flavor: 'irc', label: 'IRC' },
-  { flavor: 'issue', label: 'Tasks' },
-  { flavor: 'gmail', label: 'Mail' },
-];
+import { QueryChips } from './QueryChips';
 
 export function BundleSheet({
   items, selfMxid, initial, initialQuery, onSave, onDelete, onClose,
@@ -33,14 +24,6 @@ export function BundleSheet({
   const [label, setLabel] = useState(initial?.label ?? '');
   const [query, setQuery] = useState(initial?.query ?? initialQuery ?? '');
 
-  // Append a predicate token if it isn't already in the query.
-  const addToken = (tok: string) => setQuery((q) => {
-    const has = q.split(/\s+/).includes(tok);
-    if (has) return q.split(/\s+/).filter((t) => t !== tok).join(' ').trim(); // toggle off
-    return (q.trim() + ' ' + tok).trim();
-  });
-  const hasToken = (tok: string) => query.split(/\s+/).includes(tok);
-
   const matchCount = useMemo(() => {
     const f = parseQuery(query);
     return items.filter((it) => matchItem(f, it, { selfMxid })).length;
@@ -51,15 +34,6 @@ export function BundleSheet({
     if (!canSave) return;
     onSave({ id: initial?.id ?? crypto.randomUUID(), label: label.trim(), query: query.trim() });
   };
-
-  const chip = (tok: string, text: string) => (
-    <button
-      key={tok}
-      type="button"
-      className={`mini-chip ${hasToken(tok) ? 'active' : ''}`}
-      onClick={() => addToken(tok)}
-    >{text}</button>
-  );
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
@@ -93,16 +67,7 @@ export function BundleSheet({
               is:mine, flavor:x, from:name, status:value.
             </span>
           </label>
-          <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
-            {chip('is:unread', 'Unread')}
-            {chip('is:dm', 'DMs')}
-            {chip('is:mine', 'Assigned to me')}
-            {chip('is:pinned', 'Pinned')}
-            {chip('is:task', 'Tasks')}
-          </div>
-          <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
-            {FLAVORS.map((f) => chip(`flavor:${f.flavor}`, f.label))}
-          </div>
+          <QueryChips query={query} onChange={setQuery} />
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             Matches <strong>{matchCount}</strong> current item{matchCount === 1 ? '' : 's'}.
           </div>

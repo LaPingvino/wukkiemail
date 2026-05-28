@@ -19,7 +19,7 @@ interface Doc {
 
 type Req =
   | { type: 'put'; reqId: number; docs: Doc[] }
-  | { type: 'search'; reqId: number; q: string; limit: number }
+  | { type: 'search'; reqId: number; text: string[]; from: string[]; limit: number }
   | { type: 'clear'; reqId: number };
 
 const DB_NAME = 'wukkiemail-search';
@@ -57,9 +57,14 @@ async function put(docs: Doc[]): Promise<void> {
   });
 }
 
-async function search(q: string, limit: number): Promise<Doc[]> {
-  const needle = q.trim().toLowerCase();
-  if (!needle) return [];
+// Structured query parts from the shared filter: every `text` term must
+// appear in the body or room name (AND), and every `from` term in the
+// sender (AND). Room-level predicates (is:/flavor:/status:) are applied by
+// the caller against live items, since the worker only knows message docs.
+async function search(parts: { text: string[]; from: string[] }, limit: number): Promise<Doc[]> {
+  const text = parts.text.map((t) => t.toLowerCase()).filter(Boolean);
+  const from = parts.from.map((t) => t.toLowerCase()).filter(Boolean);
+  if (text.length === 0 && from.length === 0) return [];
   const db = await openDb();
   return new Promise<Doc[]>((resolve, reject) => {
     const hits: Doc[] = [];
@@ -70,13 +75,12 @@ async function search(q: string, limit: number): Promise<Doc[]> {
       const cursor = cursorReq.result;
       if (!cursor || hits.length >= limit) { resolve(hits); return; }
       const d = cursor.value as Doc;
-      if (
-        d.body.toLowerCase().includes(needle) ||
-        d.sender.toLowerCase().includes(needle) ||
-        d.roomName.toLowerCase().includes(needle)
-      ) {
-        hits.push(d);
-      }
+      const body = d.body.toLowerCase();
+      const room = d.roomName.toLowerCase();
+      const sender = d.sender.toLowerCase();
+      const textOk = text.every((t) => body.includes(t) || room.includes(t));
+      const fromOk = from.every((t) => sender.includes(t));
+      if (textOk && fromOk) hits.push(d);
       cursor.continue();
     };
     cursorReq.onerror = () => reject(cursorReq.error);
@@ -100,7 +104,7 @@ ctx.onmessage = async (e: MessageEvent<Req>) => {
       await put(msg.docs);
       ctx.postMessage({ reqId: msg.reqId, ok: true });
     } else if (msg.type === 'search') {
-      const hits = await search(msg.q, msg.limit);
+      const hits = await search({ text: msg.text, from: msg.from }, msg.limit);
       ctx.postMessage({ reqId: msg.reqId, hits });
     } else if (msg.type === 'clear') {
       await clear();

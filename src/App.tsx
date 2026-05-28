@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
-import { parseQuery, matchItem } from './filter';
+import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
 import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
@@ -12,6 +12,7 @@ import { EncryptionSetupSheet } from './EncryptionSetupSheet';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
+import { QueryChips } from './QueryChips';
 import type { ManualBundle } from './sources/matrix';
 import type { InboxItem } from './sources/types';
 
@@ -240,6 +241,8 @@ function Inbox({
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   // The config bundle (settings + accounts) at the top of the stream.
   const [configOpen, setConfigOpen] = useState(false);
+  // Search compose helper (predicate chips under the search box).
+  const [composerOpen, setComposerOpen] = useState(false);
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
   const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
@@ -267,6 +270,7 @@ function Inbox({
   }, []);
 
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
+  const selfMxid = matrixSrc?.id ?? null;
 
   useEffect(() => {
     if (!matrixSrc) return;
@@ -352,19 +356,32 @@ function Inbox({
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
 
-  // Full-text message search via the off-thread index. Debounced so we
-  // don't query on every keystroke. Cleared when the search box empties.
+  // Full-text message search via the off-thread index, on the same filter
+  // engine as everything else. Free-text + from: go to the worker (body /
+  // sender); room-level predicates (is:/flavor:/status:/in:) post-filter the
+  // hits against live items. Debounced; cleared when there's nothing to run.
   useEffect(() => {
-    const q = query.trim();
-    if (!matrixSrc || q.length < 2) { setMsgHits([]); return; }
+    const f = parseQuery(query);
+    if (!matrixSrc || (f.text.length === 0 && f.from.length === 0)) { setMsgHits([]); return; }
     let cancelled = false;
     const t = setTimeout(() => {
-      matrixSrc.searchMessages(q, 50)
-        .then((hits) => { if (!cancelled) setMsgHits(hits); })
+      matrixSrc.searchMessages({ text: f.text, from: f.from }, 100)
+        .then((hits) => {
+          if (cancelled) return;
+          const roomFilter = { ...EMPTY_FILTER, is: f.is, flavor: f.flavor, status: f.status, inBundle: f.inBundle };
+          const itemByRoom = new Map(items.filter((i) => i.flavor !== 'issue').map((i) => [i.id, i]));
+          const constrained = isEmptyFilter(roomFilter)
+            ? hits
+            : hits.filter((h) => {
+              const it = itemByRoom.get(`matrix:${h.roomId}`);
+              return it ? matchItem(roomFilter, it, { selfMxid }) : false;
+            });
+          setMsgHits(constrained.slice(0, 50));
+        })
         .catch(() => { if (!cancelled) setMsgHits([]); });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, matrixSrc]);
+  }, [query, matrixSrc, items, selfMxid]);
 
   // Android back / browser back closes the topmost modal-ish layer
   // instead of leaving the SPA. Each open pushes a history state; popstate
@@ -412,7 +429,6 @@ function Inbox({
     return () => { document.title = 'WukkieMail'; setFaviconDot(false); };
   }, [counts]);
 
-  const selfMxid = matrixSrc?.id ?? null;
   // Parse the search box through the shared filter system, so the box
   // understands is:unread / flavor:x / from: / status: / is:mine alongside
   // free text — the same predicates bundles will be built from.
@@ -785,12 +801,34 @@ function Inbox({
                 type="button"
                 className="hamburger"
                 aria-label="Clear search"
-                onClick={() => setQuery('')}
+                onClick={() => { setQuery(''); const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null; if (f) f.value = ''; }}
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             )}
+            <button
+              type="button"
+              className={`hamburger ${composerOpen ? 'on' : ''}`}
+              aria-label="Filter helper"
+              aria-pressed={composerOpen}
+              title="Filter helper"
+              onClick={() => setComposerOpen((o) => !o)}
+            >
+              <span className="material-symbols-outlined">tune</span>
+            </button>
           </div>
+          {composerOpen && (
+            <div className="compose-bar">
+              <QueryChips
+                query={query}
+                onChange={(q) => {
+                  setQuery(q);
+                  const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+                  if (f) f.value = q;
+                }}
+              />
+            </div>
+          )}
         </div>
         {loading ? (
           <div className="empty">Loading…</div>

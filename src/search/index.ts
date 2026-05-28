@@ -50,8 +50,10 @@ export class SearchIndex {
     return this.call<void>({ type: 'put', docs });
   }
 
-  search(q: string, limit = 50): Promise<MessageHit[]> {
-    return this.call<MessageHit[]>({ type: 'search', q, limit });
+  // Structured search: text terms match body/room (AND), from terms match
+  // sender (AND). Room-level predicates are applied by the caller.
+  search(parts: { text: string[]; from: string[] }, limit = 50): Promise<MessageHit[]> {
+    return this.call<MessageHit[]>({ type: 'search', text: parts.text, from: parts.from, limit });
   }
 
   clear(): Promise<void> {
