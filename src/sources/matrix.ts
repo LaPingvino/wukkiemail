@@ -215,9 +215,17 @@ export class MatrixSource implements Source {
     const manuallyUnread = new Set(triage.manuallyUnread);
     const addItem = (item: InboxItem | null) => {
       if (!item) return;
-      const snoozedUntil = triage.snoozed[item.id];
-      if (snoozedUntil && snoozedUntil > now) return;
       const next = { ...item, bundles: [...item.bundles] };
+      const snoozedUntil = triage.snoozed[item.id];
+      if (snoozedUntil && snoozedUntil > now) {
+        // Mark snoozed and tag it so the inbox can opt to show it via the
+        // 'snoozed' bundle, but it's hidden from the All view.
+        next.bundles.push('snoozed');
+        // Track wake-up time for the panel/UI to display ('Snoozed until …').
+        next.snoozedUntil = snoozedUntil;
+        // Snoozed items get -50 so they sink in any view that does include them.
+        next.priority -= 50;
+      }
       if (pinned.has(item.id)) {
         next.priority += 100;
         next.bundles.push('pinned');

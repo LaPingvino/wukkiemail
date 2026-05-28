@@ -285,8 +285,15 @@ function Inbox({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
-      if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
-      if (!showRead && !it.unread && !q) return false;
+      const isSnoozed = it.bundles.includes('snoozed');
+      if (bundle === 'snoozed') {
+        if (!isSnoozed) return false;
+      } else {
+        // Hide snoozed in any non-snoozed view (except when searching).
+        if (isSnoozed && !q) return false;
+        if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
+      }
+      if (!showRead && !it.unread && !q && bundle !== 'snoozed') return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -492,7 +499,9 @@ function Inbox({
                 <div className="subj">
                   <strong>{it.subject}</strong> — {it.snippet}
                 </div>
-                <div className="ts">{formatTs(it.ts)}</div>
+                <div className="ts">
+                  {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
+                </div>
                 {matrixSrc && (
                   <ItemActions
                     item={it}
@@ -653,6 +662,7 @@ function BundleChips({
     { id: 'all', label: 'Inbox', flavor: null },
   ];
   if ((counts.total.get('dm') ?? 0) > 0) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
+  if ((counts.total.get('snoozed') ?? 0) > 0) chips.push({ id: 'snoozed', label: 'Snoozed', flavor: null });
   for (const f of FLAVOR_ORDER) {
     const k = flavorBundleKey(f);
     if ((counts.total.get(k) ?? 0) > 0) chips.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
