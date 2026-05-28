@@ -454,35 +454,23 @@ function Inbox({
   // free text — the same predicates bundles will be built from.
   const parsedQuery = useMemo(() => parseQuery(query), [query]);
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     return items.filter((it) => {
       const isSnoozed = it.bundles.includes('snoozed');
-      if (bundle === 'snoozed') {
-        if (!isSnoozed) return false;
-      } else {
-        // Hide snoozed in any non-snoozed view (except when searching).
-        if (isSnoozed && !q) return false;
-        if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
-      }
-      // Don't apply the hide-read filter when:
-      //   - viewing the Snoozed bundle (everything there is interesting)
-      //   - viewing the Issues bundle (todos aren't 'read' in the same sense)
-      //   - the item is an issue and we're in the All view (would otherwise hide
-      //     all your tasks because Matrix has no read receipt for state events)
-      const skipReadFilter = bundle === 'snoozed' || bundle === 'flavor:issue' || it.flavor === 'issue';
-      if (!skipReadFilter && !q) {
+      // Read filter applies only to messages, only when not searching, and
+      // never to snoozed items — those live in the Snoozed bundle regardless
+      // of read state (issues have no read receipts, so skip them too).
+      if (!q && !isSnoozed && it.flavor !== 'issue') {
         if (readFilter === 'unread' && !it.unread) return false;
         if (readFilter === 'read' && it.unread) return false;
-        // 'all' applies no read-state filter
       }
-      // NOTE: the task status + "Mine" filters are NOT applied here. They are
-      // *display* filters applied per-section/per-bundle at render time (see
-      // displayFilter), so toggling them narrows a bundle's contents without
-      // making the bundle — and the chips that control it — disappear.
+      // NOTE: task status + "Mine" are *display* filters applied per-bundle at
+      // render time (displayFilter), so toggling them never makes a bundle and
+      // its chips vanish.
       if (!q) return true;
       return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, bundle, query, parsedQuery, readFilter, selfMxid]);
+  }, [items, query, parsedQuery, readFilter, selfMxid]);
 
   // Per-section/per-bundle display filter for tasks (status chips + Mine).
   // Applied at render so the controlling chips never vanish with their items.
@@ -634,11 +622,14 @@ function Inbox({
     };
     const loose: InboxItem[] = [];
     const groups = new Map<string, InboxItem[]>();
+    const pushTo = (k: string, it: InboxItem) => { const a = groups.get(k); if (a) a.push(it); else groups.set(k, [it]); };
     for (const it of visible) {
-      if (it.priority >= topLevel || it.bundles.includes('pinned')) { loose.push(it); continue; }
-      const k = assign(it);
-      const arr = groups.get(k);
-      if (arr) arr.push(it); else groups.set(k, [it]);
+      // Snoozed items wait in their own bottom bundle until they wake;
+      // pinned items collect in a Pinned bundle at the top.
+      if (it.bundles.includes('snoozed')) { pushTo('snoozed', it); continue; }
+      if (it.bundles.includes('pinned')) { pushTo('pinned', it); continue; }
+      if (it.priority >= topLevel) { loose.push(it); continue; }
+      pushTo(assign(it), it);
     }
     loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
     const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
@@ -683,6 +674,11 @@ function Inbox({
     };
     const spaceNodes = roots.map(buildSpace).filter((n) => n.count > 0);
 
+    // Synthetic Pinned (top) and Snoozed (bottom) bundles.
+    const pinnedItems = sortItems(groups.get('pinned') ?? []);
+    groups.delete('pinned');
+    const snoozedItems = sortItems(groups.get('snoozed') ?? []);
+    groups.delete('snoozed');
     // The "Other" bundle: items whose auto-bundle the user hid.
     const otherItems = sortItems(groups.get('other') ?? []);
     groups.delete('other');
@@ -700,13 +696,47 @@ function Inbox({
 
     const autoTop = [...spaceNodes, ...flatAuto];
     autoTop.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
-    // Other always last; shown if it has items or there are hidden bundles to restore.
-    const otherNode: BundleNode | null = (otherItems.length > 0 || hiddenBundles.length > 0)
-      ? { key: 'other', label: 'Other', flavor: 'matrix', items: otherItems, unread: unreadOf(otherItems), count: otherItems.length, children: [] }
-      : null;
-    return { loose, groups: [...manualList, ...autoTop, ...(otherNode ? [otherNode] : [])] as BundleNode[] };
+
+    const mkNode = (key: string, label: string, xs: InboxItem[]): BundleNode =>
+      ({ key, label, flavor: 'matrix', items: xs, unread: unreadOf(xs), count: xs.length, children: [] });
+    // Pinned pinned to the very top; Snoozed + Other to the bottom.
+    const pinnedNode = pinnedItems.length > 0 ? mkNode('pinned', 'Pinned', pinnedItems) : null;
+    const snoozedNode = snoozedItems.length > 0 ? mkNode('snoozed', 'Snoozed', snoozedItems) : null;
+    const otherNode = (otherItems.length > 0 || hiddenBundles.length > 0) ? mkNode('other', 'Other', otherItems) : null;
+    return {
+      loose,
+      groups: [
+        ...(pinnedNode ? [pinnedNode] : []),
+        ...manualList,
+        ...autoTop,
+        ...(otherNode ? [otherNode] : []),
+        ...(snoozedNode ? [snoozedNode] : []),
+      ] as BundleNode[],
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, selfMxid]);
+
+  // Message rooms in the exact order they appear in the stream (loose, then
+  // each bundle's items, recursing into nested spaces; Snoozed excluded).
+  // Drives the chat "Next" button so it steps through the visible inbox.
+  const roomNavOrder = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const push = (it: InboxItem) => {
+      const m = it.id.match(/^matrix:([^:]+)$/);
+      if (m && !seen.has(m[1])) { seen.add(m[1]); ids.push(m[1]); }
+    };
+    for (const it of bundled.loose) push(it);
+    const walk = (nodes: BundleNode[]) => {
+      for (const g of nodes) {
+        if (g.key === 'snoozed') continue;
+        for (const it of g.items) push(it);
+        walk(g.children);
+      }
+    };
+    walk(bundled.groups);
+    return ids;
+  }, [bundled]);
 
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
@@ -908,11 +938,16 @@ function Inbox({
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <button type="button" className="bundle-head" onClick={toggle}>
           <span className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
-          {g.manual
-            ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>bookmark</span>
-            : g.children.length > 0
-              ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>folder</span>
-              : <span className={`src ${g.flavor}`} />}
+          {(() => {
+            const ic = g.key === 'pinned' ? 'push_pin'
+              : g.key === 'snoozed' ? 'schedule'
+              : g.key === 'other' ? 'inbox'
+              : g.manual ? 'bookmark'
+              : g.children.length > 0 ? 'folder' : null;
+            return ic
+              ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
+              : <span className={`src ${g.flavor}`} />;
+          })()}
           <span className="bundle-label">{g.label}</span>
           <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
           {g.manual && (
@@ -1190,26 +1225,20 @@ function Inbox({
           onOpenChat={() => { const r = selectedIssue.roomId; setSelectedIssue(null); setSelectedRoom(r); }}
         />
       )}
-      {selectedRoom && matrixSrc && (
-        <RoomPanel
-          matrix={matrixSrc}
-          roomId={selectedRoom}
-          onClose={() => setSelectedRoom(null)}
-          onNext={() => {
-            // Walk to the next message conversation in the current inbox
-            // order, so the user can blow through unread quickly.
-            const order = visible
-              .filter((it) => it.flavor !== 'issue')
-              .map((it) => it.id.match(/^matrix:([^:]+)$/)?.[1])
-              .filter((id): id is string => !!id);
-            const curId = `matrix:${selectedRoom}`;
-            const i = order.indexOf(selectedRoom);
-            const next = i >= 0 ? order[i + 1] : order.find((id) => `matrix:${id}` !== curId);
-            if (next) setSelectedRoom(next);
-            else setSelectedRoom(null); // end of list → back to inbox
-          }}
-        />
-      )}
+      {selectedRoom && matrixSrc && (() => {
+        const i = roomNavOrder.indexOf(selectedRoom);
+        const nextRoom = i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0];
+        const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
+        return (
+          <RoomPanel
+            matrix={matrixSrc}
+            roomId={selectedRoom}
+            onClose={() => setSelectedRoom(null)}
+            nextLabel={nextItem?.subject}
+            onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
+          />
+        );
+      })()}
       {settingsOpen && matrixSrc && (
         <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />
       )}
@@ -1267,13 +1296,13 @@ function Inbox({
                   Edit bundle
                 </button>
               )}
-              {!g.manual && g.key !== 'other' && (
+              {!g.manual && !['other', 'pinned', 'snoozed'].includes(g.key) && (
                 <button onClick={() => void convertToManual(g.key, g.label)}>
                   <span className="material-symbols-outlined">tune</span>
                   Make editable (convert to filter)
                 </button>
               )}
-              {!g.manual && g.key !== 'other' && (
+              {!g.manual && !['other', 'pinned', 'snoozed'].includes(g.key) && (
                 <button onClick={() => void hideBundle(g.key)}>
                   <span className="material-symbols-outlined">visibility_off</span>
                   Hide this bundle (move to Other)

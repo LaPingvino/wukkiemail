@@ -101,6 +101,9 @@ body {
 }
 .next-btn:hover { background: var(--md-sys-color-surface-container); }
 .next-btn .material-symbols-outlined { font-size: 18px; }
+.next-btn-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
+.next-btn-label { font-size: 11px; color: var(--muted); font-weight: 600; }
+.next-btn-sub { font-size: 12px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
@@ -612,8 +615,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--card);
-  overflow: hidden;
+  /* NOT overflow:hidden — that clipped the hover action bar and snooze
+     popover inside bundles. Round the head/body corners instead. */
 }
+.bundle-head { border-radius: 14px; }
+.bundle-row.open > .bundle-head { border-radius: 14px 14px 0 0; }
+.bundle-row.open > .bundle-body { border-radius: 0 0 14px 14px; }
 .bundle-row.open { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .bundle-head {
   display: flex; align-items: center; gap: 10px; width: 100%;

@@ -17,11 +17,13 @@ export function RoomPanel({
   roomId,
   onClose,
   onNext,
+  nextLabel,
 }: {
   matrix: MatrixSource;
   roomId: string;
   onClose: () => void;
   onNext?: () => void;
+  nextLabel?: string;
 }) {
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200));
   const [composeText, setComposeText] = useState('');
@@ -193,6 +195,7 @@ export function RoomPanel({
         subtitle={`${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
         onClose={onClose}
         onNext={onNext}
+        nextLabel={nextLabel}
       />
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
@@ -559,7 +562,7 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Header({ title, subtitle, onClose, onNext }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void }) {
+function Header({ title, subtitle, onClose, onNext, nextLabel }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -570,8 +573,11 @@ function Header({ title, subtitle, onClose, onNext }: { title: string; subtitle?
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
       {onNext && (
-        <button type="button" className="next-btn" title="Next conversation" onClick={onNext}>
-          Next
+        <button type="button" className="next-btn" title={nextLabel ? `Next: ${nextLabel}` : 'Next conversation'} onClick={onNext}>
+          <span className="next-btn-text">
+            <span className="next-btn-label">Next</span>
+            {nextLabel && <span className="next-btn-sub">{nextLabel}</span>}
+          </span>
           <span className="material-symbols-outlined">chevron_right</span>
         </button>
       )}
