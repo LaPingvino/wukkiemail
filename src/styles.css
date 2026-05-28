@@ -697,6 +697,17 @@ body {
   cursor: pointer;
   white-space: nowrap;
 }
+/* Inline group label sitting with a row of mini-chips (e.g. "Source"). */
+.filter-group-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+  align-self: center;
+}
 .mini-chip:hover { background: var(--md-sys-color-surface-container); }
 .mini-chip.active {
   background: var(--md-sys-color-primary-container);

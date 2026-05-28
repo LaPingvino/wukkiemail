@@ -49,7 +49,7 @@ export function QueryChips({
       </div>
       {shownFlavors.length > 0 && (
         <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible', alignItems: 'center' }}>
-          <span className="hint" style={{ flex: '0 0 auto', marginRight: 2 }}>Source:</span>
+          <span className="filter-group-label">Source</span>
           {shownFlavors.map((f) => chip(`flavor:${f}`, FLAVOR_LABEL[f] ?? f))}
         </div>
       )}
