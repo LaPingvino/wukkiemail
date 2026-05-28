@@ -261,6 +261,7 @@ function Inbox({
   const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
+  const [hiddenBundles, setHiddenBundles] = useState<string[]>([]);
   const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
@@ -328,6 +329,7 @@ function Inbox({
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
       if (!cancelled) setSpaceTree(matrixSrc.getSpaceTree());
       if (!cancelled) setManualBundles(matrixSrc.getManualBundles());
+      if (!cancelled) setHiddenBundles(matrixSrc.getHiddenBundles());
     };
     refresh();
     let pending = false;
@@ -620,12 +622,15 @@ function Inbox({
   // always appear (even when empty) so they stay findable/editable.
   const bundled = useMemo(() => {
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
+    const hiddenSet = new Set(hiddenBundles);
     const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
     const assign = (it: InboxItem): string => {
       for (const { b, f } of manualParsed) {
         if (matchItem(f, it, { selfMxid })) return `manual:${b.id}`;
       }
-      return primaryKey(it);
+      const k = primaryKey(it);
+      // Items whose auto-bundle the user has hidden collect in "Other".
+      return hiddenSet.has(k) ? 'other' : k;
     };
     const loose: InboxItem[] = [];
     const groups = new Map<string, InboxItem[]>();
@@ -646,16 +651,26 @@ function Inbox({
       return { key: `manual:${b.id}`, label: b.label, flavor: 'matrix', manual: b, items: gItems, unread: unreadOf(gItems), count: gItems.length, children: [] };
     });
 
-    // Spaces nest: build parent→children from the tree, then assemble nodes
-    // recursively; a space shows when it or a descendant has items.
+    // Spaces nest: build parent→children from the tree, skipping hidden
+    // spaces (their direct rooms already went to Other; their children
+    // re-parent to the nearest visible ancestor). A space shows when it or a
+    // descendant has items.
     const labelOf = new Map(spaceTree.map((s) => [s.id, s.label]));
-    const childrenOf = new Map<string, string[]>();
+    const parentMap = new Map(spaceTree.map((s) => [s.id, s.parentId]));
     const allSpaceIds = new Set(spaceTree.map((s) => s.id));
+    const isHidden = (id: string) => hiddenSet.has(`space:${id}`);
+    const effectiveParent = (id: string): string | null => {
+      let p = parentMap.get(id) ?? null;
+      while (p && (!allSpaceIds.has(p) || isHidden(p))) p = parentMap.get(p) ?? null;
+      return p;
+    };
+    const childrenOf = new Map<string, string[]>();
     const roots: string[] = [];
     for (const s of spaceTree) {
-      if (s.parentId && allSpaceIds.has(s.parentId)) {
-        const arr = childrenOf.get(s.parentId) ?? []; arr.push(s.id); childrenOf.set(s.parentId, arr);
-      } else { roots.push(s.id); }
+      if (isHidden(s.id)) continue;
+      const ep = effectiveParent(s.id);
+      if (ep) { const arr = childrenOf.get(ep) ?? []; arr.push(s.id); childrenOf.set(ep, arr); }
+      else { roots.push(s.id); }
     }
     const buildSpace = (id: string): BundleNode => {
       const direct = sortItems(groups.get(`space:${id}`) ?? []);
@@ -667,6 +682,10 @@ function Inbox({
       return { key: `space:${id}`, label: labelOf.get(id) ?? id, flavor: 'matrix', items: direct, unread, count, children };
     };
     const spaceNodes = roots.map(buildSpace).filter((n) => n.count > 0);
+
+    // The "Other" bundle: items whose auto-bundle the user hid.
+    const otherItems = sortItems(groups.get('other') ?? []);
+    groups.delete('other');
 
     // Remaining groups (dm, flavor:X, orphan spaces) render flat.
     const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => ({
@@ -681,9 +700,13 @@ function Inbox({
 
     const autoTop = [...spaceNodes, ...flatAuto];
     autoTop.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
-    return { loose, groups: [...manualList, ...autoTop] as BundleNode[] };
+    // Other always last; shown if it has items or there are hidden bundles to restore.
+    const otherNode: BundleNode | null = (otherItems.length > 0 || hiddenBundles.length > 0)
+      ? { key: 'other', label: 'Other', flavor: 'matrix', items: otherItems, unread: unreadOf(otherItems), count: otherItems.length, children: [] }
+      : null;
+    return { loose, groups: [...manualList, ...autoTop, ...(otherNode ? [otherNode] : [])] as BundleNode[] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, selfMxid]);
+  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, selfMxid]);
 
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
@@ -839,6 +862,39 @@ function Inbox({
     </div>
   );
 
+  // Hide / restore / convert auto bundles. Hiding routes a default bundle's
+  // items into "Other"; converting turns it into an editable manual filter.
+  const hideBundle = async (key: string) => {
+    if (!matrixSrc) return;
+    const next = [...new Set([...hiddenBundles, key])];
+    setHiddenBundles(next); setBundleActionFor(null);
+    await matrixSrc.setHiddenBundles(next);
+  };
+  const restoreBundle = async (key: string) => {
+    if (!matrixSrc) return;
+    const next = hiddenBundles.filter((k) => k !== key);
+    setHiddenBundles(next);
+    await matrixSrc.setHiddenBundles(next);
+  };
+  const queryForBundleKey = (key: string): string => {
+    if (key === 'dm') return 'is:dm';
+    if (key.startsWith('flavor:')) return key;       // flavor:x is a valid query
+    if (key.startsWith('space:')) return `in:${key}`; // in:space:!room matches item.bundles
+    return '';
+  };
+  const convertToManual = async (key: string, label: string) => {
+    if (!matrixSrc) return;
+    const query = queryForBundleKey(key);
+    if (!query) return;
+    const b: ManualBundle = { id: crypto.randomUUID(), label, query };
+    const nextBundles = [...manualBundles, b];
+    const nextHidden = [...new Set([...hiddenBundles, key])];
+    setManualBundles(nextBundles); setHiddenBundles(nextHidden); setBundleActionFor(null);
+    await matrixSrc.setManualBundles(nextBundles);
+    await matrixSrc.setHiddenBundles(nextHidden);
+    setBundleSheet({ editing: b });
+  };
+
   // Render one bundle row (recursively for nested spaces). `counter` carries
   // the running keyboard-cursor index across loose items + all open bundles.
   const renderBundleNode = (g: BundleNode, depth: number, counter: { n: number }): React.ReactNode => {
@@ -872,6 +928,17 @@ function Inbox({
         </button>
         {open && (
           <div className="bundle-body">
+            {g.key === 'other' && hiddenBundles.length > 0 && (
+              <div className="restore-row">
+                <span className="filter-group-label">Hidden bundles</span>
+                {hiddenBundles.map((k) => (
+                  <button key={k} type="button" className="mini-chip" title="Restore this bundle" onClick={() => void restoreBundle(k)}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>undo</span>
+                    {bundleLabel(k as BundleKey, spaceBundles)}
+                  </button>
+                ))}
+              </div>
+            )}
             {g.items.length > 0 && renderFilterChips(
               g.items.some((x) => x.flavor === 'issue'),
               g.items.some((x) => x.flavor !== 'issue'),
@@ -879,7 +946,7 @@ function Inbox({
             )}
             {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, counter.n++))}
             {g.children.map((child) => renderBundleNode(child, depth + 1, counter))}
-            {g.items.length === 0 && g.children.length === 0 && (
+            {g.items.length === 0 && g.children.length === 0 && g.key !== 'other' && (
               <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
                 <p>Nothing matches this bundle right now.</p>
               </div>
@@ -1194,6 +1261,24 @@ function Inbox({
                 <span className="material-symbols-outlined">schedule</span>
                 Snooze all until tomorrow
               </button>
+              {g.manual && (
+                <button onClick={() => { setBundleActionFor(null); setBundleSheet({ editing: g.manual }); }}>
+                  <span className="material-symbols-outlined">edit</span>
+                  Edit bundle
+                </button>
+              )}
+              {!g.manual && g.key !== 'other' && (
+                <button onClick={() => void convertToManual(g.key, g.label)}>
+                  <span className="material-symbols-outlined">tune</span>
+                  Make editable (convert to filter)
+                </button>
+              )}
+              {!g.manual && g.key !== 'other' && (
+                <button onClick={() => void hideBundle(g.key)}>
+                  <span className="material-symbols-outlined">visibility_off</span>
+                  Hide this bundle (move to Other)
+                </button>
+              )}
             </div>
           </div>
         );

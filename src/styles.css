@@ -631,6 +631,10 @@ body {
   display: grid; gap: 4px;
 }
 .bundle-body .section-filters { padding: 4px 6px 8px; }
+.restore-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 6px 10px;
+}
 /* Items inside a bundle sit flush; the bundle card provides the frame. */
 .bundle-body .item { border-radius: 10px; }
 
