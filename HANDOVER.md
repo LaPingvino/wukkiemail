@@ -37,11 +37,15 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - SAS emoji verification (both directions): MatrixSource verification controller (`startSelfVerification`/`confirmVerification`/`cancelVerification`/`resetVerification`/`onVerification`), inbound caught via `CryptoEvent.VerificationRequestReceived`. `VerificationSheet` renders whenever a verification is in flight; EncryptionSetupSheet has a third "Verify with another device" mode. NB: verification enums/types imported from deep `matrix-js-sdk/lib/crypto-api/*` paths — NOT re-exported from the package root.
 - Per-room done-values editor: `DoneValuesSheet` (sidebar → "Task \"done\" statuses…") lists rooms with a kanban schema, toggles which status values count as done per room; empty = schema default (last value). `listIssueRoomsWithStatus` / `setDoneValuesForRoom` in matrix.ts, writes synced `triage.doneValuesByRoom`. Applies immediately, no Save.
 - Full-text message search (off-thread): `src/search/worker.ts` owns a `wukkiemail-search` IndexedDB of message docs, cursor-scan substring search; `src/search/index.ts` is the `SearchIndex` client wrapper. MatrixSource harvests loaded bodies (debounced on first sync + incremental on Room.timeline + after loadOlder), exposes `searchMessages`. App shows an "In messages" section under room results (250ms debounce). Coverage grows with sync/scrollback; future: token/inverted index instead of linear scan.
+- @-mention autocomplete in the composer: trailing `@query` → member dropdown (name/mxid/avatar), arrows/Enter/Tab/click, accepted mentions become matrix.to pills + `m.mentions.user_ids` on send. `getRoomMembers` + `mentionUserIds` param on sendMessage. Also fixed a latent bug: composer imperative listeners were re-attached every render — now once-per-element with refs.
+- Section-header sweep (replaced the bundle sweep-bar): Messages header "Mark all read", Tasks header "Mark all done" (`markIssueDone` resolves room done value). Selected bundle chip now always stays visible so finishing the last task doesn't yank the view (user-reported).
+- "None" status chip for tasks with no kanban value (user-reported: they vanished when any status chip was toggled).
+- JMAP email source FOUNDATION (`src/sources/jmap.ts`): `JmapSource implements Source`, session discovery + bearer token, Mailbox/get → bundles, Email/query+get → InboxItem (reuses 'gmail'/'Mail' flavor). NOT wired into App login yet — follow-up is account multiplexing (MatrixSource + JmapSource behind one inbox) + a JMAP login UI + compose/EmailSubmission. Built to keep the InboxItem/Source model honest for email.
 
 ## What's queued
-- **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
-- **@-mention autocomplete**: dropdown in composer for room members
+- **Wire JMAP into the app**: login UI (sessionUrl + token), account multiplexing so the inbox merges Matrix + JMAP items, then compose via EmailSubmission. Foundation already in `src/sources/jmap.ts`.
 - **Wally voice/video room creation**: extend FAB menu, mirror what Wally does
+- **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
 
 ## Recent user feedback patterns
 
