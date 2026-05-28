@@ -36,10 +36,10 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - Tri-state read filter on the Messages header: Unread / Read / All (was a boolean). Saved views carry `readFilter` (legacy `showRead` kept in sync).
 - SAS emoji verification (both directions): MatrixSource verification controller (`startSelfVerification`/`confirmVerification`/`cancelVerification`/`resetVerification`/`onVerification`), inbound caught via `CryptoEvent.VerificationRequestReceived`. `VerificationSheet` renders whenever a verification is in flight; EncryptionSetupSheet has a third "Verify with another device" mode. NB: verification enums/types imported from deep `matrix-js-sdk/lib/crypto-api/*` paths — NOT re-exported from the package root.
 - Per-room done-values editor: `DoneValuesSheet` (sidebar → "Task \"done\" statuses…") lists rooms with a kanban schema, toggles which status values count as done per room; empty = schema default (last value). `listIssueRoomsWithStatus` / `setDoneValuesForRoom` in matrix.ts, writes synced `triage.doneValuesByRoom`. Applies immediately, no Save.
+- Full-text message search (off-thread): `src/search/worker.ts` owns a `wukkiemail-search` IndexedDB of message docs, cursor-scan substring search; `src/search/index.ts` is the `SearchIndex` client wrapper. MatrixSource harvests loaded bodies (debounced on first sync + incremental on Room.timeline + after loadOlder), exposes `searchMessages`. App shows an "In messages" section under room results (250ms debounce). Coverage grows with sync/scrollback; future: token/inverted index instead of linear scan.
 
 ## What's queued
 - **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
-- **Search secondary index**: full-text Web Worker + IndexedDB index for message bodies
 - **@-mention autocomplete**: dropdown in composer for room members
 - **Wally voice/video room creation**: extend FAB menu, mirror what Wally does
 
