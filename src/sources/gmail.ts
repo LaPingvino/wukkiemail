@@ -1,21 +1,19 @@
-// GmailSource — stub. Auth lands tokens in localStorage; this adapter
-// will consume them once the Gmail REST client is wired. For now it
-// exposes the contract so the inbox UI can co-render Gmail items
-// once they exist.
+// GmailSource — turns the Gmail REST client into InboxItems.
+// Metadata scope only, so subjects and headers are real but bodies
+// aren't fetched. Clicking an item opens mail.google.com to the thread.
 
-import { loadCreds, type GmailCreds } from '../auth/gmail';
+import { loadCreds, gmailThreadUrl, type GmailCreds } from '../auth/gmail';
+import { GmailClient } from './gmailClient';
 import type { BundleSpec, InboxItem, Source } from './types';
 
 export class GmailSource implements Source {
   readonly kind = 'gmail' as const;
-  readonly id: string;
-  private creds: GmailCreds;
+  id = 'gmail:pending';
+  private client: GmailClient;
+  private email: string | null = null;
 
   constructor(creds: GmailCreds) {
-    this.creds = creds;
-    // The id should be the user's email — we'll pull it from a /userinfo
-    // call once the client is wired. Placeholder for now.
-    this.id = 'gmail:pending';
+    this.client = new GmailClient(creds);
   }
 
   static tryRestore(): GmailSource | null {
@@ -24,23 +22,48 @@ export class GmailSource implements Source {
   }
 
   async start(): Promise<void> {
-    // No-op until we wire the Gmail REST client. The token sits in
-    // this.creds; we'll refresh it lazily on first call.
+    // Resolve the account email so we can build deep links into Gmail.
+    // Failure here means the credentials are stale — let the caller
+    // surface an error and trigger a re-login.
+    const info = await this.client.userinfo();
+    this.email = info.email;
+    this.id = `gmail:${info.email}`;
   }
 
   async stop(): Promise<void> {
-    // No-op.
+    // Nothing to dispose — the client is a stateless wrapper.
   }
 
   async listBundles(): Promise<BundleSpec[]> {
-    return [
-      { id: 'gmail:inbox', label: 'Gmail · Inbox', count: 0, flavor: 'gmail' },
-    ];
+    return [{ id: 'gmail:inbox', label: 'Gmail', count: 0, flavor: 'gmail' }];
   }
 
   async listItems(_bundleId: string | null): Promise<InboxItem[]> {
-    // Returning empty until the Gmail messages.list call is implemented.
-    void this.creds;
-    return [];
+    const threads = await this.client.listInboxThreads(30);
+    const email = this.email ?? '';
+    return threads.map((t) => ({
+      id: `gmail:${t.id}`,
+      flavor: 'gmail' as const,
+      bundleId: null,
+      from: stripAddress(t.from),
+      fromAddress: extractAddress(t.from),
+      subject: t.subject,
+      snippet: t.snippet,
+      ts: t.ts,
+      unread: t.labelIds.includes('UNREAD'),
+      threadCount: t.messageCount,
+      openPath: gmailThreadUrl(t.id, email),
+    }));
   }
+}
+
+// "Jane Doe <jane@example.com>" → "Jane Doe"; bare addresses unchanged.
+function stripAddress(from: string): string {
+  const m = from.match(/^"?([^"<]+?)"?\s*<[^>]+>$/);
+  return (m?.[1] ?? from).trim();
+}
+
+function extractAddress(from: string): string {
+  const m = from.match(/<([^>]+)>$/);
+  return m?.[1] ?? from.trim();
 }
