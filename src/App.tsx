@@ -220,6 +220,8 @@ function Inbox({
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   );
+  const [cryptoStatus, setCryptoStatus] = useState<'none' | 'setup' | 'unverified' | 'verified'>('none');
+  const [hasEncRoom, setHasEncRoom] = useState(false);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -229,6 +231,21 @@ function Inbox({
   }, []);
 
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
+
+  useEffect(() => {
+    if (!matrixSrc) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const s = await matrixSrc.getCryptoStatus();
+        if (!cancelled) setCryptoStatus(s);
+        if (!cancelled) setHasEncRoom(matrixSrc.hasAnyEncryptedRoom());
+      } catch { /* swallow */ }
+    };
+    void refresh();
+    const unsub = matrixSrc.subscribe(() => void refresh());
+    return () => { cancelled = true; unsub(); };
+  }, [matrixSrc]);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +505,17 @@ function Inbox({
         >
           Priority tuning…
         </button>
+        {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
+          <div className="crypto-banner" title="Encryption setup pending">
+            <span className="material-symbols-outlined">lock_open</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <strong>Encryption not fully set up</strong>
+              <div style={{ fontSize: 11, opacity: 0.8 }}>
+                Encrypted history may be unreadable on new devices. Recovery key bootstrap is the next iteration.
+              </div>
+            </div>
+          </div>
+        )}
         {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
           <button
             onClick={async () => {
