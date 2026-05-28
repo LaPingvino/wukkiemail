@@ -401,25 +401,28 @@ function Inbox({
       {sidebarOpen && <div className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
       <main className="main">
         <div className="toolbar">
-          <button
-            type="button"
-            className="hamburger"
-            aria-label="Menu"
-            onClick={() => setSidebarOpen((o) => !o)}
-          >
-            <span className="material-symbols-outlined">menu</span>
-          </button>
-          <md-outlined-text-field
-            label="Search"
-            placeholder="Filter inbox…"
-            value={query}
-            ref={fieldRef((v) => setQuery(v))}
-            style={{ width: '100%', maxWidth: 600 }}
-          />
-          {query && (
-            <md-text-button onClick={() => setQuery('')}>Clear</md-text-button>
-          )}
+          <div className="toolbar-inner">
+            <button
+              type="button"
+              className="hamburger"
+              aria-label="Menu"
+              onClick={() => setSidebarOpen((o) => !o)}
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            <md-outlined-text-field
+              label="Search"
+              placeholder="Filter inbox…"
+              value={query}
+              ref={fieldRef((v) => setQuery(v))}
+              style={{ flex: 1 }}
+            />
+            {query && (
+              <md-text-button onClick={() => setQuery('')}>Clear</md-text-button>
+            )}
+          </div>
         </div>
+        <BundleChips bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (
@@ -529,7 +532,6 @@ function Inbox({
           onClose={() => setSelectedRoom(null)}
         />
       )}
-      <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
     </div>
   );
 }
@@ -591,6 +593,51 @@ function nextDayAt(hour: number, addDays = 1): number {
   return d.getTime();
 }
 
+function BundleChips({
+  bundle, setBundle, counts, spaceBundles,
+}: {
+  bundle: BundleKey;
+  setBundle: (k: BundleKey) => void;
+  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
+  spaceBundles: BundleSpec[];
+}) {
+  // Inline horizontal chip bar for the main bundles. Always shows All;
+  // then DMs and each populated flavor; then space bundles. Click to
+  // filter. The drawer remains for full nav.
+  const chips: { id: BundleKey; label: string; flavor: ItemFlavor | null }[] = [
+    { id: 'all', label: 'Inbox', flavor: null },
+  ];
+  if ((counts.total.get('dm') ?? 0) > 0) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
+  for (const f of FLAVOR_ORDER) {
+    const k = flavorBundleKey(f);
+    if ((counts.total.get(k) ?? 0) > 0) chips.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
+  }
+  for (const b of spaceBundles) {
+    if ((counts.total.get(b.id) ?? 0) > 0) chips.push({ id: b.id, label: b.label, flavor: 'matrix' });
+  }
+  return (
+    <div className="chip-bar">
+      <div className="chip-bar-inner">
+        {chips.map(({ id, label, flavor }) => {
+          const unread = counts.unread.get(id) ?? 0;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`chip ${bundle === id ? 'active' : ''}`}
+              onClick={() => setBundle(id)}
+            >
+              {flavor && <span className={`src ${flavor}`} />}
+              <span>{label}</span>
+              {unread > 0 && <span className="chip-badge">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BundleRow({
   id, label, flavor, total, unread, active, onSelect,
 }: {
@@ -621,53 +668,6 @@ function BundleRow({
         {unread === 0 && total}
       </span>
     </div>
-  );
-}
-
-function BottomNav({
-  bundle,
-  setBundle,
-  counts,
-  spaceBundles,
-}: {
-  bundle: BundleKey;
-  setBundle: (k: BundleKey) => void;
-  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
-  spaceBundles: BundleSpec[];
-}) {
-  // Top 5 most populated bundles (Inbox always first) — flavors and DMs
-  // first since they're most-used; spaces are usually accessed less often.
-  const candidates: { id: BundleKey; label: string; flavor: ItemFlavor | null }[] = [
-    { id: 'all', label: 'Inbox', flavor: null },
-  ];
-  if ((counts.total.get('dm') ?? 0) > 0) candidates.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
-  for (const f of FLAVOR_ORDER) {
-    const k = flavorBundleKey(f);
-    if ((counts.total.get(k) ?? 0) > 0) candidates.push({ id: k, label: FLAVOR_LABELS[f], flavor: f });
-  }
-  for (const b of spaceBundles) {
-    if ((counts.total.get(b.id) ?? 0) > 0) candidates.push({ id: b.id, label: b.label, flavor: 'matrix' });
-  }
-  const populated = candidates.slice(0, 5);
-  return (
-    <nav className="bottom-nav" aria-label="Inbox bundles">
-      {populated.map(({ id, label, flavor }) => {
-        const unread = counts.unread.get(id) ?? 0;
-        return (
-          <button
-            key={id}
-            className={`tab ${bundle === id ? 'active' : ''}`}
-            onClick={() => setBundle(id)}
-            aria-label={label}
-            aria-current={bundle === id ? 'page' : undefined}
-          >
-            <span className={`src ${flavor ?? ''}`} />
-            {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-            <span>{label}</span>
-          </button>
-        );
-      })}
-    </nav>
   );
 }
 
