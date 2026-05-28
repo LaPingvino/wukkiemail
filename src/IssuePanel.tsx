@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import type { MatrixSource, SchemaField } from './sources/matrix';
-import { renderInline, renderFormattedHtml } from './markdown';
+import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 
 export function IssuePanel({
   matrix,
@@ -29,7 +29,7 @@ export function IssuePanel({
     if (!body || posting) return;
     setPosting(true);
     try {
-      await matrix.commentOnIssue(roomId, issueId, body);
+      await matrix.commentOnIssue(roomId, issueId, body, markdownToHtml(body));
       setComment('');
     } catch (e) {
       console.warn('[wukkiemail] commentOnIssue failed', e);

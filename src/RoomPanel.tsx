@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
-import { renderInline, renderFormattedHtml } from './markdown';
+import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 import { CollapsibleBody } from './CollapsibleBody';
 
 export function RoomPanel({
@@ -78,7 +78,7 @@ export function RoomPanel({
     setSending(true);
     setSendError(null);
     try {
-      await matrix.sendMessage(roomId, body);
+      await matrix.sendMessage(roomId, body, markdownToHtml(body));
       setComposeText('');
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.

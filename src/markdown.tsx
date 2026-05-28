@@ -37,6 +37,48 @@ export function renderFormattedHtml(html: string): React.ReactNode {
 const URL_RE = /\b(https?:\/\/[^\s)]+[^\s.,;:!?)\]'"])/g;
 const INLINE_RE = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
 
+// Cheap markdown → HTML for outgoing messages. Matches the inline-only
+// subset we render on the way in (bold/italic/code/links); paragraphs
+// become <br/>-separated text. Returns null if nothing markdown-looking
+// is present, so callers can skip formatted_body when it'd be redundant.
+export function markdownToHtml(text: string): string | null {
+  const hasInline = /\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`/.test(text);
+  const hasUrl = URL_RE.test(text);
+  if (!hasInline && !hasUrl) return null;
+  URL_RE.lastIndex = 0; // matchAll resets but the test() above moved it
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  let out = '';
+  let lastUrlEnd = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    if (m.index === undefined) continue;
+    if (m.index > lastUrlEnd) out += inlineMarksToHtml(text.slice(lastUrlEnd, m.index), esc);
+    out += `<a href="${esc(m[1])}">${esc(m[1])}</a>`;
+    lastUrlEnd = m.index + m[0].length;
+  }
+  if (lastUrlEnd < text.length) out += inlineMarksToHtml(text.slice(lastUrlEnd), esc);
+  return out.replace(/\n/g, '<br/>');
+}
+
+function inlineMarksToHtml(text: string, esc: (s: string) => string): string {
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(INLINE_RE)) {
+    if (m.index === undefined) continue;
+    if (m.index > last) out += esc(text.slice(last, m.index));
+    const tok = m[1];
+    if (tok.startsWith('**')) out += `<strong>${esc(tok.slice(2, -2))}</strong>`;
+    else if (tok.startsWith('*')) out += `<em>${esc(tok.slice(1, -1))}</em>`;
+    else out += `<code>${esc(tok.slice(1, -1))}</code>`;
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out += esc(text.slice(last));
+  return out;
+}
+
 export function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let key = 0;
