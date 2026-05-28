@@ -69,7 +69,7 @@ export class MatrixSource implements Source {
           elapsedMs: Math.round(performance.now() - startedAt),
         });
         reject(new Error(`Matrix sync timeout (state: ${state}) — check browser console for SDK errors.`));
-      }, 45_000);
+      }, 120_000);
       const handler = (state: string, prev: string | null, data: unknown) => {
         // eslint-disable-next-line no-console
         console.info('[wukkiemail] sync ->', state, { prev, data });
@@ -90,7 +90,13 @@ export class MatrixSource implements Source {
     });
 
     try {
-      await this.client.startClient({ initialSyncLimit: 1 });
+      // lazyLoadMembers cuts initial /sync payload dramatically on heavy
+      // accounts — members for a room only arrive when we touch the room.
+      // initialSyncLimit: 1 keeps the timeline portion tiny too.
+      await this.client.startClient({
+        initialSyncLimit: 1,
+        lazyLoadMembers: true,
+      });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[wukkiemail] startClient threw', e);
