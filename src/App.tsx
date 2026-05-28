@@ -159,77 +159,70 @@ function ConnectScreen({
       </p>
 
       {/* Matrix block */}
-      <fieldset style={fieldsetStyle}>
-        <legend style={legendStyle}>Matrix</legend>
+      <section style={sectionStyle}>
+        <div style={sectionHead}>Matrix</div>
         {matrix.kind === 'none' || matrix.kind === 'error' ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (mxid && pw) void onMatrixLogin(mxid, pw);
             }}
-            style={{ display: 'grid', gap: 8 }}
+            style={{ display: 'grid', gap: 12 }}
           >
-            <input
-              type="text"
+            <md-outlined-text-field
+              label="Matrix ID"
               placeholder="@you:matrix.org"
               value={mxid}
-              onChange={(e) => setMxid(e.target.value)}
-              autoComplete="username"
-              style={inputStyle}
+              autocomplete="username"
+              ref={fieldRef((v) => setMxid(v))}
             />
-            <input
+            <md-outlined-text-field
+              label="Password"
               type="password"
-              placeholder="Password"
               value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoComplete="current-password"
-              style={inputStyle}
+              autocomplete="current-password"
+              ref={fieldRef((v) => setPw(v))}
             />
-            <button type="submit">Connect Matrix</button>
-            {matrix.kind === 'error' && (
-              <p style={errStyle}>{matrix.error}</p>
-            )}
+            <md-filled-button type="submit">Connect Matrix</md-filled-button>
+            {matrix.kind === 'error' && <p style={errStyle}>{matrix.error}</p>}
           </form>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
+            <md-circular-progress indeterminate aria-label="Signing in" />
             <p style={{ margin: 0, color: 'var(--muted)' }}>
               {matrix.kind === 'connecting' ? 'Signing in…' : 'Syncing rooms…'}
             </p>
-            <button className="secondary" onClick={onCancelMatrix}>Cancel</button>
+            <md-outlined-button onClick={onCancelMatrix}>Cancel</md-outlined-button>
           </div>
         )}
-      </fieldset>
+      </section>
 
       {/* Gmail block */}
-      <fieldset style={fieldsetStyle}>
-        <legend style={legendStyle}>Gmail</legend>
+      <section style={sectionStyle}>
+        <div style={sectionHead}>Gmail</div>
         {gmail.kind === 'none' || gmail.kind === 'error' ? (
           <div style={{ display: 'grid', gap: 8 }}>
-            <button className="secondary" onClick={onGmailLogin}>
+            <md-outlined-button onClick={onGmailLogin}>
               {gmailConfigured ? 'Connect Gmail' : 'Set up Gmail integration…'}
-            </button>
+            </md-outlined-button>
             {!gmailConfigured && (
               <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
                 This instance hasn't configured a Google OAuth client yet.{' '}
-                <button
-                  onClick={onShowSetup}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent)', padding: 0, cursor: 'pointer', font: 'inherit' }}
-                >
-                  Open setup guide
-                </button>.
+                <md-text-button onClick={onShowSetup}>Open setup guide</md-text-button>
               </p>
             )}
             {gmail.kind === 'error' && <p style={errStyle}>{gmail.error}</p>}
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
+            <md-circular-progress indeterminate aria-label="Connecting Gmail" />
             <p style={{ margin: 0, color: 'var(--muted)' }}>
               {gmail.kind === 'connecting' ? 'Redirecting…' : 'Loading threads…'}
             </p>
-            <button className="secondary" onClick={onCancelGmail}>Cancel</button>
+            <md-outlined-button onClick={onCancelGmail}>Cancel</md-outlined-button>
           </div>
         )}
-      </fieldset>
+      </section>
 
       <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
         Gmail uses the metadata scope only — clicking a thread opens it in mail.google.com for the body.
@@ -238,30 +231,35 @@ function ConnectScreen({
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  background: 'var(--bg)',
-  color: 'var(--fg)',
-  font: 'inherit',
-};
+// Wires a Material text field's input event to React state. Material Web
+// components emit native 'input' events but expose .value as a property,
+// so a ref-attached listener is the simplest bridge.
+function fieldRef(setter: (v: string) => void) {
+  return (el: HTMLElement | null) => {
+    if (!el) return;
+    const handler = (ev: Event) => {
+      setter((ev.target as HTMLInputElement & { value: string }).value);
+    };
+    el.addEventListener('input', handler);
+  };
+}
 
-const fieldsetStyle: React.CSSProperties = {
+const sectionStyle: React.CSSProperties = {
   border: '1px solid var(--border)',
-  borderRadius: 8,
-  padding: '12px 14px',
+  borderRadius: 16,
+  padding: '16px 20px',
   display: 'grid',
-  gap: 8,
+  gap: 12,
 };
 
-const legendStyle: React.CSSProperties = {
-  padding: '0 6px',
+const sectionHead: React.CSSProperties = {
   fontSize: 13,
+  textTransform: 'uppercase',
+  letterSpacing: 0.6,
   color: 'var(--muted)',
 };
 
-const errStyle: React.CSSProperties = { color: '#e57373', margin: 0, fontSize: 13 };
+const errStyle: React.CSSProperties = { color: 'var(--md-sys-color-error)', margin: 0, fontSize: 13 };
 
 type BundleKey = 'all' | ItemFlavor;
 

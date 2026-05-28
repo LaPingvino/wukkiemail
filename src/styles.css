@@ -1,73 +1,132 @@
+/* Material 3 light/dark surface tokens. Material Web reads these
+   --md-sys-color-* tokens directly. We pick a calm Inbox-ish blue. */
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  --accent: #1e88e5;
-  --bg: #fafafa;
-  --fg: #1a1a1a;
-  --muted: #6b7280;
-  --card: #ffffff;
-  --border: #e5e7eb;
+  font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif;
+  --md-sys-color-primary: #1a73e8;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d2e3fc;
+  --md-sys-color-on-primary-container: #041e49;
+  --md-sys-color-secondary: #5f6368;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-container: #f1f3f4;
+  --md-sys-color-surface-container-low: #f8f9fa;
+  --md-sys-color-on-surface: #1f1f1f;
+  --md-sys-color-on-surface-variant: #5f6368;
+  --md-sys-color-outline-variant: #dadce0;
+  --md-sys-color-error: #b3261e;
+  --bg: var(--md-sys-color-surface-container-low);
+  --fg: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --card: var(--md-sys-color-surface);
+  --border: var(--md-sys-color-outline-variant);
+  --accent: var(--md-sys-color-primary);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115;
-    --fg: #e5e7eb;
-    --muted: #9aa3b2;
-    --card: #181b22;
-    --border: #2a2f3a;
+    --md-sys-color-primary: #a8c7fa;
+    --md-sys-color-on-primary: #062e6f;
+    --md-sys-color-primary-container: #284579;
+    --md-sys-color-on-primary-container: #d2e3fc;
+    --md-sys-color-surface: #131314;
+    --md-sys-color-surface-container: #1f2024;
+    --md-sys-color-surface-container-low: #1a1a1c;
+    --md-sys-color-on-surface: #e3e3e3;
+    --md-sys-color-on-surface-variant: #c4c7c5;
+    --md-sys-color-outline-variant: #444746;
   }
 }
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--fg); }
-button { font: inherit; cursor: pointer; }
-.app {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  height: 100%;
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--md-sys-typescale-body-medium-font, inherit);
 }
+
+.app { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
+
 .sidebar {
   border-right: 1px solid var(--border);
-  padding: 16px;
+  padding: 16px 8px;
   background: var(--card);
+  overflow-y: auto;
 }
-.sidebar h1 { font-size: 18px; margin: 0 0 16px 0; }
-.sidebar .bundle {
-  display: flex; justify-content: space-between;
-  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+.sidebar h1 {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0 16px 16px;
+  color: var(--md-sys-color-on-surface);
+}
+
+/* Pill-shaped nav items in the Inbox tradition. */
+.bundle {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-radius: 999px; cursor: pointer;
   color: var(--fg);
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 2px 0;
+  transition: background 0.12s ease;
 }
-.sidebar .bundle:hover { background: rgba(127,127,127,0.08); }
-.sidebar .bundle.active { background: rgba(30,136,229,0.12); color: var(--accent); }
-.sidebar .bundle .count { color: var(--muted); font-size: 12px; }
+.bundle:hover { background: var(--md-sys-color-surface-container); }
+.bundle.active {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font-weight: 500;
+}
+.bundle .count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.bundle.active .count { color: var(--md-sys-color-on-primary-container); }
+
 .main { display: flex; flex-direction: column; min-width: 0; }
 .empty {
   display: grid; place-items: center; height: 100%;
   color: var(--muted); text-align: center; padding: 24px;
 }
+
 .connect {
-  display: grid; gap: 12px; max-width: 420px; margin: 64px auto; padding: 24px;
-  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  display: grid; gap: 16px;
+  max-width: 480px; margin: 64px auto; padding: 32px;
+  background: var(--card);
+  border-radius: 28px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06);
 }
-.connect h2 { margin: 0; }
-.connect button {
-  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--accent); color: white; border-color: transparent;
+.connect h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 400;
 }
-.connect button.secondary { background: transparent; color: var(--fg); }
-.item-list { overflow-y: auto; }
+
+.item-list { overflow-y: auto; padding: 8px 0; }
+
+/* List rows: hover lift like Inbox cards. */
 .item {
-  display: grid; grid-template-columns: 24px 200px 1fr auto;
-  gap: 12px; padding: 12px 16px; align-items: center;
+  display: grid; grid-template-columns: 12px 220px 1fr auto;
+  gap: 16px; padding: 14px 24px; align-items: center;
   border-bottom: 1px solid var(--border);
+  transition: background 0.1s ease;
 }
-.item .src { width: 20px; height: 20px; border-radius: 4px; background: var(--muted); }
+.item:hover { background: var(--md-sys-color-surface-container); }
+
+.item .src { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .item .src.gmail { background: #ea4335; }
 .item .src.matrix { background: #0dbd8b; }
 .item .src.whatsapp { background: #25d366; }
+.item .src.meta { background: #0866ff; }
 .item .src.irc { background: #6b7280; }
 .item .src.signal { background: #3a76f0; }
-.item .src.issue { background: #f59e0b; }
-.item .from { color: var(--fg); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item .subj { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item .ts { color: var(--muted); font-size: 12px; }
+.item .src.issue { background: #f9ab00; }
+
+.item .from { color: var(--fg); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.item .subj { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.item .subj strong { color: var(--fg); font-weight: 500; }
+.item .ts { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* Make Material Web buttons fit the layout */
+md-filled-button, md-outlined-button, md-text-button { width: 100%; }
+md-outlined-text-field { width: 100%; }

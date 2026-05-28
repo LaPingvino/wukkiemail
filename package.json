@@ -13,6 +13,8 @@
     "deploy": "wrangler pages deploy dist"
   },
   "dependencies": {
+    "@material/web": "^2.4.0",
+    "lit": "^3.2.0",
     "matrix-js-sdk": "github:LaPingvino/matrix-js-sdk#wally-dist",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
