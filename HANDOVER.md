@@ -35,9 +35,9 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - Per-event-type tuning: each room's latest event → `eventCategory` (message/image/membership/roomstate/call/sticker/…). Settings "By event type" section enumerates detected categories (counts) with a -5..+5 priority slider + Hide toggle each. Stored in synced weights `eventTypeAdjust`. Hiding is by latest event (room reappears when a real message lands); pinned rooms always stay. (`eventCategory`/`EVENT_CATEGORY_LABELS`/`getDetectedEventCategories` in matrix.ts)
 - Tri-state read filter on the Messages header: Unread / Read / All (was a boolean). Saved views carry `readFilter` (legacy `showRead` kept in sync).
 - SAS emoji verification (both directions): MatrixSource verification controller (`startSelfVerification`/`confirmVerification`/`cancelVerification`/`resetVerification`/`onVerification`), inbound caught via `CryptoEvent.VerificationRequestReceived`. `VerificationSheet` renders whenever a verification is in flight; EncryptionSetupSheet has a third "Verify with another device" mode. NB: verification enums/types imported from deep `matrix-js-sdk/lib/crypto-api/*` paths — NOT re-exported from the package root.
+- Per-room done-values editor: `DoneValuesSheet` (sidebar → "Task \"done\" statuses…") lists rooms with a kanban schema, toggles which status values count as done per room; empty = schema default (last value). `listIssueRoomsWithStatus` / `setDoneValuesForRoom` in matrix.ts, writes synced `triage.doneValuesByRoom`. Applies immediately, no Save.
 
 ## What's queued
-- **Per-room done-values editor**: small UI to override which kanban values count as done per room (data layer already there: `triage.doneValuesByRoom`)
 - **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
 - **Search secondary index**: full-text Web Worker + IndexedDB index for message bodies
 - **@-mention autocomplete**: dropdown in composer for room members
