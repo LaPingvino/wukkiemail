@@ -26,6 +26,7 @@ export interface InboxItem {
   ts: number;            // ms epoch of most recent activity
   unread: boolean;
   threadCount: number;
+  priority: number;      // higher = more important; sorted desc with ts as tie-break
   // route the UI uses to open the thing:
   openPath: string;      // e.g. /m/!roomid/$eventid or /g/<gmail-thread-id>
 }

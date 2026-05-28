@@ -351,6 +351,26 @@ function isSpace(room: Room): boolean {
   return type === 'm.space';
 }
 
+// Priority scoring. Bigger = higher in the inbox stream.
+//   +5  unread highlight (mention/own keyword)
+//   +3  any unread
+//   +2  DM with a human
+//   +1  recent (<24h) activity
+//   -2  bridged group chat (notification spam-prone)
+//   -1  bot-y sender (mxid contains 'bot')
+function computePriority(room: Room, flavor: string, isDm: boolean, isUnread: boolean, highlight: boolean, lastTs: number, lastSenderId: string): number {
+  let p = 0;
+  if (highlight) p += 5;
+  else if (isUnread) p += 3;
+  if (isDm) p += 2;
+  if (Date.now() - lastTs < 24 * 3600 * 1000) p += 1;
+  const memberCount = room.getJoinedMemberCount();
+  const isBridge = flavor !== 'matrix' && flavor !== 'issue';
+  if (isBridge && memberCount > 2) p -= 2;
+  if (lastSenderId.toLowerCase().includes('bot')) p -= 1;
+  return p;
+}
+
 function roomToItem(room: Room, selfId: string, extraBundles: string[] = []): InboxItem | null {
   const memberIds = room.getJoinedMembers().map((m) => m.userId);
   const flavor = flavorForRoomMembers(memberIds.filter((id) => id !== selfId));
@@ -366,6 +386,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = []): In
   const content = last.getContent() as { body?: string; msgtype?: string };
   const snippet = content.body ?? `[${last.getType()}]`;
 
+  const isDm = extraBundles.includes('dm');
+  const notifs = room.getUnreadNotificationCount?.() ?? 0;
+  const highlights = room.getUnreadNotificationCount?.('highlight' as never) ?? 0;
   return {
     id: `matrix:${room.roomId}`,
     flavor,
@@ -375,8 +398,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = []): In
     subject: room.name || room.roomId,
     snippet,
     ts: last.getTs(),
-    unread: (room.getUnreadNotificationCount?.() ?? 0) > 0,
+    unread: notifs > 0,
     threadCount: live.length,
+    priority: computePriority(room, flavor, isDm, notifs > 0, highlights > 0, last.getTs(), senderId),
     openPath: `/m/${encodeURIComponent(room.roomId)}`,
   };
 }
@@ -410,10 +434,13 @@ function issueItemsForRoom(room: Room, extraBundles: string[] = []): InboxItem[]
     const senderMember = room.getMember(senderId);
     const fromName = senderMember?.name ?? senderId;
     const snippetParts = [status, priority, assignee && `→ ${assignee}`].filter(Boolean);
+    // Issues default to medium priority; status==Done sinks them.
+    const isDone = /done|closed|resolved/i.test(status);
     items.push({
       id: `matrix:${room.roomId}:issue:${issueId}`,
       flavor: 'issue',
       bundles: ['flavor:issue', ...extraBundles],
+      priority: isDone ? -3 : 2,
       from: fromName,
       fromAddress: senderId,
       subject: `${room.name || room.roomId} · ${title}`,

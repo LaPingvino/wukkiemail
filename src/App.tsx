@@ -206,6 +206,7 @@ function Inbox({
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showRead, setShowRead] = useState(false);
 
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
 
@@ -219,7 +220,10 @@ function Inbox({
       matrixSrc.listItems(null).then(
         (batch) => {
           if (cancelled) return;
-          setItems(batch.slice().sort((a, b) => b.ts - a.ts));
+          // Sort by priority desc, then ts desc — important first, ties
+          // broken by recency. Read items still appear in their natural
+          // position; the showRead filter below hides them by default.
+          setItems(batch.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)));
           setLoading(false);
         },
         (e) => {
@@ -272,6 +276,7 @@ function Inbox({
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
       if (bundle !== 'all' && !it.bundles.includes(bundle)) return false;
+      if (!showRead && !it.unread && !q) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -280,7 +285,12 @@ function Inbox({
         (it.fromAddress?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [items, bundle, query]);
+  }, [items, bundle, query, showRead]);
+
+  const hiddenReadCount = useMemo(() => {
+    if (showRead || query) return 0;
+    return items.filter((it) => !it.unread && (bundle === 'all' || it.bundles.includes(bundle))).length;
+  }, [items, bundle, query, showRead]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -417,11 +427,13 @@ function Inbox({
           </div>
         ) : (
           <div className="item-list">
-            {visible.slice(0, 200).map((it, i) => (
+            {visible.slice(0, 200).map((it, i) => {
+              const dim = it.priority <= -1;
+              return (
               <a
                 key={it.id}
                 data-idx={i}
-                className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''}`}
+                className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${dim ? 'dim' : ''}`}
                 href={it.openPath}
                 onClick={(e) => {
                   e.preventDefault();
@@ -443,7 +455,25 @@ function Inbox({
                 </div>
                 <div className="ts">{formatTs(it.ts)}</div>
               </a>
-            ))}
+            ); })}
+            {hiddenReadCount > 0 && (
+              <button
+                type="button"
+                className="show-read"
+                onClick={() => setShowRead(true)}
+              >
+                Show {hiddenReadCount} read item{hiddenReadCount === 1 ? '' : 's'}
+              </button>
+            )}
+            {showRead && !query && (
+              <button
+                type="button"
+                className="show-read"
+                onClick={() => setShowRead(false)}
+              >
+                Hide read items
+              </button>
+            )}
           </div>
         )}
       </main>
