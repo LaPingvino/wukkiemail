@@ -431,7 +431,10 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom || !!selectedEmail || composeOpen;
+  // Note: the room/issue/email content panels are NOT in this cascade — they
+  // live in the URL hash (see hash routing below) so a refresh restores them
+  // and browser back/forward navigate them. This cascade is for sheets only.
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || composeOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -448,9 +451,6 @@ function Inbox({
         else if (jmapLoginOpen) setJmapLoginOpen(false);
         else if (bundleSheet) setBundleSheet(null);
         else if (composeOpen) setComposeOpen(false);
-        else if (selectedEmail) setSelectedEmail(null);
-        else if (selectedIssue) setSelectedIssue(null);
-        else if (selectedRoom) setSelectedRoom(null);
       };
       window.addEventListener('popstate', onPop);
       return () => {
@@ -465,6 +465,43 @@ function Inbox({
     // state change of the individual modals would push extra entries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyModalOpen]);
+
+  // Hash routing for the content panels (chat / task / mail). Opening one
+  // writes the URL hash; a refresh restores it (RoomPanel/EmailView read from
+  // the local IndexedDB cache, so it comes back instantly), and browser
+  // back/forward navigate between inbox and an open panel.
+  const applyHash = useCallback(() => {
+    const h = window.location.hash.replace(/^#/, '');
+    let m: RegExpMatchArray | null;
+    if ((m = h.match(/^\/m\/([^/]+)\/issue\/(.+)$/))) {
+      setSelectedIssue({ roomId: decodeURIComponent(m[1]), issueId: decodeURIComponent(m[2]) });
+      setSelectedRoom(null); setSelectedEmail(null);
+    } else if ((m = h.match(/^\/m\/([^/]+)$/))) {
+      setSelectedRoom(decodeURIComponent(m[1])); setSelectedIssue(null); setSelectedEmail(null);
+    } else if ((m = h.match(/^\/mail\/(.+)$/))) {
+      setSelectedEmail(decodeURIComponent(m[1])); setSelectedRoom(null); setSelectedIssue(null);
+    } else {
+      setSelectedRoom(null); setSelectedIssue(null); setSelectedEmail(null);
+    }
+  }, []);
+  useEffect(() => {
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, [applyHash]);
+  // Reflect panel state into the hash (without piling history entries when it
+  // already matches; clearing uses replaceState so closing doesn't add one).
+  useEffect(() => {
+    const desired = selectedIssue
+      ? `#/m/${encodeURIComponent(selectedIssue.roomId)}/issue/${encodeURIComponent(selectedIssue.issueId)}`
+      : selectedRoom ? `#/m/${encodeURIComponent(selectedRoom)}`
+      : selectedEmail ? `#/mail/${encodeURIComponent(selectedEmail)}`
+      : '';
+    const current = window.location.hash;
+    if (desired === current) return;
+    if (desired) window.location.hash = desired;
+    else if (current && current !== '#') history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, [selectedRoom, selectedIssue, selectedEmail]);
 
   // Tab title gets a (N) prefix when there are unread items, so the
   // user can see backlog from another tab without switching. Restore
