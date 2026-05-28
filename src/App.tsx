@@ -212,7 +212,8 @@ function Inbox({
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showRead, setShowRead] = useState(false);
+  // Read-state filter for messages: unread-only (default), read-only, or all.
+  const [readFilter, setReadFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
@@ -386,7 +387,11 @@ function Inbox({
       //   - the item is an issue and we're in the All view (would otherwise hide
       //     all your tasks because Matrix has no read receipt for state events)
       const skipReadFilter = bundle === 'snoozed' || bundle === 'flavor:issue' || it.flavor === 'issue';
-      if (!showRead && !it.unread && !q && !skipReadFilter) return false;
+      if (!skipReadFilter && !q) {
+        if (readFilter === 'unread' && !it.unread) return false;
+        if (readFilter === 'read' && it.unread) return false;
+        // 'all' applies no read-state filter
+      }
       // Status sub-filter only applies when viewing the Issues bundle.
       // Multi-select task-status filter: only applies to issue items.
       if (it.flavor === 'issue' && issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
@@ -398,7 +403,7 @@ function Inbox({
         (it.fromAddress?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [items, bundle, query, showRead, issueStatusFilter]);
+  }, [items, bundle, query, readFilter, issueStatusFilter]);
 
   // Status counts for the Tasks-header status chips. Computed across every
   // task visible in the current bundle (not just the Issues bundle) so the
@@ -423,9 +428,9 @@ function Inbox({
   // explicitly deselects all chips.
 
   const hiddenReadCount = useMemo(() => {
-    if (showRead || query) return 0;
+    if (readFilter !== 'unread' || query) return 0;
     return items.filter((it) => !it.unread && (bundle === 'all' || it.bundles.includes(bundle))).length;
-  }, [items, bundle, query, showRead]);
+  }, [items, bundle, query, readFilter]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -648,7 +653,7 @@ function Inbox({
             setBundle(v.bundle);
             setQuery(v.query ?? '');
             setIssueStatusFilter(v.issueStatus ? new Set(v.issueStatus.split(',')) : new Set());
-            setShowRead(!!v.showRead);
+            setReadFilter(v.readFilter ?? (v.showRead ? 'all' : 'unread'));
           }}
           saveCurrentView={async () => {
             if (!matrixSrc) return;
@@ -660,7 +665,8 @@ function Inbox({
               bundle,
               query: query || undefined,
               issueStatus: issueStatusFilter.size > 0 ? [...issueStatusFilter].join(',') : undefined,
-              showRead: showRead || undefined,
+              readFilter: readFilter !== 'unread' ? readFilter : undefined,
+              showRead: readFilter === 'all' || undefined, // keep legacy field in sync for old clients
             };
             const next = [...savedViews, view];
             setSavedViews(next);
@@ -764,20 +770,16 @@ function Inbox({
                           </>
                         ) : (
                           <>
-                            <button
-                              type="button"
-                              className={`mini-chip ${!showRead ? 'active' : ''}`}
-                              onClick={() => setShowRead(false)}
-                            >
-                              Unread
-                            </button>
-                            <button
-                              type="button"
-                              className={`mini-chip ${showRead ? 'active' : ''}`}
-                              onClick={() => setShowRead(true)}
-                            >
-                              All
-                            </button>
+                            {(['unread', 'read', 'all'] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                className={`mini-chip ${readFilter === mode ? 'active' : ''}`}
+                                onClick={() => setReadFilter(mode)}
+                              >
+                                {mode === 'unread' ? 'Unread' : mode === 'read' ? 'Read' : 'All'}
+                              </button>
+                            ))}
                           </>
                         )}
                       </div>
@@ -861,18 +863,18 @@ function Inbox({
               <button
                 type="button"
                 className="show-read"
-                onClick={() => setShowRead(true)}
+                onClick={() => setReadFilter('all')}
               >
                 Show {hiddenReadCount} read item{hiddenReadCount === 1 ? '' : 's'}
               </button>
             )}
-            {showRead && !query && (
+            {readFilter !== 'unread' && !query && (
               <button
                 type="button"
                 className="show-read"
-                onClick={() => setShowRead(false)}
+                onClick={() => setReadFilter('unread')}
               >
-                Hide read items
+                Show unread only
               </button>
             )}
           </div>
