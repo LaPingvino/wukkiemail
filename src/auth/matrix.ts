@@ -83,38 +83,36 @@ export async function loginWithPassword(
 }
 
 // Build a client backed by IndexedDB so the next page load is fast.
+// Order is load-bearing: IndexedDBStore.startup() MUST be called AFTER
+// the store is assigned to a client (createClient does that), otherwise
+// the SDK throws "must be called after assigning it to the client".
+//
 // URL flags for debugging:
-//   ?nostore — skip IndexedDB, use MemoryStore (rules out store corruption)
-//   ?reset   — delete the IndexedDB before building, fresh start
+//   ?nostore — skip IndexedDB, use MemoryStore
+//   ?reset   — delete the IndexedDB before building
 export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
   const params = new URLSearchParams(window.location.search);
   const dbName = `wukkiemail:matrix:${creds.userId}`;
-  let store: IndexedDBStore | MemoryStore;
   if (params.has('reset')) {
     // eslint-disable-next-line no-console
     console.warn('[wukkiemail] ?reset — deleting IndexedDB', dbName);
     try { window.indexedDB.deleteDatabase(dbName); } catch (e) { console.warn(e); }
   }
+
+  let store: IndexedDBStore | MemoryStore;
   if (params.has('nostore')) {
     // eslint-disable-next-line no-console
     console.warn('[wukkiemail] ?nostore — using MemoryStore');
     store = new MemoryStore({ localStorage: window.localStorage });
   } else {
-    try {
-      const idb = new IndexedDBStore({
-        indexedDB: window.indexedDB,
-        localStorage: window.localStorage,
-        dbName,
-      });
-      await idb.startup();
-      store = idb;
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[wukkiemail] IndexedDB store unavailable, falling back to MemoryStore', e);
-      store = new MemoryStore({ localStorage: window.localStorage });
-    }
+    store = new IndexedDBStore({
+      indexedDB: window.indexedDB,
+      localStorage: window.localStorage,
+      dbName,
+    });
   }
-  return createClient({
+
+  const client = createClient({
     baseUrl: creds.homeserverUrl,
     accessToken: creds.accessToken,
     userId: creds.userId,
@@ -123,4 +121,19 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     // We don't enable crypto in v0 — read-only triage of plaintext rooms first.
     // Encrypted rooms will show "(encrypted)" placeholders until crypto lands.
   });
+
+  // Now that the store has been linked to a client, hydrate it.
+  // If IndexedDB is unavailable, swap to MemoryStore transparently.
+  if (store instanceof IndexedDBStore) {
+    try {
+      await store.startup();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] IndexedDB startup failed, swapping to MemoryStore', e);
+      const mem = new MemoryStore({ localStorage: window.localStorage });
+      (client as unknown as { store: MemoryStore }).store = mem;
+    }
+  }
+
+  return client;
 }

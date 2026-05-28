@@ -1,53 +1,31 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ItemFlavor } from './sources/types';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
-import {
-  beginLogin as beginGmailLogin,
-  consumeReturnFragment as consumeGmailReturn,
-  clearCreds as clearGmailCreds,
-} from './auth/gmail';
 import { MatrixSource } from './sources/matrix';
-import { GmailSource } from './sources/gmail';
-import { SetupScreen, gmailIsConfigured } from './Setup';
 import { IssuePanel } from './IssuePanel';
 import type { InboxItem } from './sources/types';
 
-// Per-source state. Both progress independently so the user can add
-// the other side mid-flight, cancel one without affecting the other,
-// and triage what's loaded so far.
-type SourceState<S> =
+// Per-source state. Matrix-only for now; the multi-source design stays
+// so an adapter for JMAP (or a mautrix-imap-style email bridge) can
+// drop in later.
+type SourceState =
   | { kind: 'none' }
   | { kind: 'connecting' }
-  | { kind: 'syncing'; source: S }
-  | { kind: 'ready'; source: S }
+  | { kind: 'syncing'; source: MatrixSource }
+  | { kind: 'ready'; source: MatrixSource }
   | { kind: 'error'; error: string };
 
 export function App() {
-  const [matrix, setMatrix] = useState<SourceState<MatrixSource>>({ kind: 'none' });
-  const [gmail, setGmail] = useState<SourceState<GmailSource>>({ kind: 'none' });
-  const [showSetup, setShowSetup] = useState(
-    typeof window !== 'undefined' && window.location.pathname === '/setup',
-  );
-  const gmailConfigured = gmailIsConfigured();
+  const [matrix, setMatrix] = useState<SourceState>({ kind: 'none' });
 
   // Restore on boot.
   useEffect(() => {
-    if (consumeGmailReturn()) window.history.replaceState({}, '', '/');
-
     const m = MatrixSource.tryRestore();
     if (m) {
       setMatrix({ kind: 'syncing', source: m });
       m.start().then(
         () => setMatrix({ kind: 'ready', source: m }),
         (e: Error) => setMatrix({ kind: 'error', error: e.message }),
-      );
-    }
-    const g = GmailSource.tryRestore();
-    if (g) {
-      setGmail({ kind: 'syncing', source: g });
-      g.start().then(
-        () => setGmail({ kind: 'ready', source: g }),
-        (e: Error) => setGmail({ kind: 'error', error: e.message }),
       );
     }
   }, []);
@@ -66,7 +44,7 @@ export function App() {
     }
   }, []);
 
-  const onCancelMatrix = useCallback(() => {
+  const onSignOut = useCallback(() => {
     if (matrix.kind === 'syncing' || matrix.kind === 'ready') {
       void matrix.source.stop();
     }
@@ -74,80 +52,22 @@ export function App() {
     setMatrix({ kind: 'none' });
   }, [matrix]);
 
-  const onCancelGmail = useCallback(() => {
-    clearGmailCreds();
-    setGmail({ kind: 'none' });
-  }, []);
-
-  // The inbox shows as soon as at least one source has data (or is past
-  // its initial sync). Before that we show the connect screen, which is
-  // always interactive — both buttons available regardless of the other
-  // side's state.
-  const anyReady = matrix.kind === 'ready' || gmail.kind === 'ready';
-
-  if (showSetup) {
-    return <SetupScreen onBack={() => {
-      window.history.replaceState({}, '', '/');
-      setShowSetup(false);
-    }} />;
+  // Show the inbox shell as soon as the source is created, so the user
+  // sees progress even mid-sync.
+  if (matrix.kind === 'ready' || matrix.kind === 'syncing') {
+    return <Inbox matrix={matrix} onSignOut={onSignOut} />;
   }
-
-  if (!anyReady) {
-    return (
-      <ConnectScreen
-        matrix={matrix}
-        gmail={gmail}
-        gmailConfigured={gmailConfigured}
-        onShowSetup={() => setShowSetup(true)}
-        onMatrixLogin={onMatrixLogin}
-        onGmailLogin={() => {
-          if (!gmailConfigured) {
-            setShowSetup(true);
-            return;
-          }
-          try { beginGmailLogin(); }
-          catch (e) { setGmail({ kind: 'error', error: e instanceof Error ? e.message : String(e) }); }
-        }}
-        onCancelMatrix={onCancelMatrix}
-        onCancelGmail={onCancelGmail}
-      />
-    );
-  }
-
-  return (
-    <Inbox
-      matrix={matrix}
-      gmail={gmail}
-      onGmailLogin={() => {
-        try { beginGmailLogin(); }
-        catch (e) { setGmail({ kind: 'error', error: e instanceof Error ? e.message : String(e) }); }
-      }}
-      onSignOutAll={() => {
-        onCancelMatrix();
-        onCancelGmail();
-      }}
-    />
-  );
+  return <ConnectScreen matrix={matrix} onMatrixLogin={onMatrixLogin} onCancel={onSignOut} />;
 }
 
 function ConnectScreen({
   matrix,
-  gmail,
-  gmailConfigured,
-  onShowSetup,
   onMatrixLogin,
-  onGmailLogin,
-  onCancelMatrix,
-  onCancelGmail,
+  onCancel,
 }: {
-  matrix: SourceState<MatrixSource>;
-  gmail: SourceState<GmailSource>;
-  gmailConfigured: boolean;
-  onShowSetup: () => void;
+  matrix: SourceState;
   onMatrixLogin: (mxid: string, password: string) => Promise<void>;
-  onGmailLogin: () => void;
-  onCancelMatrix: () => void;
-  onCancelGmail: () => void;
+  onCancel: () => void;
 }) {
   const [mxid, setMxid] = useState('');
   const [pw, setPw] = useState('');
@@ -156,10 +76,11 @@ function ConnectScreen({
     <div className="connect">
       <h2>WukkieMail</h2>
       <p style={{ color: 'var(--muted)', margin: 0 }}>
-        Connect Gmail, Matrix, or both — features adapt to what you add.
+        A Matrix-first triage inbox. Bridge networks (WhatsApp, Signal, IRC,
+        Messenger) appear as their own bundles. Issues from rooms with an
+        eu.kiefte.issues schema get a side panel.
       </p>
 
-      {/* Matrix block */}
       <section style={sectionStyle}>
         <div style={sectionHead}>Matrix</div>
         {matrix.kind === 'none' || matrix.kind === 'error' ? (
@@ -191,42 +112,15 @@ function ConnectScreen({
           <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
             <md-circular-progress indeterminate aria-label="Signing in" />
             <p style={{ margin: 0, color: 'var(--muted)' }}>
-              {matrix.kind === 'connecting' ? 'Signing in…' : 'Syncing rooms…'}
+              {matrix.kind === 'connecting' ? 'Signing in…' : 'Starting sync…'}
             </p>
-            <md-outlined-button onClick={onCancelMatrix}>Cancel</md-outlined-button>
-          </div>
-        )}
-      </section>
-
-      {/* Gmail block */}
-      <section style={sectionStyle}>
-        <div style={sectionHead}>Gmail</div>
-        {gmail.kind === 'none' || gmail.kind === 'error' ? (
-          <div style={{ display: 'grid', gap: 8 }}>
-            <md-outlined-button onClick={onGmailLogin}>
-              {gmailConfigured ? 'Connect Gmail' : 'Set up Gmail integration…'}
-            </md-outlined-button>
-            {!gmailConfigured && (
-              <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
-                This instance hasn't configured a Google OAuth client yet.{' '}
-                <md-text-button onClick={onShowSetup}>Open setup guide</md-text-button>
-              </p>
-            )}
-            {gmail.kind === 'error' && <p style={errStyle}>{gmail.error}</p>}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
-            <md-circular-progress indeterminate aria-label="Connecting Gmail" />
-            <p style={{ margin: 0, color: 'var(--muted)' }}>
-              {gmail.kind === 'connecting' ? 'Redirecting…' : 'Loading threads…'}
-            </p>
-            <md-outlined-button onClick={onCancelGmail}>Cancel</md-outlined-button>
+            <md-outlined-button onClick={onCancel}>Cancel</md-outlined-button>
           </div>
         )}
       </section>
 
       <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
-        Gmail uses the metadata scope only — clicking a thread opens it in mail.google.com for the body.
+        Mail support (JMAP and/or a Matrix email bridge) is on the roadmap.
       </p>
     </div>
   );
@@ -266,7 +160,7 @@ type BundleKey = 'all' | ItemFlavor;
 
 const BUNDLE_LABELS: Record<BundleKey, string> = {
   all: 'Inbox',
-  gmail: 'Gmail',
+  gmail: 'Mail',
   matrix: 'Matrix',
   whatsapp: 'WhatsApp',
   meta: 'Messenger',
@@ -276,19 +170,15 @@ const BUNDLE_LABELS: Record<BundleKey, string> = {
 };
 
 const BUNDLE_ORDER: BundleKey[] = [
-  'all', 'gmail', 'matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue',
+  'all', 'matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue', 'gmail',
 ];
 
 function Inbox({
   matrix,
-  gmail,
-  onGmailLogin,
-  onSignOutAll,
+  onSignOut,
 }: {
-  matrix: SourceState<MatrixSource>;
-  gmail: SourceState<GmailSource>;
-  onGmailLogin: () => void;
-  onSignOutAll: () => void;
+  matrix: SourceState;
+  onSignOut: () => void;
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -298,45 +188,38 @@ function Inbox({
   const [cursor, setCursor] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
-  const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
+  const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
 
   useEffect(() => {
     let cancelled = false;
-    const sources = [matrixSrc, gmailSrc].filter((s): s is NonNullable<typeof s> => s !== null);
-    if (sources.length === 0) {
+    if (!matrixSrc) {
       setItems([]); setLoading(false);
       return;
     }
     const refresh = () => {
-      Promise.all(sources.map((s) =>
-        s.listItems(null).catch((e) => {
+      matrixSrc.listItems(null).then(
+        (batch) => {
+          if (cancelled) return;
+          setItems(batch.slice().sort((a, b) => b.ts - a.ts));
+          setLoading(false);
+        },
+        (e) => {
           // eslint-disable-next-line no-console
-          console.warn('[wukkiemail] listItems failed for', s.kind, e);
-          return [] as InboxItem[];
-        }),
-      )).then((batches) => {
-        if (cancelled) return;
-        const merged = batches.flat().sort((a, b) => b.ts - a.ts);
-        setItems(merged);
-        setLoading(false);
-      });
+          console.warn('[wukkiemail] matrix listItems failed', e);
+          if (!cancelled) setLoading(false);
+        },
+      );
     };
     refresh();
-    // Subscribers re-poll on any source change. rAF-debounce so a burst
-    // of sync events doesn't thrash render.
     let pending = false;
     const onChange = () => {
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => { pending = false; refresh(); });
     };
-    const unsubMatrix = matrixSrc?.subscribe(onChange);
-    const unsubGmail = gmailSrc?.subscribe(onChange);
-    // Belt-and-suspenders: tick a 5s poll for the first 60s after mount,
-    // so a missed subscribe event (e.g. PREPARED firing before subscribe
-    // attaches) still gets surfaced. Stops once 60s have passed —
-    // by then the subscribe path should be the source of truth.
+    const unsub = matrixSrc.subscribe(onChange);
+    // Belt-and-suspenders: poll every 3s for 60s so any missed event still
+    // pulls in items.
     const startedAt = Date.now();
     const poller = setInterval(() => {
       if (cancelled || Date.now() - startedAt > 60_000) {
@@ -344,13 +227,10 @@ function Inbox({
         return;
       }
       refresh();
-    }, 5_000);
-    return () => { cancelled = true; unsubMatrix?.(); unsubGmail?.(); clearInterval(poller); };
-  }, [matrixSrc, gmailSrc]);
+    }, 3_000);
+    return () => { cancelled = true; unsub(); clearInterval(poller); };
+  }, [matrixSrc]);
 
-  // Bundles derive from items — only bundles that have at least one item show up.
-  // Track total + unread separately so the bundle pill can show a bold
-  // unread count when there's any, and a quieter total alongside.
   const counts = useMemo(() => {
     const total = new Map<BundleKey, number>();
     const unread = new Map<BundleKey, number>();
@@ -366,7 +246,6 @@ function Inbox({
     return { total, unread };
   }, [items]);
 
-  // Reset cursor when the filter changes so we don't point past the end.
   useEffect(() => { setCursor(0); }, [bundle, query]);
 
   const visible = useMemo(() => {
@@ -383,7 +262,6 @@ function Inbox({
     });
   }, [items, bundle, query]);
 
-  // Keyboard navigation, Inbox-style.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -420,8 +298,6 @@ function Inbox({
         if (it.flavor === 'issue') {
           const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
           if (m) { setSelectedIssue({ roomId: m[1], issueId: m[2] }); e.preventDefault(); }
-        } else if (it.flavor === 'gmail') {
-          window.open(it.openPath, '_blank', 'noopener,noreferrer');
         }
       }
     };
@@ -440,7 +316,6 @@ function Inbox({
         <h1>WukkieMail</h1>
         <div className="accounts">
           {matrixSrc && <AccountChip flavor="matrix" label={matrixSrc.id} />}
-          {gmailSrc && <AccountChip flavor="gmail" label={gmailSrc.id.replace(/^gmail:/, '')} />}
         </div>
         {BUNDLE_ORDER.map((key) => {
           const total = counts.total.get(key) ?? 0;
@@ -467,26 +342,13 @@ function Inbox({
             </div>
           );
         })}
-        {gmail.kind === 'none' && (
-          <md-outlined-button
-            onClick={onGmailLogin}
-            style={{ marginTop: 16, width: '100%' }}
-          >
-            + Connect Gmail
-          </md-outlined-button>
-        )}
         <SourceStatus
           label="Matrix"
           loading={matrix.kind === 'connecting' || matrix.kind === 'syncing'}
           error={matrix.kind === 'error' ? matrix.error : null}
         />
-        <SourceStatus
-          label="Gmail"
-          loading={gmail.kind === 'syncing' || (gmailSrc?.getStatus() === 'syncing')}
-          error={gmail.kind === 'error' ? gmail.error : null}
-        />
         <button
-          onClick={onSignOutAll}
+          onClick={onSignOut}
           style={{
             marginTop: 24, width: '100%', padding: '8px',
             background: 'transparent', border: '1px solid var(--border)',
@@ -521,7 +383,7 @@ function Inbox({
           <div className="empty">Loading…</div>
         ) : visible.length === 0 ? (
           <div className="empty">
-            <p>{bundle === 'all' ? 'No items.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</p>
+            <p>{bundle === 'all' ? 'No items yet.' : `No items in ${BUNDLE_LABELS[bundle]}.`}</p>
             {matrixSrc && (
               <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
                 Matrix: sync={String(matrixSrc.describe().state)},
@@ -538,15 +400,15 @@ function Inbox({
                 data-idx={i}
                 className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''}`}
                 href={it.openPath}
-                target={it.flavor === 'gmail' ? '_blank' : '_self'}
-                rel={it.flavor === 'gmail' ? 'noopener noreferrer' : undefined}
                 onClick={(e) => {
-                  // Issue items: intercept and open the inline panel
-                  // instead of letting the link navigate into the SPA.
                   if (it.flavor === 'issue') {
                     e.preventDefault();
                     const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
                     if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+                  } else {
+                    // Matrix items: prevent navigation until we have a real
+                    // detail view. For now, no-op.
+                    e.preventDefault();
                   }
                 }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
@@ -584,7 +446,6 @@ function BottomNav({
   setBundle: (k: BundleKey) => void;
   counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
 }) {
-  // Pick the 5 most-populated bundles (always include 'all') for the bottom bar.
   const populated = BUNDLE_ORDER
     .filter((k) => k === 'all' || (counts.total.get(k) ?? 0) > 0)
     .slice(0, 5);
@@ -610,7 +471,6 @@ function BottomNav({
   );
 }
 
-// Deterministic per-name HSL: same sender gets the same color across reloads.
 function hashHue(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -618,7 +478,6 @@ function hashHue(s: string): number {
 }
 
 function initials(name: string): string {
-  // Strip "@..." mxids down to the localpart; strip <email> wrappers.
   const cleaned = name.replace(/^@/, '').replace(/<[^>]+>/g, '').trim();
   const parts = cleaned.split(/[\s_:.-]+/).filter(Boolean);
   if (parts.length === 0) return '?';
@@ -636,7 +495,7 @@ function Avatar({ name, flavor }: { name: string; flavor: string }) {
   );
 }
 
-function AccountChip({ flavor, label }: { flavor: 'matrix' | 'gmail'; label: string }) {
+function AccountChip({ flavor, label }: { flavor: 'matrix'; label: string }) {
   return (
     <div className="account-chip" title={label}>
       <span className={`src ${flavor}`} style={{ width: 8, height: 8, borderRadius: 50 }} />

@@ -1,14 +1,12 @@
 {
-  // Unified Workers + assets. /api/* paths run the Worker first (OAuth
-  // swap, refresh); the SPA-fallback assets handler eats everything
-  // else, so we have to opt API routes OUT of the assets-first default.
+  // Static SPA deployment — no server-side code now that the Gmail
+  // OAuth Worker is gone. CF still runs `npx wrangler deploy` so we
+  // keep this config minimal; if Pages dashboard offered a blank
+  // deploy command this whole file could go.
   "name": "wukkiemail",
   "compatibility_date": "2026-05-01",
-  "main": "src/worker.ts",
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": true
+    "not_found_handling": "single-page-application"
   }
 }

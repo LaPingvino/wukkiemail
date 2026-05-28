@@ -11,6 +11,7 @@
 // to be observable end-to-end before we add caching layers.
 
 import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import { ClientEvent } from 'matrix-js-sdk';
 import { buildClient, loadCreds, type MatrixCreds } from '../auth/matrix';
 import { flavorForRoomMembers } from './bridges';
 import type { BundleSpec, InboxItem, Source } from './types';
@@ -87,7 +88,7 @@ export class MatrixSource implements Source {
     // Sync listener stays attached for the lifetime of the source.
     // Every transition pings subscribers so the inbox redraws as
     // rooms arrive — we don't block on PREPARED any more.
-    const onSync = (state: string, prev: string | null, data: unknown) => {
+    client.on(ClientEvent.Sync, (state, prev, data) => {
       // eslint-disable-next-line no-console
       console.info('[wukkiemail] sync ->', state, { prev });
       this.syncState = state;
@@ -97,8 +98,18 @@ export class MatrixSource implements Source {
         // eslint-disable-next-line no-console
         console.warn('[wukkiemail] sync ERROR:', err);
       }
-    };
-    client.on('sync' as never, onSync as never);
+    });
+    // Belt-and-suspenders: poll the SDK's getSyncState() every 2s in case
+    // our listener is the part that's broken — at least the UI updates.
+    setInterval(() => {
+      const s = client.getSyncState();
+      if (s !== this.syncState) {
+        // eslint-disable-next-line no-console
+        console.info('[wukkiemail] sync state poll caught', s, '(listener missed it?)');
+        this.syncState = s;
+        this.notify();
+      }
+    }, 2000);
 
     try {
       // lazyLoadMembers cuts initial /sync payload dramatically on heavy
