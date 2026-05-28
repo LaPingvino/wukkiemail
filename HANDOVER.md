@@ -4,7 +4,7 @@ Quick brief for any agent picking this up mid-stream.
 
 ## What it is
 
-WukkieMail — Inbox-style triage on top of Matrix. Live at `wukkiemail.pages.dev` (CF Pages). Repo: `LaPingvino/wukkiemail`. Pushes auto-deploy. User: Joop (`@LaPingvino` on GitHub, mxid varies).
+WukkieMail — Inbox-style triage on top of Matrix. Live at `mail.wukkie.uk` (custom domain) and `wukkiemail.pages.dev` (CF Pages). Repo: `LaPingvino/wukkiemail`. Pushes auto-deploy. User: Joop (`@LaPingvino` on GitHub, mxid varies).
 
 ## Architecture in one paragraph
 
