@@ -215,7 +215,7 @@ function Inbox({
   const [showRead, setShowRead] = useState(false);
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
-  const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
+  const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -388,7 +388,8 @@ function Inbox({
       const skipReadFilter = bundle === 'snoozed' || bundle === 'flavor:issue' || it.flavor === 'issue';
       if (!showRead && !it.unread && !q && !skipReadFilter) return false;
       // Status sub-filter only applies when viewing the Issues bundle.
-      if (bundle === 'flavor:issue' && issueStatusFilter && it.statusValue !== issueStatusFilter) return false;
+      // Multi-select task-status filter: only applies to issue items.
+      if (it.flavor === 'issue' && issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -410,8 +411,10 @@ function Inbox({
     return counts;
   }, [items, bundle]);
 
-  // Reset status filter when leaving the Issues bundle.
-  useEffect(() => { if (bundle !== 'flavor:issue') setIssueStatusFilter(null); }, [bundle]);
+  // Don't reset the filter when leaving the Issues bundle — the chips
+  // live with the Tasks section header now and apply wherever tasks
+  // show up (All view too). Clearing only happens when the user
+  // explicitly deselects all chips.
 
   const hiddenReadCount = useMemo(() => {
     if (showRead || query) return 0;
@@ -638,7 +641,7 @@ function Inbox({
           applyView={(v) => {
             setBundle(v.bundle);
             setQuery(v.query ?? '');
-            setIssueStatusFilter(v.issueStatus ?? null);
+            setIssueStatusFilter(v.issueStatus ? new Set(v.issueStatus.split(',')) : new Set());
             setShowRead(!!v.showRead);
           }}
           saveCurrentView={async () => {
@@ -650,7 +653,7 @@ function Inbox({
               name: name.trim(),
               bundle,
               query: query || undefined,
-              issueStatus: issueStatusFilter ?? undefined,
+              issueStatus: issueStatusFilter.size > 0 ? [...issueStatusFilter].join(',') : undefined,
               showRead: showRead || undefined,
             };
             const next = [...savedViews, view];
@@ -669,8 +672,8 @@ function Inbox({
             <div className="chip-bar-inner">
               <button
                 type="button"
-                className={`chip ${issueStatusFilter === null ? 'active' : ''}`}
-                onClick={() => setIssueStatusFilter(null)}
+                className={`chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
+                onClick={() => setIssueStatusFilter(new Set())}
               >
                 <span>All statuses</span>
               </button>
@@ -680,8 +683,12 @@ function Inbox({
                   <button
                     key={status}
                     type="button"
-                    className={`chip ${issueStatusFilter === status ? 'active' : ''}`}
-                    onClick={() => setIssueStatusFilter(status)}
+                    className={`chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
+                    onClick={() => setIssueStatusFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(status)) next.delete(status); else next.add(status);
+                      return next;
+                    })}
                   >
                     <span>{status}</span>
                     <span className="chip-badge">{count}</span>
