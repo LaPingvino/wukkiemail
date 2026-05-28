@@ -61,13 +61,44 @@ npm run dev                       # vite dev server
 
 For local Pages Functions: `npx wrangler pages dev -- npm run dev` (or use Vite dev for UI work and the deployed Pages Function for OAuth).
 
-## Deploy
+## Deploy your own
 
-Cloudflare Pages — point it at this repo, build command `npm run build`, output dir `dist`. Set Pages env vars:
+WukkieMail is designed so each user/org runs their own copy. Gmail integration uses your own Google OAuth client, so you're not stuck behind anyone else's verification status. About 10 minutes the first time.
 
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET` (secret)
-- `GOOGLE_OAUTH_REDIRECT_URI` — e.g. `https://wukkiemail.pages.dev/api/gmail/oauth/callback`
+### 1. Fork & connect Cloudflare Pages
+
+1. Fork this repo to your GitHub.
+2. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git** → pick your fork.
+3. Build settings: framework "None", build command `npm run build`, output dir `dist`. CF auto-detects bun.
+
+### 2. Visit the deployed site and follow the in-app setup wizard
+
+Once it's live (you'll get a `*.pages.dev` URL), open it and click **"Set up Gmail integration…"** on the connect screen — or go straight to `/setup`. The wizard shows the exact redirect URI to paste into Google Cloud Console (specific to your deployment's origin) and the four env vars to set on Pages. Copy buttons next to each value.
+
+You can also do it from the docs below if you prefer not to deploy first.
+
+### Manual variant of step 2
+
+In Google Cloud Console:
+- Enable the Gmail API.
+- Configure the OAuth consent screen (External; add yourself + intended users as Test Users).
+- Create an **OAuth client ID** of type **Web application**.
+- Add authorized redirect URI: `https://<your-domain>/api/gmail/oauth/callback`.
+
+In Cloudflare Pages → Settings → Environment variables (Production + Preview):
+
+| Variable | Notes |
+|---|---|
+| `VITE_GOOGLE_CLIENT_ID` | Plain text — baked into the JS bundle. Vite only inlines `VITE_*` vars. |
+| `GOOGLE_CLIENT_ID` | Same value, used server-side by the Pages Function. |
+| `GOOGLE_CLIENT_SECRET` | **Mark as Secret.** |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Must match what you pasted into Google exactly. |
+
+Then redeploy (env vars don't apply to existing builds — push a commit or hit Retry on the latest deployment).
+
+### Scope note
+
+We only request `gmail.metadata` (headers, labels, threading — no message bodies). That keeps OAuth verification at the cheap tier (no Cloud Application Security Assessment). Clicking a thread opens `mail.google.com` so the body shows up there.
 
 ## Status
 

@@ -7,6 +7,7 @@ import {
 } from './auth/gmail';
 import { MatrixSource } from './sources/matrix';
 import { GmailSource } from './sources/gmail';
+import { SetupScreen, gmailIsConfigured } from './Setup';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Both progress independently so the user can add
@@ -22,6 +23,10 @@ type SourceState<S> =
 export function App() {
   const [matrix, setMatrix] = useState<SourceState<MatrixSource>>({ kind: 'none' });
   const [gmail, setGmail] = useState<SourceState<GmailSource>>({ kind: 'none' });
+  const [showSetup, setShowSetup] = useState(
+    typeof window !== 'undefined' && window.location.pathname === '/setup',
+  );
+  const gmailConfigured = gmailIsConfigured();
 
   // Restore on boot.
   useEffect(() => {
@@ -78,13 +83,26 @@ export function App() {
   // side's state.
   const anyReady = matrix.kind === 'ready' || gmail.kind === 'ready';
 
+  if (showSetup) {
+    return <SetupScreen onBack={() => {
+      window.history.replaceState({}, '', '/');
+      setShowSetup(false);
+    }} />;
+  }
+
   if (!anyReady) {
     return (
       <ConnectScreen
         matrix={matrix}
         gmail={gmail}
+        gmailConfigured={gmailConfigured}
+        onShowSetup={() => setShowSetup(true)}
         onMatrixLogin={onMatrixLogin}
         onGmailLogin={() => {
+          if (!gmailConfigured) {
+            setShowSetup(true);
+            return;
+          }
           try { beginGmailLogin(); }
           catch (e) { setGmail({ kind: 'error', error: e instanceof Error ? e.message : String(e) }); }
         }}
@@ -113,6 +131,8 @@ export function App() {
 function ConnectScreen({
   matrix,
   gmail,
+  gmailConfigured,
+  onShowSetup,
   onMatrixLogin,
   onGmailLogin,
   onCancelMatrix,
@@ -120,6 +140,8 @@ function ConnectScreen({
 }: {
   matrix: SourceState<MatrixSource>;
   gmail: SourceState<GmailSource>;
+  gmailConfigured: boolean;
+  onShowSetup: () => void;
   onMatrixLogin: (mxid: string, password: string) => Promise<void>;
   onGmailLogin: () => void;
   onCancelMatrix: () => void;
@@ -182,7 +204,20 @@ function ConnectScreen({
         <legend style={legendStyle}>Gmail</legend>
         {gmail.kind === 'none' || gmail.kind === 'error' ? (
           <div style={{ display: 'grid', gap: 8 }}>
-            <button className="secondary" onClick={onGmailLogin}>Connect Gmail</button>
+            <button className="secondary" onClick={onGmailLogin}>
+              {gmailConfigured ? 'Connect Gmail' : 'Set up Gmail integration…'}
+            </button>
+            {!gmailConfigured && (
+              <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
+                This instance hasn't configured a Google OAuth client yet.{' '}
+                <button
+                  onClick={onShowSetup}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                >
+                  Open setup guide
+                </button>.
+              </p>
+            )}
             {gmail.kind === 'error' && <p style={errStyle}>{gmail.error}</p>}
           </div>
         ) : (
