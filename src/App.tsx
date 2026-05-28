@@ -13,6 +13,8 @@ import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
 import { QueryChips } from './QueryChips';
+import { JmapLoginSheet } from './JmapLoginSheet';
+import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode } from './sources/matrix';
 import type { InboxItem } from './sources/types';
 
@@ -259,6 +261,10 @@ function Inbox({
   const [composerOpen, setComposerOpen] = useState(false);
   // Bundle-level bulk-action sheet (keyed by bundle key).
   const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
+  // Optional JMAP mail source, multiplexed into the inbox alongside Matrix.
+  const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
+  const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
+  const jmapEmail = loadJmapCreds()?.email ?? loadJmapCreds()?.sessionUrl ?? null;
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
   const [hiddenBundles, setHiddenBundles] = useState<string[]>([]);
@@ -311,21 +317,29 @@ function Inbox({
       return;
     }
     const refresh = () => {
-      matrixSrc.listItems(null).then(
-        (batch) => {
-          if (cancelled) return;
-          // Sort by priority desc, then ts desc — important first, ties
-          // broken by recency. Read items still appear in their natural
-          // position; the showRead filter below hides them by default.
-          setItems(batch.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)));
-          setLoading(false);
-        },
-        (e) => {
-          // eslint-disable-next-line no-console
-          console.warn('[wukkiemail] matrix listItems failed', e);
-          if (!cancelled) setLoading(false);
-        },
-      );
+      // Merge Matrix items with JMAP mail items (if a mail account is
+      // connected). JMAP items get the shared triage overlay so pin/snooze/
+      // unread work across sources. Sort by priority desc, then ts desc.
+      (async () => {
+        const matrixItems = await matrixSrc.listItems(null);
+        let all = matrixItems;
+        if (jmapSrc) {
+          try {
+            const ji = matrixSrc.applyExternalTriage(await jmapSrc.listItems(null));
+            all = [...matrixItems, ...ji];
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[wukkiemail] jmap listItems failed', e);
+          }
+        }
+        if (cancelled) return;
+        setItems(all.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)));
+        setLoading(false);
+      })().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail] listItems failed', e);
+        if (!cancelled) setLoading(false);
+      });
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
       if (!cancelled) setSpaceTree(matrixSrc.getSpaceTree());
       if (!cancelled) setManualBundles(matrixSrc.getManualBundles());
@@ -339,6 +353,13 @@ function Inbox({
       requestAnimationFrame(() => { pending = false; refresh(); });
     };
     const unsub = matrixSrc.subscribe(onChange);
+    // Start the JMAP source (idempotent enough — start() re-fetches session)
+    // and refresh when it signals changes.
+    let unsubJmap: (() => void) | undefined;
+    if (jmapSrc) {
+      jmapSrc.start().then(() => { if (!cancelled) refresh(); }).catch((e) => console.warn('[wukkiemail] jmap start failed', e));
+      unsubJmap = jmapSrc.subscribe(onChange);
+    }
     // Belt-and-suspenders: poll every 3s for 60s so any missed event still
     // pulls in items.
     const startedAt = Date.now();
@@ -349,8 +370,8 @@ function Inbox({
       }
       refresh();
     }, 3_000);
-    return () => { cancelled = true; unsub(); clearInterval(poller); };
-  }, [matrixSrc, refreshTick]);
+    return () => { cancelled = true; unsub(); unsubJmap?.(); clearInterval(poller); };
+  }, [matrixSrc, jmapSrc, refreshTick]);
 
   const counts = useMemo(() => {
     const total = new Map<BundleKey, number>();
@@ -406,7 +427,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || !!selectedIssue || !!selectedRoom;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -420,6 +441,7 @@ function Inbox({
         else if (doneValuesOpen) setDoneValuesOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
         else if (addAccountOpen) setAddAccountOpen(false);
+        else if (jmapLoginOpen) setJmapLoginOpen(false);
         else if (bundleSheet) setBundleSheet(null);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
@@ -1104,6 +1126,9 @@ function Inbox({
                         )}
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
+                        {jmapSrc
+                          ? <button type="button" className="config-btn" onClick={() => { if (confirm('Disconnect this mail account?')) { clearJmapCreds(); window.location.reload(); } }}>Mail: {jmapEmail} — disconnect</button>
+                          : <button type="button" className="config-btn" onClick={() => setJmapLoginOpen(true)}>Connect mail (JMAP)…</button>}
                         {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
                           <button
                             type="button"
@@ -1313,6 +1338,12 @@ function Inbox({
         );
       })()}
       {matrixSrc && <VerificationSheet matrix={matrixSrc} />}
+      {jmapLoginOpen && (
+        <JmapLoginSheet
+          onClose={() => setJmapLoginOpen(false)}
+          onConnected={() => window.location.reload()}
+        />
+      )}
       {bundleSheet && matrixSrc && (
         <BundleSheet
           items={items}
