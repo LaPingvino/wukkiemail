@@ -184,6 +184,20 @@ const FLAVOR_ORDER: ItemFlavor[] = ['matrix', 'whatsapp', 'meta', 'signal', 'irc
 
 function flavorBundleKey(f: ItemFlavor): BundleKey { return `flavor:${f}`; }
 
+// Does a task's user-field set reference me? User fields may hold a full
+// mxid, a bare localpart, or a display name, so match loosely: equal to
+// the mxid, equal to the localpart, or either containing the other.
+function issueAssignedToSelf(userValues: string[] | undefined, selfMxid: string | null): boolean {
+  if (!selfMxid || !userValues || userValues.length === 0) return false;
+  const mxid = selfMxid.toLowerCase();
+  const local = mxid.replace(/^@/, '').split(':')[0];
+  return userValues.some((raw) => {
+    const v = raw.toLowerCase().trim();
+    if (!v) return false;
+    return v === mxid || v === local || v === `@${local}` || v.includes(local) || mxid.includes(v);
+  });
+}
+
 function bundleLabel(key: BundleKey, spaceBundles: BundleSpec[]): string {
   if (key === 'all') return 'Inbox';
   if (key === 'dm') return 'DMs';
@@ -221,6 +235,8 @@ function Inbox({
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
+  // When on, hide tasks not assigned to me (matched on any schema user field).
+  const [mineOnly, setMineOnly] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -390,6 +406,7 @@ function Inbox({
     return () => { document.title = 'WukkieMail'; setFaviconDot(false); };
   }, [counts]);
 
+  const selfMxid = matrixSrc?.id ?? null;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
@@ -415,6 +432,8 @@ function Inbox({
       // Status sub-filter only applies when viewing the Issues bundle.
       // Multi-select task-status filter: only applies to issue items.
       if (it.flavor === 'issue' && issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
+      // "Assigned to me": hide tasks whose user fields don't reference me.
+      if (it.flavor === 'issue' && mineOnly && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -423,7 +442,14 @@ function Inbox({
         (it.fromAddress?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [items, bundle, query, readFilter, issueStatusFilter]);
+  }, [items, bundle, query, readFilter, issueStatusFilter, mineOnly, selfMxid]);
+
+  // Whether any task carries user-field values — gates the "Mine" filter
+  // chip so it only shows when assignment is actually in play.
+  const anyAssignableTasks = useMemo(
+    () => items.some((it) => it.flavor === 'issue' && (it.userValues?.length ?? 0) > 0),
+    [items],
+  );
 
   // Status counts for the Tasks-header status chips. Computed across every
   // task visible in the current bundle (not just the Issues bundle) so the
@@ -774,6 +800,16 @@ function Inbox({
                                   <span className="chip-badge">{count}</span>
                                 </button>
                               ))}
+                            {anyAssignableTasks && (
+                              <button
+                                type="button"
+                                className={`mini-chip ${mineOnly ? 'active' : ''}`}
+                                title="Show only tasks assigned to me"
+                                onClick={() => setMineOnly((v) => !v)}
+                              >
+                                Mine
+                              </button>
+                            )}
                           </>
                         ) : (
                           <>
