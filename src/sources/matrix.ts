@@ -158,6 +158,41 @@ export class MatrixSource implements Source {
     return items.sort((a, b) => b.ts - a.ts);
   }
 
+  // Pull recent timeline messages for a room. Drops state events and
+  // anything without a body (we'll add nicer renderers later).
+  getRoomTimeline(roomId: string, limit = 50): RoomTimelineSnapshot | null {
+    if (!this.client) return null;
+    const room = this.client.getRoom(roomId);
+    if (!room) return null;
+    const messages: TimelineMessage[] = [];
+    const all = room.getLiveTimeline().getEvents();
+    for (let i = all.length - 1; i >= 0 && messages.length < limit; i--) {
+      const ev = all[i];
+      const type = ev.getType();
+      if (type !== 'm.room.message' && type !== 'm.room.encrypted') continue;
+      const content = ev.getContent() as { body?: string; msgtype?: string };
+      const senderId = ev.getSender() ?? '?';
+      const senderMember = room.getMember(senderId);
+      messages.push({
+        id: ev.getId() ?? String(ev.getTs()),
+        senderId,
+        senderName: senderMember?.name ?? senderId,
+        body: type === 'm.room.encrypted'
+          ? '(encrypted — body not available, v0 has no crypto)'
+          : (content.body ?? `[${content.msgtype ?? type}]`),
+        ts: ev.getTs(),
+        msgtype: content.msgtype ?? type,
+      });
+    }
+    messages.reverse();
+    return {
+      roomId,
+      roomName: room.name || roomId,
+      memberCount: room.getJoinedMemberCount(),
+      messages,
+    };
+  }
+
   // Pull a single issue's state event + schema + comments from a room.
   // Comments are any timeline event whose content has eu.kiefte.issue_id
   // matching the issueId. Returns null if the room or issue isn't found.
@@ -211,6 +246,22 @@ export interface IssueComment {
   sender: string;
   body: string;
   ts: number;
+}
+
+export interface RoomTimelineSnapshot {
+  roomId: string;
+  roomName: string;
+  memberCount: number;
+  messages: TimelineMessage[];
+}
+
+export interface TimelineMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  ts: number;
+  msgtype: string;
 }
 
 function isSpace(room: Room): boolean {

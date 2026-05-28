@@ -3,6 +3,7 @@ import type { ItemFlavor } from './sources/types';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
+import { RoomPanel } from './RoomPanel';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -185,6 +186,7 @@ function Inbox({
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -280,6 +282,7 @@ function Inbox({
       }
       if (e.key === 'Escape') {
         if (selectedIssue) { setSelectedIssue(null); return; }
+        if (selectedRoom) { setSelectedRoom(null); return; }
         if (query) { setQuery(''); return; }
       }
       if (e.key === 'j' || e.key === 'ArrowDown') {
@@ -295,15 +298,19 @@ function Inbox({
       if (e.key === 'Enter') {
         const it = visible[cursor];
         if (!it) return;
+        e.preventDefault();
         if (it.flavor === 'issue') {
           const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
-          if (m) { setSelectedIssue({ roomId: m[1], issueId: m[2] }); e.preventDefault(); }
+          if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+        } else {
+          const m = it.id.match(/^matrix:(.+)$/);
+          if (m) setSelectedRoom(m[1]);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);
@@ -401,14 +408,14 @@ function Inbox({
                 className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''}`}
                 href={it.openPath}
                 onClick={(e) => {
+                  e.preventDefault();
                   if (it.flavor === 'issue') {
-                    e.preventDefault();
                     const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
                     if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
                   } else {
-                    // Matrix items: prevent navigation until we have a real
-                    // detail view. For now, no-op.
-                    e.preventDefault();
+                    // matrix / bridge items: open the room timeline panel
+                    const m = it.id.match(/^matrix:(.+)$/);
+                    if (m) setSelectedRoom(m[1]);
                   }
                 }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
@@ -430,6 +437,13 @@ function Inbox({
           roomId={selectedIssue.roomId}
           issueId={selectedIssue.issueId}
           onClose={() => setSelectedIssue(null)}
+        />
+      )}
+      {selectedRoom && matrixSrc && (
+        <RoomPanel
+          matrix={matrixSrc}
+          roomId={selectedRoom}
+          onClose={() => setSelectedRoom(null)}
         />
       )}
       <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} />
