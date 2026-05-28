@@ -2,7 +2,7 @@
 // Subscribes to the source's change events so new messages appear as
 // they arrive. No compose/reply yet — this is the read-side preview.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 
@@ -15,20 +15,49 @@ export function RoomPanel({
   roomId: string;
   onClose: () => void;
 }) {
-  const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId));
+  const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200));
   const [composeText, setComposeText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     const unsub = matrix.subscribe(() => {
-      setSnap(matrix.getRoomTimeline(roomId));
+      setSnap(matrix.getRoomTimeline(roomId, 200));
     });
     // Mark read on open. Fire-and-forget — the listItems poll picks up
     // the new unread state on the next refresh tick.
     void matrix.markRoomRead(roomId);
     return unsub;
   }, [matrix, roomId]);
+
+  const loadOlder = async () => {
+    if (loadingOlder || !hasMore) return;
+    setLoadingOlder(true);
+    try {
+      const more = await matrix.loadOlder(roomId, 50);
+      setHasMore(more);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] loadOlder failed', e);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // Auto-load when the message list is scrolled near the top.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (el.scrollTop < 80) void loadOlder();
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingOlder, hasMore]);
 
   const send = async () => {
     const body = composeText.trim();
@@ -68,7 +97,22 @@ export function RoomPanel({
         subtitle={`${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
         onClose={onClose}
       />
-      <div className="issue-body">
+      <div className="issue-body" ref={bodyRef}>
+        {hasMore && (
+          <button
+            type="button"
+            className="show-read"
+            onClick={() => void loadOlder()}
+            disabled={loadingOlder}
+          >
+            {loadingOlder ? 'Loading older…' : 'Load older messages'}
+          </button>
+        )}
+        {!hasMore && snap.messages.length > 0 && (
+          <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center', margin: '8px 0' }}>
+            — start of room —
+          </p>
+        )}
         {snap.messages.length === 0 ? (
           <p style={{ color: 'var(--muted)' }}>No messages.</p>
         ) : (

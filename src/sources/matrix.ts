@@ -209,6 +209,20 @@ export class MatrixSource implements Source {
     return items.sort((a, b) => b.ts - a.ts);
   }
 
+  // Paginate the live timeline backwards by ~limit events. Resolves true
+  // if more history exists; false if we hit the start of the room. The
+  // SDK appends events to the existing timeline, so consumers re-render
+  // via the next sync/change tick.
+  async loadOlder(roomId: string, limit = 50): Promise<boolean> {
+    if (!this.client) return false;
+    const room = this.client.getRoom(roomId);
+    if (!room) return false;
+    const timeline = room.getLiveTimeline();
+    const more = await this.client.paginateEventTimeline(timeline, { backwards: true, limit });
+    this.notify();
+    return more;
+  }
+
   // Send a plain text message to a room. For encrypted rooms this will
   // fail until we wire crypto — caller surfaces the error.
   async sendMessage(roomId: string, body: string): Promise<void> {
