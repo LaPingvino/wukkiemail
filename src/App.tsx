@@ -1076,14 +1076,12 @@ function Inbox({
           <div className="empty">Loading…</div>
         ) : visible.length === 0 && msgHits.length === 0 ? (
           <div className="empty">
-            <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>
-            {matrixSrc && (
-              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                Matrix: sync={String(matrixSrc.describe().state)},
-                rooms={matrixSrc.describe().rooms},
-                spaces={matrixSrc.describe().spaces}
-              </p>
-            )}
+            {/* Distinguish "still hydrating from the local store / initial sync"
+                from a genuinely empty inbox, so a reload doesn't flash
+                "No items yet" before the cached rooms load. */}
+            {matrixSrc && matrixSrc.describe().rooms === 0
+              ? <p>Syncing your conversations…</p>
+              : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>}
           </div>
         ) : (
           <div className="item-list">
