@@ -211,6 +211,7 @@ function Inbox({
   const [showRead, setShowRead] = useState(false);
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
   const [actionSheetFor, setActionSheetFor] = useState<string | null>(null);
+  const [issueStatusFilter, setIssueStatusFilter] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
@@ -302,6 +303,8 @@ function Inbox({
       //     all your tasks because Matrix has no read receipt for state events)
       const skipReadFilter = bundle === 'snoozed' || bundle === 'flavor:issue' || it.flavor === 'issue';
       if (!showRead && !it.unread && !q && !skipReadFilter) return false;
+      // Status sub-filter only applies when viewing the Issues bundle.
+      if (bundle === 'flavor:issue' && issueStatusFilter && it.statusValue !== issueStatusFilter) return false;
       if (!q) return true;
       return (
         it.subject.toLowerCase().includes(q) ||
@@ -310,7 +313,21 @@ function Inbox({
         (it.fromAddress?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [items, bundle, query, showRead]);
+  }, [items, bundle, query, showRead, issueStatusFilter]);
+
+  // Status counts for the Issues sub-filter.
+  const issueStatusCounts = useMemo(() => {
+    if (bundle !== 'flavor:issue') return null;
+    const counts = new Map<string, number>();
+    for (const it of items) {
+      if (it.flavor !== 'issue' || !it.statusValue) continue;
+      counts.set(it.statusValue, (counts.get(it.statusValue) ?? 0) + 1);
+    }
+    return counts;
+  }, [items, bundle]);
+
+  // Reset status filter when leaving the Issues bundle.
+  useEffect(() => { if (bundle !== 'flavor:issue') setIssueStatusFilter(null); }, [bundle]);
 
   const hiddenReadCount = useMemo(() => {
     if (showRead || query) return 0;
@@ -448,6 +465,32 @@ function Inbox({
           </div>
         </div>
         <BundleChips bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
+        {bundle === 'flavor:issue' && issueStatusCounts && issueStatusCounts.size > 0 && (
+          <div className="chip-bar" style={{ top: 112 }}>
+            <div className="chip-bar-inner">
+              <button
+                type="button"
+                className={`chip ${issueStatusFilter === null ? 'active' : ''}`}
+                onClick={() => setIssueStatusFilter(null)}
+              >
+                <span>All statuses</span>
+              </button>
+              {[...issueStatusCounts.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([status, count]) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`chip ${issueStatusFilter === status ? 'active' : ''}`}
+                    onClick={() => setIssueStatusFilter(status)}
+                  >
+                    <span>{status}</span>
+                    <span className="chip-badge">{count}</span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
         {bundle !== 'all' && visible.length > 0 && matrixSrc && (
           <div className="sweep-bar">
             <span style={{ color: 'var(--muted)', fontSize: 13 }}>

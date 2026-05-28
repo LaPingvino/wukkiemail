@@ -30,6 +30,7 @@ export interface InboxItem {
   snoozedUntil?: number; // ms epoch when this item wakes from snooze
   senderPresence?: 'online' | 'unavailable' | 'offline';
   avatarUrl?: string; // resolved HTTPS thumbnail; falls back to initials when absent
+  statusValue?: string; // for issue items: their kanban_group status value
   // route the UI uses to open the thing:
   openPath: string;      // e.g. /m/!roomid/$eventid or /g/<gmail-thread-id>
 }
