@@ -21,6 +21,21 @@ export function IssuePanel({
   useEffect(() => matrix.subscribe(() => setTick((n) => n + 1)), [matrix]);
   const detail = matrix.getIssueDetail(roomId, issueId);
   void tick;
+  const [comment, setComment] = useState('');
+  const [posting, setPosting] = useState(false);
+  const postComment = async () => {
+    const body = comment.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    try {
+      await matrix.commentOnIssue(roomId, issueId, body);
+      setComment('');
+    } catch (e) {
+      console.warn('[wukkiemail] commentOnIssue failed', e);
+    } finally {
+      setPosting(false);
+    }
+  };
 
   if (!detail) {
     return (
@@ -94,6 +109,41 @@ export function IssuePanel({
             ))}
           </ul>
         )}
+      </div>
+      <div className="composer">
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void postComment();
+            }
+          }}
+          placeholder="Add a comment…"
+          rows={1}
+          disabled={posting}
+          style={{
+            flex: 1, minWidth: 0,
+            padding: '10px 12px',
+            border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--bg)', color: 'var(--fg)', font: 'inherit',
+            resize: 'vertical', minHeight: 40,
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void postComment()}
+          disabled={!comment.trim() || posting}
+          style={{
+            background: 'var(--md-sys-color-primary)',
+            color: 'var(--md-sys-color-on-primary)',
+            border: 'none', borderRadius: 999,
+            padding: '8px 16px', cursor: 'pointer', font: 'inherit',
+          }}
+        >
+          {posting ? 'Sending…' : 'Comment'}
+        </button>
       </div>
     </div>
   );

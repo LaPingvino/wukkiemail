@@ -310,6 +310,20 @@ export class MatrixSource implements Source {
       .sort((a, b) => (a.isDm === b.isDm ? a.name.localeCompare(b.name) : (a.isDm ? -1 : 1)));
   }
 
+  // Post a comment on an issue. We tag it with eu.kiefte.issue_id so
+  // getIssueDetail's filter picks it up. Body is plain text; renderers
+  // displaying these messages outside WukkieMail (Cinny, Element) will
+  // just show the body without the tag.
+  async commentOnIssue(roomId: string, issueId: string, body: string): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.sendMessage(roomId, {
+      msgtype: 'm.text',
+      body,
+      'eu.kiefte.issue_id': issueId,
+    } as never);
+    this.notify();
+  }
+
   // Patch an issue's content. Merges the partial with the current
   // state_event content and re-sends. Caller surfaces errors.
   async updateIssue(roomId: string, issueId: string, patch: Record<string, unknown>): Promise<void> {
