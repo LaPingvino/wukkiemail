@@ -158,6 +158,29 @@ export class MatrixSource implements Source {
     return items.sort((a, b) => b.ts - a.ts);
   }
 
+  // Mark a room read at its newest message. The SDK fires off a /receipt
+  // request; on success the next listItems() will compute unread=0 for
+  // this room. Fails silently if the room or messages aren't ready yet —
+  // we'll get another chance on the next sync transition.
+  async markRoomRead(roomId: string): Promise<void> {
+    if (!this.client) return;
+    const room = this.client.getRoom(roomId);
+    if (!room) return;
+    const events = room.getLiveTimeline().getEvents();
+    const last = events[events.length - 1];
+    if (!last) return;
+    try {
+      await this.client.sendReadReceipt(last);
+      // Force a refresh: getUnreadNotificationCount won't change locally
+      // until /sync confirms, but the API call has already taken effect
+      // server-side.
+      this.notify();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] sendReadReceipt failed for', roomId, e);
+    }
+  }
+
   // Pull recent timeline messages for a room. Drops state events and
   // anything without a body (we'll add nicer renderers later).
   getRoomTimeline(roomId: string, limit = 50): RoomTimelineSnapshot | null {

@@ -21,6 +21,9 @@ export function RoomPanel({
     const unsub = matrix.subscribe(() => {
       setSnap(matrix.getRoomTimeline(roomId));
     });
+    // Mark read on open. Fire-and-forget — the listItems poll picks up
+    // the new unread state on the next refresh tick.
+    void matrix.markRoomRead(roomId);
     return unsub;
   }, [matrix, roomId]);
 
