@@ -619,13 +619,13 @@ function Inbox({
       <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
       <div className="from">
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
-        {it.from}
+        {it.subject}
         {showOrigin && it.originLabel && (
           <span className="origin-tag" title={it.accountId}>{it.originLabel}</span>
         )}
       </div>
       <div className="subj">
-        <strong>{it.subject}</strong> — {it.snippet}
+        <strong>{it.from}</strong> — {it.snippet}
       </div>
       <div className="ts">
         {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
