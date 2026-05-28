@@ -12,23 +12,75 @@ export interface MatrixCreds {
   deviceId: string;
 }
 
-const STORAGE_KEY = 'wukkiemail.matrix.creds.v1';
+const LEGACY_STORAGE_KEY = 'wukkiemail.matrix.creds.v1';
+const SLOT_INDEX_KEY = 'wukkiemail.matrix.slots';
+const ACTIVE_SLOT_KEY = 'wukkiemail.matrix.activeSlot';
+const slotKey = (slot: string) => `wukkiemail.matrix.creds.v1.${slot}`;
 
-export function loadCreds(): MatrixCreds | null {
+// One-shot migration: if a single-slot creds blob is still in localStorage
+// from before multi-account, move it to a userId-keyed slot.
+function migrateLegacyIfPresent(): void {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return;
+    const creds = JSON.parse(raw) as MatrixCreds;
+    const slot = creds.userId;
+    if (slot) {
+      localStorage.setItem(slotKey(slot), raw);
+      localStorage.setItem(SLOT_INDEX_KEY, JSON.stringify([slot]));
+      localStorage.setItem(ACTIVE_SLOT_KEY, slot);
+    }
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch { /* leave legacy in place */ }
+}
+
+export function listSlots(): string[] {
+  migrateLegacyIfPresent();
+  try {
+    const raw = localStorage.getItem(SLOT_INDEX_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch { return []; }
+}
+
+export function getActiveSlot(): string | null {
+  migrateLegacyIfPresent();
+  const slot = localStorage.getItem(ACTIVE_SLOT_KEY);
+  return slot && listSlots().includes(slot) ? slot : (listSlots()[0] ?? null);
+}
+
+export function setActiveSlot(slot: string): void {
+  localStorage.setItem(ACTIVE_SLOT_KEY, slot);
+}
+
+export function loadCreds(slot?: string): MatrixCreds | null {
+  migrateLegacyIfPresent();
+  const target = slot ?? getActiveSlot();
+  if (!target) return null;
+  try {
+    const raw = localStorage.getItem(slotKey(target));
     return raw ? (JSON.parse(raw) as MatrixCreds) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export function saveCreds(c: MatrixCreds): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+  const slot = c.userId;
+  localStorage.setItem(slotKey(slot), JSON.stringify(c));
+  const slots = new Set(listSlots());
+  slots.add(slot);
+  localStorage.setItem(SLOT_INDEX_KEY, JSON.stringify([...slots]));
+  if (!localStorage.getItem(ACTIVE_SLOT_KEY)) setActiveSlot(slot);
 }
 
-export function clearCreds(): void {
-  localStorage.removeItem(STORAGE_KEY);
+export function clearCreds(slot?: string): void {
+  const target = slot ?? getActiveSlot();
+  if (!target) return;
+  localStorage.removeItem(slotKey(target));
+  const slots = listSlots().filter((s) => s !== target);
+  localStorage.setItem(SLOT_INDEX_KEY, JSON.stringify(slots));
+  if (getActiveSlot() === target) {
+    if (slots[0]) setActiveSlot(slots[0]);
+    else localStorage.removeItem(ACTIVE_SLOT_KEY);
+  }
 }
 
 // Returns the base URL for a server name (host portion of an mxid).

@@ -250,6 +250,20 @@ export function RoomPanel({
                   ))}
                   <ReactionAdder onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)} />
                 </div>
+                {m.readBy && m.readBy.length > 0 && (
+                  <div className="read-by" aria-label={`Read by ${m.readBy.map((r) => r.name).join(', ')}`}>
+                    {m.readBy.slice(0, 5).map((r) => (
+                      <span key={r.userId} title={r.name} className="read-by-avatar">
+                        {r.avatarUrl
+                          ? <img src={r.avatarUrl} alt="" />
+                          : <span>{r.name.slice(0, 1).toUpperCase()}</span>}
+                      </span>
+                    ))}
+                    {m.readBy.length > 5 && (
+                      <span className="read-by-more">+{m.readBy.length - 5}</span>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
