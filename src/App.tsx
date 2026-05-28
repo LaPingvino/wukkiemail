@@ -438,15 +438,23 @@ function Inbox({
         if (readFilter === 'read' && it.unread) return false;
         // 'all' applies no read-state filter
       }
-      // Status sub-filter only applies when viewing the Issues bundle.
-      // Multi-select task-status filter: only applies to issue items.
-      if (it.flavor === 'issue' && issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
-      // "Assigned to me": hide tasks whose user fields don't reference me.
-      if (it.flavor === 'issue' && mineOnly && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
+      // NOTE: the task status + "Mine" filters are NOT applied here. They are
+      // *display* filters applied per-section/per-bundle at render time (see
+      // displayFilter), so toggling them narrows a bundle's contents without
+      // making the bundle — and the chips that control it — disappear.
       if (!q) return true;
       return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, bundle, query, parsedQuery, readFilter, issueStatusFilter, mineOnly, selfMxid]);
+  }, [items, bundle, query, parsedQuery, readFilter, selfMxid]);
+
+  // Per-section/per-bundle display filter for tasks (status chips + Mine).
+  // Applied at render so the controlling chips never vanish with their items.
+  const displayFilter = (it: InboxItem): boolean => {
+    if (it.flavor !== 'issue') return true;
+    if (issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
+    if (mineOnly && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
+    return true;
+  };
 
   // Whether any task carries user-field values — gates the "Mine" filter
   // chip so it only shows when assignment is actually in play.
@@ -1012,7 +1020,7 @@ function Inbox({
                   </div>,
                 );
                 // Loose (important) items shown directly at the top level.
-                for (const it of bundled.loose) rendered.push(renderItem(it, idx++));
+                for (const it of bundled.loose) if (displayFilter(it)) rendered.push(renderItem(it, idx++));
                 // Everything else folds into bundles, opened in place.
                 for (const g of bundled.groups) {
                   const open = expandedBundles.has(g.key);
@@ -1043,7 +1051,7 @@ function Inbox({
                             g.items.some((x) => x.flavor !== 'issue'),
                             g.items,
                           )}
-                          {g.items.slice(0, 200).map((it) => renderItem(it, idx++))}
+                          {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, idx++))}
                         </div>
                       )}
                     </div>,
@@ -1082,7 +1090,7 @@ function Inbox({
                   );
                   lastGroup = group;
                 }
-                rendered.push(renderItem(it, idx++));
+                if (displayFilter(it)) rendered.push(renderItem(it, idx++));
               });
               return rendered;
             })()}
