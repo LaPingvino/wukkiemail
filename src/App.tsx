@@ -616,16 +616,18 @@ function Inbox({
             {(() => {
               const rendered: React.ReactNode[] = [];
               const shown = visible.slice(0, 200);
+              // In the All view, group tasks above messages so each gets
+              // a single header. Inside each group, retain the existing
+              // (priority, ts) order so the user's tuning still ranks them.
+              const isAll = bundle === 'all';
+              const tasks = isAll ? shown.filter((x) => x.flavor === 'issue') : [];
+              const messages = isAll ? shown.filter((x) => x.flavor !== 'issue') : shown;
+              const ordered = isAll ? [...tasks, ...messages] : shown;
+              const hasBothGroups = isAll && tasks.length > 0 && messages.length > 0;
               let lastGroup: 'issue' | 'message' | null = null;
-              const hasIssue = shown.some((x) => x.flavor === 'issue');
-              const hasOther = shown.some((x) => x.flavor !== 'issue');
-              const bothGroupsPresent = hasIssue && hasOther;
-              shown.forEach((it, i) => {
+              ordered.forEach((it, i) => {
                 const group = it.flavor === 'issue' ? 'issue' : 'message';
-                // Section headers only when both groups are visible AND we're
-                // in the All view (otherwise they're noise — bundles already
-                // imply the group).
-                if (bundle === 'all' && bothGroupsPresent && group !== lastGroup) {
+                if (hasBothGroups && group !== lastGroup) {
                   rendered.push(
                     <div key={`h-${group}`} className="section-header">
                       {group === 'issue' ? 'Tasks' : 'Messages'}

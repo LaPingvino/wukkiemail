@@ -937,8 +937,11 @@ body {
 }
 .reply-chip button:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
 
-.msg-reply {
+.msg-actions {
+  display: flex; gap: 4px;
   margin-top: 4px;
+}
+.msg-reply {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;

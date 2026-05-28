@@ -22,6 +22,8 @@ export function RoomPanel({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
+  const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
+  const selfId = matrix.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -94,9 +96,14 @@ export function RoomPanel({
     setSending(true);
     setSendError(null);
     try {
-      await matrix.sendMessage(roomId, body, markdownToHtml(body), replyTo);
+      if (editing) {
+        await matrix.editMessage(roomId, editing.eventId, body, markdownToHtml(body));
+        setEditing(null);
+      } else {
+        await matrix.sendMessage(roomId, body, markdownToHtml(body), replyTo);
+        setReplyTo(null);
+      }
       setComposeText('');
-      setReplyTo(null);
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
       const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
@@ -173,14 +180,33 @@ export function RoomPanel({
                 ) : (
                   <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
                 )}
-                <button
-                  type="button"
-                  className="msg-reply"
-                  aria-label="Reply"
-                  onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
-                >
-                  <span className="material-symbols-outlined">reply</span>
-                </button>
+                <div className="msg-actions">
+                  <button
+                    type="button"
+                    className="msg-reply"
+                    aria-label="Reply"
+                    onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
+                  >
+                    <span className="material-symbols-outlined">reply</span>
+                  </button>
+                  {m.senderId === selfId && (
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label="Edit"
+                      onClick={() => {
+                        setEditing({ eventId: m.id, originalBody: m.body });
+                        setComposeText(m.body);
+                        setReplyTo(null);
+                      }}
+                    >
+                      <span className="material-symbols-outlined">edit</span>
+                    </button>
+                  )}
+                </div>
+                {m.edited && (
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}> (edited)</span>
+                )}
                 <div className="reactions">
                   {m.reactions?.map((r) => (
                     <button
@@ -209,6 +235,21 @@ export function RoomPanel({
             <div className="reply-chip-body">{replyTo.body.slice(0, 200)}</div>
           </div>
           <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      )}
+      {editing && (
+        <div className="reply-chip">
+          <div className="reply-chip-inner">
+            <div className="reply-chip-label">Editing</div>
+            <div className="reply-chip-body">{editing.originalBody.slice(0, 200)}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setEditing(null); setComposeText(''); }}
+            aria-label="Cancel edit"
+          >
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
