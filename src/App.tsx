@@ -8,6 +8,7 @@ import { RoomPanel } from './RoomPanel';
 import { NewTaskSheet } from './NewTaskSheet';
 import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet } from './EncryptionSetupSheet';
+import { VerificationSheet } from './VerificationSheet';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -901,6 +902,7 @@ function Inbox({
       {encryptionOpen && matrixSrc && (
         <EncryptionSetupSheet matrix={matrixSrc} onClose={() => setEncryptionOpen(false)} />
       )}
+      {matrixSrc && <VerificationSheet matrix={matrixSrc} />}
       {addAccountOpen && (
         <AddAccountSheet
           onClose={() => setAddAccountOpen(false)}

@@ -16,7 +16,7 @@ export function EncryptionSetupSheet({
   matrix: MatrixSource;
   onClose: () => void;
 }) {
-  const [mode, setMode] = useState<'bootstrap' | 'verify'>('bootstrap');
+  const [mode, setMode] = useState<'bootstrap' | 'verify' | 'sas'>('bootstrap');
   const [password, setPassword] = useState('');
   const [existingKey, setExistingKey] = useState('');
   const [phase, setPhase] = useState<'enter' | 'working' | 'done' | 'error'>('enter');
@@ -35,6 +35,13 @@ export function EncryptionSetupSheet({
       setError(e instanceof Error ? e.message : String(e));
       setPhase('error');
     }
+  };
+
+  // Kick off SAS verification, then close this sheet — the standalone
+  // VerificationSheet (driven by the verification state channel) takes over.
+  const startSas = async () => {
+    try { await matrix.startSelfVerification(); onClose(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase('error'); }
   };
 
   const run = async () => {
@@ -74,6 +81,11 @@ export function EncryptionSetupSheet({
                   className={`chip ${mode === 'verify' ? 'active' : ''}`}
                   onClick={() => setMode('verify')}
                 >I have a recovery key</button>
+                <button
+                  type="button"
+                  className={`chip ${mode === 'sas' ? 'active' : ''}`}
+                  onClick={() => setMode('sas')}
+                >Verify with another device</button>
               </div>
               {mode === 'bootstrap' && (
               <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
@@ -88,7 +100,22 @@ export function EncryptionSetupSheet({
                 fetch your existing cross-signing keys and mark this device
                 trusted so encrypted history decrypts.
               </p>)}
-              {mode === 'bootstrap' ? (
+              {mode === 'sas' && (
+              <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+                Verify by comparing emoji with another device that's already
+                signed in (WukkieMail or Element). Have it open and ready —
+                we'll show seven emoji on both; you confirm they match.
+              </p>)}
+              {mode === 'sas' ? (
+                <button
+                  type="button"
+                  className="sheet-submit"
+                  onClick={() => void startSas()}
+                  style={{ justifySelf: 'end' }}
+                >
+                  Start emoji verification
+                </button>
+              ) : mode === 'bootstrap' ? (
                 <>
                   <label className="sheet-label">
                     <span>Account password</span>

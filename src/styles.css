@@ -198,6 +198,24 @@ body {
   overflow-y: auto;
   display: grid; gap: 12px;
 }
+/* SAS emoji verification grid: seven [glyph, name] tiles. */
+.sas-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 4px 0;
+}
+.sas-emoji {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 6px;
+  background: var(--md-sys-color-surface-container);
+  border-radius: 12px;
+}
+.sas-glyph { font-size: 34px; line-height: 1; }
+.sas-name { font-size: 11px; color: var(--muted); text-align: center; text-transform: capitalize; }
+@media (max-width: 420px) {
+  .sas-grid { grid-template-columns: repeat(3, 1fr); }
+}
 .sheet-label {
   display: grid; gap: 4px;
   font-size: 12px;
