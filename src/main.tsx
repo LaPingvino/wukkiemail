@@ -11,3 +11,14 @@ createRoot(root).render(
     <App />
   </React.StrictMode>,
 );
+
+// Register the service worker on idle so it doesn't fight first paint.
+// Production-only: dev server uses its own HMR which conflicts with SW.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch((e) => {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] sw register failed', e);
+    });
+  });
+}
