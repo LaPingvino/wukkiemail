@@ -1,10 +1,10 @@
 // Inline issue detail — opens when you click an issue item in the inbox.
-// Reads the issue state event + comments via MatrixSource.getIssueDetail,
-// renders the schema fields, the comment timeline, status chips for
-// quick state changes, and a back button.
+// Every field is inline-editable: click the value to edit, blur or
+// Enter to save. Status uses a horizontal chip bar instead of an
+// edit-in-place control because it's the highest-frequency change.
 
 import { useEffect, useState } from 'react';
-import type { MatrixSource } from './sources/matrix';
+import type { MatrixSource, SchemaField } from './sources/matrix';
 
 export function IssuePanel({
   matrix,
@@ -35,20 +35,21 @@ export function IssuePanel({
   }
 
   const { content, schema, comments, roomName } = detail;
-  const title = String(content.title ?? '(untitled)');
-  // Find the kanban-group enum field, if any — used for the inline
-  // status chip bar. Falls back to first enum field with values.
   const statusField = schema.fields.find((f) => f.kanban_group && f.type === 'enum' && f.values?.length)
     ?? schema.fields.find((f) => f.type === 'enum' && f.values?.length);
 
-  const changeStatus = async (next: string) => {
-    try { await matrix.updateIssue(roomId, issueId, { [statusField!.key]: next }); }
+  const save = async (key: string, value: unknown) => {
+    try { await matrix.updateIssue(roomId, issueId, { [key]: value }); }
     catch (e) { console.warn('[wukkiemail] updateIssue failed', e); }
   };
 
   return (
     <div className="issue-panel">
-      <Header title={title} subtitle={roomName} onClose={onClose} />
+      <Header
+        title={String(content.title ?? '(untitled)')}
+        subtitle={roomName}
+        onClose={onClose}
+      />
       <div className="issue-body">
         {statusField && statusField.values && (
           <div className="status-chips">
@@ -57,7 +58,7 @@ export function IssuePanel({
                 key={v}
                 type="button"
                 className={`chip ${content[statusField.key] === v ? 'active' : ''}`}
-                onClick={() => void changeStatus(v)}
+                onClick={() => void save(statusField.key, v)}
               >
                 {v}
               </button>
@@ -66,17 +67,15 @@ export function IssuePanel({
         )}
         <dl className="issue-fields">
           {schema.fields
-            .filter((f) => f.key !== 'title' && (!statusField || f.key !== statusField.key))
-            .map((f) => {
-              const v = content[f.key];
-              if (v === undefined || v === '' || v === null) return null;
-              return (
-                <div key={f.key} className="field-row">
-                  <dt>{f.label}</dt>
-                  <dd>{renderField(v, f.type)}</dd>
-                </div>
-              );
-            })}
+            .filter((f) => !statusField || f.key !== statusField.key)
+            .map((f) => (
+              <EditableFieldRow
+                key={f.key}
+                field={f}
+                value={content[f.key]}
+                onSave={(v) => void save(f.key, v)}
+              />
+            ))}
         </dl>
 
         <h3 style={{ marginTop: 24 }}>Comments</h3>
@@ -100,6 +99,85 @@ export function IssuePanel({
   );
 }
 
+function EditableFieldRow({
+  field, value, onSave,
+}: {
+  field: SchemaField;
+  value: unknown;
+  onSave: (v: unknown) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => valueToString(value, field.type));
+
+  if (!editing) {
+    const display = value !== undefined && value !== '' && value !== null
+      ? renderField(value, field.type)
+      : <span style={{ color: 'var(--muted)' }}>—</span>;
+    return (
+      <div className="field-row">
+        <dt>{field.label}</dt>
+        <dd
+          className="editable"
+          onClick={() => { setDraft(valueToString(value, field.type)); setEditing(true); }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') { setDraft(valueToString(value, field.type)); setEditing(true); } }}
+        >
+          {display}
+        </dd>
+      </div>
+    );
+  }
+
+  const commit = () => {
+    setEditing(false);
+    if (draft === valueToString(value, field.type)) return;
+    if (field.type === 'date' && draft === '') { onSave(''); return; }
+    onSave(draft);
+  };
+
+  return (
+    <div className="field-row">
+      <dt>{field.label}</dt>
+      <dd>
+        {field.type === 'enum' && field.values ? (
+          <div className="status-chips">
+            {field.values.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`chip ${draft === v ? 'active' : ''}`}
+                onClick={() => { setDraft(v); onSave(v); setEditing(false); }}
+              >
+                {v}
+              </button>
+            ))}
+            <button type="button" className="chip" onClick={() => { setDraft(''); onSave(''); setEditing(false); }}>—</button>
+          </div>
+        ) : (
+          <input
+            autoFocus
+            type={field.type === 'date' ? 'date' : 'text'}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+            }}
+            placeholder={field.type === 'user' ? '@user:server' : ''}
+            style={{
+              width: '100%', padding: '6px 10px',
+              border: '1px solid var(--border)', borderRadius: 8,
+              background: 'var(--bg)', color: 'var(--fg)', font: 'inherit',
+            }}
+          />
+        )}
+      </dd>
+    </div>
+  );
+}
+
 function Header({ title, subtitle, onClose }: { title: string; subtitle?: string; onClose: () => void }) {
   return (
     <header className="issue-head">
@@ -112,6 +190,17 @@ function Header({ title, subtitle, onClose }: { title: string; subtitle?: string
       </div>
     </header>
   );
+}
+
+function valueToString(value: unknown, type: string): string {
+  if (value === undefined || value === null) return '';
+  if (type === 'date' && typeof value === 'string') {
+    // Reformat for the date input's YYYY-MM-DD format if possible.
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return value;
+  }
+  return String(value);
 }
 
 function renderField(value: unknown, type: string): string {

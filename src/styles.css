@@ -602,7 +602,14 @@ body {
   display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline;
 }
 .issue-fields dt { color: var(--muted); font-size: 13px; }
-.issue-fields dd { margin: 0; font-size: 14px; }
+.issue-fields dd { margin: 0; font-size: 14px; min-width: 0; }
+.issue-fields dd.editable {
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 6px;
+  cursor: text;
+}
+.issue-fields dd.editable:hover { background: var(--md-sys-color-surface-container); }
 .comment-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 12px; }
 .comment-list li {
   padding: 12px 14px; background: var(--md-sys-color-surface-container);
