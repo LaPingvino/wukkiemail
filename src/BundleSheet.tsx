@@ -67,7 +67,7 @@ export function BundleSheet({
               is:mine, flavor:x, from:name, status:value.
             </span>
           </label>
-          <QueryChips query={query} onChange={setQuery} />
+          <QueryChips query={query} onChange={setQuery} flavors={[...new Set(items.map((i) => i.flavor))]} />
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             Matches <strong>{matchCount}</strong> current item{matchCount === 1 ? '' : 's'}.
           </div>

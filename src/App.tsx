@@ -492,6 +492,14 @@ function Inbox({
     [items],
   );
 
+  // Source flavors actually present in the inbox (detected bridges + Matrix
+  // + Tasks, and Mail once JMAP is wired) — drives the composer's source
+  // chips so we never offer a filter for a source the user doesn't have.
+  const presentFlavors = useMemo(
+    () => [...new Set(items.map((it) => it.flavor))],
+    [items],
+  );
+
   // Status counts for the Tasks-header status chips. Computed across every
   // task visible in the current bundle (not just the Issues bundle) so the
   // chips work in the All view too. Counts ignore the status filter itself
@@ -824,6 +832,7 @@ function Inbox({
             <div className="compose-bar">
               <QueryChips
                 query={query}
+                flavors={presentFlavors}
                 onChange={(q) => {
                   setQuery(q);
                   const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null;

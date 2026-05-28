@@ -5,19 +5,20 @@
 
 import type { ItemFlavor } from './sources/types';
 
-// Mail (flavor:gmail) is deliberately omitted — the only mail backend is
-// JMAP (which Gmail doesn't implement) and it isn't wired up yet, so
-// offering a Mail filter would surface an always-empty predicate.
-const FLAVORS: { flavor: ItemFlavor; label: string }[] = [
-  { flavor: 'matrix', label: 'Matrix' },
-  { flavor: 'whatsapp', label: 'WhatsApp' },
-  { flavor: 'meta', label: 'Meta' },
-  { flavor: 'signal', label: 'Signal' },
-  { flavor: 'irc', label: 'IRC' },
-  { flavor: 'issue', label: 'Tasks' },
-];
+const FLAVOR_LABEL: Record<string, string> = {
+  matrix: 'Matrix', whatsapp: 'WhatsApp', meta: 'Meta',
+  signal: 'Signal', irc: 'IRC', issue: 'Tasks', gmail: 'Mail',
+};
+// Stable display order; only those actually present are shown.
+const FLAVOR_ORDER: ItemFlavor[] = ['matrix', 'whatsapp', 'meta', 'signal', 'irc', 'issue', 'gmail'];
 
-export function QueryChips({ query, onChange }: { query: string; onChange: (q: string) => void }) {
+export function QueryChips({
+  query, onChange, flavors,
+}: {
+  query: string;
+  onChange: (q: string) => void;
+  flavors?: ItemFlavor[]; // which flavor chips to show — typically the ones detected in the inbox
+}) {
   const tokens = query.split(/\s+/).filter(Boolean);
   const has = (tok: string) => tokens.includes(tok);
   const toggle = (tok: string) => {
@@ -32,6 +33,11 @@ export function QueryChips({ query, onChange }: { query: string; onChange: (q: s
       onClick={() => toggle(tok)}
     >{text}</button>
   );
+  // Show flavor chips only for sources actually present (detected bridges +
+  // Matrix + Tasks), so we don't offer e.g. a Meta filter the user never uses.
+  const shownFlavors = (flavors && flavors.length > 0
+    ? FLAVOR_ORDER.filter((f) => flavors.includes(f))
+    : (['matrix', 'issue'] as ItemFlavor[]));
   return (
     <>
       <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
@@ -41,9 +47,12 @@ export function QueryChips({ query, onChange }: { query: string; onChange: (q: s
         {chip('is:pinned', 'Pinned')}
         {chip('is:task', 'Tasks')}
       </div>
-      <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
-        {FLAVORS.map((f) => chip(`flavor:${f.flavor}`, f.label))}
-      </div>
+      {shownFlavors.length > 0 && (
+        <div className="section-filters" style={{ flexWrap: 'wrap', overflow: 'visible', alignItems: 'center' }}>
+          <span className="hint" style={{ flex: '0 0 auto', marginRight: 2 }}>Source:</span>
+          {shownFlavors.map((f) => chip(`flavor:${f}`, FLAVOR_LABEL[f] ?? f))}
+        </div>
+      )}
     </>
   );
 }
