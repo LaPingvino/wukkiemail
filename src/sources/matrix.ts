@@ -268,6 +268,52 @@ export class MatrixSource implements Source {
     };
   }
 
+  // List rooms the user can use as a task target. Filters to rooms
+  // where the user has permission to send eu.kiefte.issue state events.
+  // Each entry tags whether it's a DM, a space child, encrypted, etc.,
+  // so the picker can show the right hint ('Private todo' vs 'Team
+  // visible').
+  listTaskTargetRooms(): TaskTargetRoom[] {
+    if (!this.client) return [];
+    const selfId = this.client.getUserId() ?? '';
+    const dmIdx = this.buildBundleIndex();
+    return this.client.getRooms()
+      .filter((r) => !isSpace(r))
+      .filter((r) => {
+        const pl = r.currentState.getStateEvents('m.room.power_levels', '');
+        const plContent = (pl?.getContent() ?? {}) as { events?: Record<string, number>; state_default?: number };
+        const required = plContent.events?.[ISSUE_EVENT] ?? plContent.state_default ?? 50;
+        const myLevel = r.getMember(selfId)?.powerLevel ?? 0;
+        return myLevel >= required;
+      })
+      .map((r) => {
+        const bundles = dmIdx.get(r.roomId) ?? [];
+        const memberIds = r.getJoinedMembers().map((m) => m.userId);
+        const flavor = flavorForRoomMembers(memberIds.filter((id) => id !== selfId));
+        return {
+          roomId: r.roomId,
+          name: r.name || r.roomId,
+          isDm: bundles.includes('dm'),
+          flavor,
+          memberCount: r.getJoinedMemberCount(),
+        };
+      })
+      .sort((a, b) => (a.isDm === b.isDm ? a.name.localeCompare(b.name) : (a.isDm ? -1 : 1)));
+  }
+
+  // Create a new issue in a target room. Caller picks the room and we
+  // generate a stable id (state_key) plus a minimal schema-compatible
+  // content (just a title — the user can edit further in the issue
+  // panel later, when we wire editing).
+  async createTask(roomId: string, title: string, extra: Record<string, unknown> = {}): Promise<string> {
+    if (!this.client) throw new Error('client not started');
+    const stateKey = crypto.randomUUID();
+    const content = { title, status: 'To Do', ...extra };
+    await this.client.sendStateEvent(roomId, ISSUE_EVENT as never, content as never, stateKey);
+    this.notify();
+    return stateKey;
+  }
+
   async setManuallyUnread(itemId: string, unread: boolean): Promise<void> {
     const s = this.getTriageState();
     const set = new Set(s.manuallyUnread);
@@ -414,6 +460,14 @@ export interface IssueComment {
   sender: string;
   body: string;
   ts: number;
+}
+
+export interface TaskTargetRoom {
+  roomId: string;
+  name: string;
+  isDm: boolean;
+  flavor: string;
+  memberCount: number;
 }
 
 export interface RoomTimelineSnapshot {

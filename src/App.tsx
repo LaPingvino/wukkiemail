@@ -4,6 +4,7 @@ import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
+import { NewTaskSheet } from './NewTaskSheet';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -208,6 +209,7 @@ function Inbox({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showRead, setShowRead] = useState(false);
   const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -531,6 +533,26 @@ function Inbox({
           roomId={selectedRoom}
           onClose={() => setSelectedRoom(null)}
         />
+      )}
+      {newTaskOpen && matrixSrc && (
+        <NewTaskSheet
+          matrix={matrixSrc}
+          onClose={() => setNewTaskOpen(false)}
+          onCreated={(roomId, issueId) => {
+            setNewTaskOpen(false);
+            setSelectedIssue({ roomId, issueId });
+          }}
+        />
+      )}
+      {matrixSrc && (
+        <button
+          type="button"
+          className="fab"
+          aria-label="New task"
+          onClick={() => setNewTaskOpen(true)}
+        >
+          <span className="material-symbols-outlined">add</span>
+        </button>
       )}
     </div>
   );
