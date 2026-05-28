@@ -89,6 +89,23 @@ export function SettingsSheet({
           {slider('recent', 'Recent', 'Activity within the last 24 hours')}
           {slider('bridgeChat', 'Bridge group penalty', 'How much group chats from bridges (WhatsApp/IRC/etc.) are demoted')}
           {slider('bot', 'Bot sender penalty', 'How much bot-looking senders are demoted')}
+
+          <label className="sheet-label">
+            <span>Statuses that count as "done"</span>
+            <input
+              type="text"
+              value={w.doneStatuses.join(', ')}
+              onChange={(e) => setW({
+                ...w,
+                doneStatuses: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+              })}
+              placeholder="Done, Closed, Resolved"
+            />
+            <span className="hint">
+              Comma-separated. Issues whose status matches any of these sink to
+              the bottom of the inbox. Case-insensitive.
+            </span>
+          </label>
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
               Live preview — your inbox top 5 with these weights:
