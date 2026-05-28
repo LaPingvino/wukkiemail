@@ -13,7 +13,7 @@ import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
 import { QueryChips } from './QueryChips';
-import type { ManualBundle } from './sources/matrix';
+import type { ManualBundle, SpaceNode } from './sources/matrix';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -185,6 +185,19 @@ const FLAVOR_LABELS: Record<ItemFlavor, string> = {
 
 
 
+// A node in the bundled stream. Space bundles can nest (children); manual
+// and flavor/dm bundles are leaves. count/unread include descendants.
+interface BundleNode {
+  key: string;
+  label: string;
+  flavor: ItemFlavor;
+  manual?: ManualBundle;
+  items: InboxItem[];   // items directly in this bundle (not in children)
+  unread: number;       // incl. descendants
+  count: number;        // incl. descendants
+  children: BundleNode[];
+}
+
 // Does a task's user-field set reference me? User fields may hold a full
 // mxid, a bare localpart, or a display name, so match loosely: equal to
 // the mxid, equal to the localpart, or either containing the other.
@@ -222,6 +235,7 @@ function Inbox({
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
+  const [spaceTree, setSpaceTree] = useState<SpaceNode[]>([]);
   const [loading, setLoading] = useState(true);
   // The bundled stream is the only view now; bundle scoping is always 'all'.
   const bundle: BundleKey = 'all';
@@ -312,6 +326,7 @@ function Inbox({
         },
       );
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
+      if (!cancelled) setSpaceTree(matrixSrc.getSpaceTree());
       if (!cancelled) setManualBundles(matrixSrc.getManualBundles());
     };
     refresh();
@@ -622,25 +637,53 @@ function Inbox({
     }
     loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
     const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+    const unreadOf = (xs: InboxItem[]) => xs.filter((g) => g.unread).length;
+
     // Manual bundles first, in user order, always present.
-    const manualList = manualBundles.map((b) => {
+    const manualList: BundleNode[] = manualBundles.map((b) => {
       const gItems = sortItems(groups.get(`manual:${b.id}`) ?? []);
       groups.delete(`manual:${b.id}`);
-      return { key: `manual:${b.id}`, label: b.label, flavor: 'matrix' as ItemFlavor, manual: b, items: gItems, unread: gItems.filter((g) => g.unread).length };
+      return { key: `manual:${b.id}`, label: b.label, flavor: 'matrix', manual: b, items: gItems, unread: unreadOf(gItems), count: gItems.length, children: [] };
     });
-    // Then the auto-bundles, sorted by activity.
-    const autoList = [...groups.entries()].map(([key, gItems]) => ({
+
+    // Spaces nest: build parent→children from the tree, then assemble nodes
+    // recursively; a space shows when it or a descendant has items.
+    const labelOf = new Map(spaceTree.map((s) => [s.id, s.label]));
+    const childrenOf = new Map<string, string[]>();
+    const allSpaceIds = new Set(spaceTree.map((s) => s.id));
+    const roots: string[] = [];
+    for (const s of spaceTree) {
+      if (s.parentId && allSpaceIds.has(s.parentId)) {
+        const arr = childrenOf.get(s.parentId) ?? []; arr.push(s.id); childrenOf.set(s.parentId, arr);
+      } else { roots.push(s.id); }
+    }
+    const buildSpace = (id: string): BundleNode => {
+      const direct = sortItems(groups.get(`space:${id}`) ?? []);
+      groups.delete(`space:${id}`);
+      const children = (childrenOf.get(id) ?? []).map(buildSpace).filter((n) => n.count > 0);
+      children.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
+      const unread = unreadOf(direct) + children.reduce((s, c) => s + c.unread, 0);
+      const count = direct.length + children.reduce((s, c) => s + c.count, 0);
+      return { key: `space:${id}`, label: labelOf.get(id) ?? id, flavor: 'matrix', items: direct, unread, count, children };
+    };
+    const spaceNodes = roots.map(buildSpace).filter((n) => n.count > 0);
+
+    // Remaining groups (dm, flavor:X, orphan spaces) render flat.
+    const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => ({
       key,
       label: bundleLabel(key as BundleKey, spaceBundles),
       flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
-      manual: undefined as ManualBundle | undefined,
       items: sortItems(gItems),
-      unread: gItems.filter((g) => g.unread).length,
+      unread: unreadOf(gItems),
+      count: gItems.length,
+      children: [],
     }));
-    autoList.sort((a, b) => (b.unread - a.unread) || (b.items.length - a.items.length) || a.label.localeCompare(b.label));
-    return { loose, groups: [...manualList, ...autoList] };
+
+    const autoTop = [...spaceNodes, ...flatAuto];
+    autoTop.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
+    return { loose, groups: [...manualList, ...autoTop] as BundleNode[] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, matrixSrc, items, manualBundles, selfMxid]);
+  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, selfMxid]);
 
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
@@ -792,6 +835,57 @@ function Inbox({
     </div>
   );
 
+  // Render one bundle row (recursively for nested spaces). `counter` carries
+  // the running keyboard-cursor index across loose items + all open bundles.
+  const renderBundleNode = (g: BundleNode, depth: number, counter: { n: number }): React.ReactNode => {
+    const open = expandedBundles.has(g.key);
+    const toggle = () => setExpandedBundles((prev) => {
+      const next = new Set(prev);
+      if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
+      return next;
+    });
+    return (
+      <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
+        <button type="button" className="bundle-head" onClick={toggle}>
+          <span className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
+          {g.manual
+            ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>bookmark</span>
+            : g.children.length > 0
+              ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>folder</span>
+              : <span className={`src ${g.flavor}`} />}
+          <span className="bundle-label">{g.label}</span>
+          <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
+          {g.manual && (
+            <span className="section-sweep" role="button" aria-label="Edit bundle" title="Edit bundle"
+              onClick={(e) => { e.stopPropagation(); setBundleSheet({ editing: g.manual }); }}>
+              <span className="material-symbols-outlined">edit</span>
+            </span>
+          )}
+          <span className="section-sweep" role="button" aria-label="Bundle actions" title="Bundle actions"
+            onClick={(e) => { e.stopPropagation(); setBundleActionFor(g.key); }}>
+            <span className="material-symbols-outlined">more_vert</span>
+          </span>
+        </button>
+        {open && (
+          <div className="bundle-body">
+            {g.items.length > 0 && renderFilterChips(
+              g.items.some((x) => x.flavor === 'issue'),
+              g.items.some((x) => x.flavor !== 'issue'),
+              g.items,
+            )}
+            {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, counter.n++))}
+            {g.children.map((child) => renderBundleNode(child, depth + 1, counter))}
+            {g.items.length === 0 && g.children.length === 0 && (
+              <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
+                <p>Nothing matches this bundle right now.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="app no-sidebar">
       <main className="main">
@@ -920,70 +1014,11 @@ function Inbox({
                   </div>,
                 );
                 // Loose (important) items shown directly at the top level.
-                for (const it of bundled.loose) if (displayFilter(it)) rendered.push(renderItem(it, idx++));
-                // Everything else folds into bundles, opened in place.
-                for (const g of bundled.groups) {
-                  const open = expandedBundles.has(g.key);
-                  rendered.push(
-                    <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`}>
-                      <button
-                        type="button"
-                        className="bundle-head"
-                        onClick={() => setExpandedBundles((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
-                          return n;
-                        })}
-                      >
-                        <span className="material-symbols-outlined bundle-chevron">
-                          {open ? 'expand_more' : 'chevron_right'}
-                        </span>
-                        {g.manual
-                          ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>bookmark</span>
-                          : <span className={`src ${g.flavor}`} />}
-                        <span className="bundle-label">{g.label}</span>
-                        <span className="bundle-count">
-                          {g.unread > 0 ? `${g.unread} unread · ` : ''}{g.items.length}
-                        </span>
-                        {g.manual && (
-                          <span
-                            className="section-sweep"
-                            role="button"
-                            aria-label="Edit bundle"
-                            title="Edit bundle"
-                            onClick={(e) => { e.stopPropagation(); setBundleSheet({ editing: g.manual }); }}
-                          >
-                            <span className="material-symbols-outlined">edit</span>
-                          </span>
-                        )}
-                        <span
-                          className="section-sweep"
-                          role="button"
-                          aria-label="Bundle actions"
-                          title="Bundle actions"
-                          onClick={(e) => { e.stopPropagation(); setBundleActionFor(g.key); }}
-                        >
-                          <span className="material-symbols-outlined">more_vert</span>
-                        </span>
-                      </button>
-                      {open && (
-                        <div className="bundle-body">
-                          {renderFilterChips(
-                            g.items.some((x) => x.flavor === 'issue'),
-                            g.items.some((x) => x.flavor !== 'issue'),
-                            g.items,
-                          )}
-                          {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, idx++))}
-                          {g.items.length === 0 && (
-                            <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
-                              <p>Nothing matches this bundle right now.</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>,
-                  );
-                }
+                const counter = { n: idx };
+                for (const it of bundled.loose) if (displayFilter(it)) rendered.push(renderItem(it, counter.n++));
+                // Everything else folds into bundles (spaces nest), opened in place.
+                for (const g of bundled.groups) rendered.push(renderBundleNode(g, 0, counter));
+                idx = counter.n;
                 // New-bundle entry at the end of the stream.
                 rendered.push(
                   <button
