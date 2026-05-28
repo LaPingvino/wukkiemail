@@ -59,8 +59,9 @@ The big direction, captured so it survives. Build it ON the filter system — do
   - Rows now lead with chat/title name, then sender + text (was sender-first).
   - Chat (RoomPanel) is now **full-screen** with a sticky bottom composer (`.room-panel`), not a side bar. IssuePanel stays a side panel.
   - Fixed: `decodeRecoveryKey` import (deep crypto-api path; not re-exported from root) — recovery-key verification works.
-  - TRANSITIONAL: top chip bar + sidebar STILL present (step c removes them); per-bundle chips still tune GLOBAL state (readFilter/status/mine); real per-bundle filter state + manual bundles later.
-  - NOT yet built: (c) sidebar removal, (d) manual bundles, (e) search redesign. Pending UX ask: search is "extremely broken" (redesign on filter engine).
+  - **Step (c) DONE**: sidebar/chip-bar/space-bubbles/hamburger all removed. Bundled stream + config bundle ARE the navigation. Deleted BundleChips/BundleRow/SourceStatus/FLAVOR_ORDER/flavorBundleKey. `bundle` is now a constant 'all'. Toolbar = brand glyph + search. Spaces are ordinary bundles. Also done this run: jump-to-chat button in IssuePanel header; chat full-screen; row order chat→sender→text; status/Mine display-filter trap fix; decodeRecoveryKey fix.
+  - TRANSITIONAL: per-bundle chips still tune GLOBAL state (readFilter/status/mine) — real per-bundle filter state is a refinement. readFilter still applied globally in `visible`.
+  - NOT yet built: (d) manual bundles as saved filters (matrix.ts still has getSavedViews/setSavedViews + SavedView type to build on), (e) search redesign on the filter engine + the search-index worker. Pending UX ask: search is "extremely broken".
 
 ## What's queued
 - **Wire JMAP + combined multi-account view** (user wants this): login UI (sessionUrl + token), then run multiple sources (Matrix slots + JMAP) behind ONE merged inbox. Design the user asked for: a combined view where every element makes clear which inbox/chat/account it came from — the provenance fields (`accountId`/`originLabel`) + `.origin-tag` rendering already exist and auto-activate once >1 source feeds `items`. The multiplexer is the missing piece: a top-level component that merges `listItems()` across sources, fans `subscribe`/triage to the right one by item id prefix, and merges `listBundles`. Then JMAP compose via EmailSubmission. Foundation in `src/sources/jmap.ts`.
