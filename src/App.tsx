@@ -9,6 +9,7 @@ import {
 import { MatrixSource } from './sources/matrix';
 import { GmailSource } from './sources/gmail';
 import { SetupScreen, gmailIsConfigured } from './Setup';
+import { IssuePanel } from './IssuePanel';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Both progress independently so the user can add
@@ -293,6 +294,7 @@ function Inbox({
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
+  const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
 
   const matrixSrc = matrix.kind === 'ready' ? matrix.source : null;
   const gmailSrc = gmail.kind === 'ready' ? gmail.source : null;
@@ -434,6 +436,15 @@ function Inbox({
                 href={it.openPath}
                 target={it.flavor === 'gmail' ? '_blank' : '_self'}
                 rel={it.flavor === 'gmail' ? 'noopener noreferrer' : undefined}
+                onClick={(e) => {
+                  // Issue items: intercept and open the inline panel
+                  // instead of letting the link navigate into the SPA.
+                  if (it.flavor === 'issue') {
+                    e.preventDefault();
+                    const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+                    if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+                  }
+                }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
               >
                 <div className={`src ${it.flavor}`} />
@@ -447,6 +458,14 @@ function Inbox({
           </div>
         )}
       </main>
+      {selectedIssue && matrixSrc && (
+        <IssuePanel
+          matrix={matrixSrc}
+          roomId={selectedIssue.roomId}
+          issueId={selectedIssue.issueId}
+          onClose={() => setSelectedIssue(null)}
+        />
+      )}
     </div>
   );
 }

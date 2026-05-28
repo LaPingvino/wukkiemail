@@ -135,6 +135,60 @@ export class MatrixSource implements Source {
     }
     return items.sort((a, b) => b.ts - a.ts);
   }
+
+  // Pull a single issue's state event + schema + comments from a room.
+  // Comments are any timeline event whose content has eu.kiefte.issue_id
+  // matching the issueId. Returns null if the room or issue isn't found.
+  getIssueDetail(roomId: string, issueId: string): IssueDetail | null {
+    if (!this.client) return null;
+    const room = this.client.getRoom(roomId);
+    if (!room) return null;
+    const ev = room.currentState.getStateEvents(ISSUE_EVENT, issueId);
+    if (!ev) return null;
+    const content = ev.getContent() as Record<string, unknown> & { _deleted?: boolean; title?: string };
+    if (content._deleted) return null;
+    const schema = getSchema(room);
+    const comments: IssueComment[] = [];
+    for (const tev of room.getLiveTimeline().getEvents()) {
+      const c = tev.getContent() as Record<string, unknown>;
+      if (c['eu.kiefte.issue_id'] !== issueId) continue;
+      const senderId = tev.getSender() ?? '?';
+      const senderMember = room.getMember(senderId);
+      comments.push({
+        id: tev.getId() ?? `${tev.getTs()}`,
+        sender: senderMember?.name ?? senderId,
+        body: String((c.body as string) ?? ''),
+        ts: tev.getTs(),
+      });
+    }
+    comments.sort((a, b) => a.ts - b.ts);
+    return {
+      issueId,
+      roomId,
+      roomName: room.name || roomId,
+      content,
+      schema,
+      comments,
+      lastUpdate: ev.getTs(),
+    };
+  }
+}
+
+export interface IssueDetail {
+  issueId: string;
+  roomId: string;
+  roomName: string;
+  content: Record<string, unknown> & { title?: string };
+  schema: IssueSchema;
+  comments: IssueComment[];
+  lastUpdate: number;
+}
+
+export interface IssueComment {
+  id: string;
+  sender: string;
+  body: string;
+  ts: number;
 }
 
 function isSpace(room: Room): boolean {

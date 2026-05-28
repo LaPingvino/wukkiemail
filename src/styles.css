@@ -136,6 +136,42 @@ body {
 .item .subj strong { color: var(--fg); font-weight: 500; }
 .item .ts { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
+/* Issue side panel */
+.issue-panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(560px, 100vw);
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0,0,0,0.08);
+  display: flex; flex-direction: column;
+  z-index: 10;
+}
+.issue-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.issue-title { font-size: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-subtitle { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-body { padding: 16px 24px; overflow-y: auto; }
+.issue-fields { display: grid; gap: 8px; margin: 0; }
+.issue-fields .field-row {
+  display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline;
+}
+.issue-fields dt { color: var(--muted); font-size: 13px; }
+.issue-fields dd { margin: 0; font-size: 14px; }
+.comment-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 12px; }
+.comment-list li {
+  padding: 12px 14px; background: var(--md-sys-color-surface-container);
+  border-radius: 12px;
+}
+.comment-head {
+  display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+  font-size: 13px;
+}
+.comment-head .ts { color: var(--muted); font-size: 11px; }
+.comment-body { white-space: pre-wrap; font-size: 14px; }
+
 /* Make Material Web buttons fit the layout */
 md-filled-button, md-outlined-button, md-text-button { width: 100%; }
 md-outlined-text-field { width: 100%; }
