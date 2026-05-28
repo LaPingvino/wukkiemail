@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
+import type { SavedView } from './sources/matrix';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
@@ -201,6 +202,7 @@ function Inbox({
 }) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<BundleKey>('all');
   const [query, setQuery] = useState('');
@@ -246,6 +248,7 @@ function Inbox({
         },
       );
       matrixSrc.listBundles().then((bs) => { if (!cancelled) setSpaceBundles(bs); });
+      if (!cancelled) setSavedViews(matrixSrc.getSavedViews());
     };
     refresh();
     let pending = false;
@@ -464,7 +467,39 @@ function Inbox({
             )}
           </div>
         </div>
-        <BundleChips bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
+        <BundleChips
+          bundle={bundle} setBundle={setBundle}
+          counts={counts} spaceBundles={spaceBundles}
+          savedViews={savedViews}
+          applyView={(v) => {
+            setBundle(v.bundle);
+            setQuery(v.query ?? '');
+            setIssueStatusFilter(v.issueStatus ?? null);
+            setShowRead(!!v.showRead);
+          }}
+          saveCurrentView={async () => {
+            if (!matrixSrc) return;
+            const name = prompt('Name this view');
+            if (!name?.trim()) return;
+            const view: SavedView = {
+              id: crypto.randomUUID(),
+              name: name.trim(),
+              bundle,
+              query: query || undefined,
+              issueStatus: issueStatusFilter ?? undefined,
+              showRead: showRead || undefined,
+            };
+            const next = [...savedViews, view];
+            setSavedViews(next);
+            await matrixSrc.setSavedViews(next);
+          }}
+          deleteView={async (id) => {
+            if (!matrixSrc) return;
+            const next = savedViews.filter((v) => v.id !== id);
+            setSavedViews(next);
+            await matrixSrc.setSavedViews(next);
+          }}
+        />
         {bundle === 'flavor:issue' && issueStatusCounts && issueStatusCounts.size > 0 && (
           <div className="chip-bar" style={{ top: 112 }}>
             <div className="chip-bar-inner">
@@ -787,12 +822,16 @@ function nextDayAt(hour: number, addDays = 1): number {
 }
 
 function BundleChips({
-  bundle, setBundle, counts, spaceBundles,
+  bundle, setBundle, counts, spaceBundles, savedViews, applyView, saveCurrentView, deleteView,
 }: {
   bundle: BundleKey;
   setBundle: (k: BundleKey) => void;
   counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
   spaceBundles: BundleSpec[];
+  savedViews: SavedView[];
+  applyView: (v: SavedView) => void;
+  saveCurrentView: () => void;
+  deleteView: (id: string) => void;
 }) {
   // Inline horizontal chip bar for the main bundles. Always shows All;
   // then DMs and each populated flavor; then space bundles. Click to
@@ -827,6 +866,20 @@ function BundleChips({
             </button>
           );
         })}
+        {savedViews.map((v) => (
+          <span key={v.id} className="chip saved" title={`Saved view: ${v.name}`}>
+            <button type="button" className="saved-apply" onClick={() => applyView(v)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4 }}>bookmark</span>
+              {v.name}
+            </button>
+            <button type="button" className="saved-del" aria-label="Delete view" onClick={() => deleteView(v.id)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+            </button>
+          </span>
+        ))}
+        <button type="button" className="chip" onClick={saveCurrentView} title="Save current view">
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+        </button>
       </div>
     </div>
   );

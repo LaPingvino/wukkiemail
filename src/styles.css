@@ -388,6 +388,22 @@ body {
   color: var(--md-sys-color-on-primary-container);
   border-color: transparent;
 }
+.chip.saved {
+  padding: 0 6px 0 0;
+  gap: 0;
+}
+.chip.saved .saved-apply,
+.chip.saved .saved-del {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px 10px;
+  display: inline-flex; align-items: center;
+  font: inherit;
+}
+.chip.saved .saved-del { padding: 6px 6px; opacity: 0.6; }
+.chip.saved .saved-del:hover { opacity: 1; }
 .chip-badge {
   background: var(--md-sys-color-primary);
   color: white;

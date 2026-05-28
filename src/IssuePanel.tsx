@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import type { MatrixSource, SchemaField } from './sources/matrix';
-import { renderInline } from './markdown';
+import { renderInline, renderFormattedHtml } from './markdown';
 
 export function IssuePanel({
   matrix,
@@ -105,7 +105,9 @@ export function IssuePanel({
                   <strong>{c.sender}</strong>
                   <span className="ts">{new Date(c.ts).toLocaleString()}</span>
                 </div>
-                <div className="comment-body">{renderInline(c.body)}</div>
+                <div className="comment-body">
+                  {c.html ? renderFormattedHtml(c.html) : renderInline(c.body)}
+                </div>
               </li>
             ))}
           </ul>
