@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { SavedView } from './sources/matrix';
-import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
+import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
@@ -219,6 +219,9 @@ function Inbox({
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [slots] = useState<string[]>(() => listSlots());
+  const activeSlot = getActiveSlot();
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   );
@@ -316,7 +319,7 @@ function Inbox({
   // instead of leaving the SPA. Each open pushes a history state; popstate
   // dispatches based on priority: action sheet > new task > settings >
   // issue panel > room panel > sidebar drawer.
-  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || encryptionOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
+  const anyModalOpen = !!actionSheetFor || newTaskOpen || settingsOpen || encryptionOpen || addAccountOpen || !!selectedIssue || !!selectedRoom || sidebarOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -325,6 +328,7 @@ function Inbox({
         else if (newTaskOpen) setNewTaskOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
+        else if (addAccountOpen) setAddAccountOpen(false);
         else if (selectedIssue) setSelectedIssue(null);
         else if (selectedRoom) setSelectedRoom(null);
         else if (sidebarOpen) setSidebarOpen(false);
@@ -469,7 +473,40 @@ function Inbox({
       <aside className="sidebar">
         <h1>WukkieMail</h1>
         <div className="accounts">
-          {matrixSrc && <AccountChip flavor="matrix" label={matrixSrc.id} />}
+          {slots.map((slot) => (
+            <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (slot === activeSlot) return;
+                  setActiveSlot(slot);
+                  window.location.reload();
+                }}
+                style={{
+                  flex: 1, minWidth: 0, padding: '6px 10px',
+                  background: slot === activeSlot ? 'var(--md-sys-color-primary-container)' : 'transparent',
+                  color: slot === activeSlot ? 'var(--md-sys-color-on-primary-container)' : 'var(--fg)',
+                  border: 'none', borderRadius: 8, cursor: slot === activeSlot ? 'default' : 'pointer',
+                  font: 'inherit', fontSize: 12, textAlign: 'left',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                <span className="src matrix" style={{ display: 'inline-block', marginRight: 6 }} />
+                {slot}
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setAddAccountOpen(true); setSidebarOpen(false); }}
+            style={{
+              padding: '6px 10px', background: 'transparent', color: 'var(--muted)',
+              border: '1px dashed var(--border)', borderRadius: 8,
+              font: 'inherit', fontSize: 12, cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            + Add account
+          </button>
         </div>
         <BundleRow id="all" label="Inbox" total={counts.total.get('all') ?? 0} unread={counts.unread.get('all') ?? 0} active={bundle === 'all'} onSelect={(k) => { setBundle(k); setSidebarOpen(false); }} />
         {(counts.total.get('dm') ?? 0) > 0 && (
@@ -816,6 +853,15 @@ function Inbox({
       {encryptionOpen && matrixSrc && (
         <EncryptionSetupSheet matrix={matrixSrc} onClose={() => setEncryptionOpen(false)} />
       )}
+      {addAccountOpen && (
+        <AddAccountSheet
+          onClose={() => setAddAccountOpen(false)}
+          onAdded={(slot) => {
+            setActiveSlot(slot);
+            window.location.reload();
+          }}
+        />
+      )}
       {newTaskOpen && matrixSrc && (
         <NewTaskSheet
           matrix={matrixSrc}
@@ -1073,11 +1119,63 @@ function Avatar({ name, flavor, presence, url }: { name: string; flavor: string;
   );
 }
 
-function AccountChip({ flavor, label }: { flavor: 'matrix'; label: string }) {
+function AddAccountSheet({
+  onClose, onAdded,
+}: {
+  onClose: () => void;
+  onAdded: (slot: string) => void;
+}) {
+  const [mxid, setMxid] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!mxid || !pw) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const creds = await loginWithPassword(mxid, pw);
+      saveCreds(creds);
+      onAdded(creds.userId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <div className="account-chip" title={label}>
-      <span className={`src ${flavor}`} style={{ width: 8, height: 8, borderRadius: 50 }} />
-      <span className="account-label">{label}</span>
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Add account</div>
+        </header>
+        <div className="sheet-body">
+          <label className="sheet-label">
+            <span>Matrix ID</span>
+            <input type="text" autoFocus value={mxid} onChange={(e) => setMxid(e.target.value)} placeholder="@you:matrix.org" />
+          </label>
+          <label className="sheet-label">
+            <span>Password</span>
+            <input
+              type="password" value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && mxid && pw) void submit(); }}
+            />
+          </label>
+          {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13, margin: 0 }}>{error}</p>}
+          <button
+            type="button" className="sheet-submit"
+            onClick={() => void submit()}
+            disabled={!mxid || !pw || busy}
+            style={{ justifySelf: 'end' }}
+          >
+            {busy ? 'Signing in…' : 'Add'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
