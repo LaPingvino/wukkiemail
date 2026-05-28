@@ -81,9 +81,10 @@ export function NewTaskSheet({
             />
           </label>
           <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
-            DMs are personal todos (private). Team rooms make the task
-            visible to everyone in the room. We only list rooms where
-            you can post state events.
+            Rooms already set up for issues come first. Rooms you can
+            bootstrap a schema in are listed second — picking one will
+            seed a default schema when you create your first task.
+            Rooms where you can't post issues are hidden.
           </p>
           <ul className="target-list">
             {filtered.length === 0 ? (
@@ -102,6 +103,7 @@ export function NewTaskSheet({
                   <span className={`src ${t.flavor}`} />
                   <div className="target-name">{t.name}</div>
                   <div className="target-meta">
+                    {!t.hasSchema && '+ schema · '}
                     {t.isDm ? 'Private' : `${t.memberCount} members`}
                   </div>
                 </label>

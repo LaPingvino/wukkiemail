@@ -658,10 +658,50 @@ body {
   background: var(--bg);
   font-size: 14px;
 }
+.reaction { cursor: pointer; font-family: inherit; }
 .reaction.self {
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
   border-color: transparent;
+}
+.reaction-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+.reaction-add:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
+.reaction-popover {
+  position: absolute;
+  bottom: 100%; left: 0;
+  margin-bottom: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+  display: flex; gap: 2px;
+  padding: 4px;
+  z-index: 6;
+}
+.reaction-popover button {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.reaction-popover button:hover { background: var(--md-sys-color-surface-container); }
+.reaction-popover form { display: inline-flex; align-items: center; padding-left: 4px; }
+.reaction-popover input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
 }
 .comment-list li { min-width: 0; max-width: 100%; }
 

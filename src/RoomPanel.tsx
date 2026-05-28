@@ -141,16 +141,21 @@ export function RoomPanel({
                 ) : (
                   <div className="comment-body">{m.body}</div>
                 )}
-                {m.reactions && m.reactions.length > 0 && (
-                  <div className="reactions">
-                    {m.reactions.map((r) => (
-                      <span key={r.key} className={`reaction ${r.selfReacted ? 'self' : ''}`}>
-                        <span>{r.key}</span>
-                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <div className="reactions">
+                  {m.reactions?.map((r) => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      className={`reaction ${r.selfReacted ? 'self' : ''}`}
+                      onClick={() => void matrix.toggleReaction(roomId, m.id, r.key)}
+                      title={r.selfReacted ? 'Remove your reaction' : 'Add your reaction'}
+                    >
+                      <span>{r.key}</span>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
+                    </button>
+                  ))}
+                  <ReactionAdder onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)} />
+                </div>
               </li>
             ))}
           </ul>
@@ -193,6 +198,46 @@ export function RoomPanel({
         </md-icon-button>
       </div>
     </div>
+  );
+}
+
+function ReactionAdder({ onAdd }: { onAdd: (key: string) => void }) {
+  const [open, setOpen] = useState(false);
+  // Tiny built-in palette + free-text. Full emoji picker is a separate
+  // dependency we'll add later if needed.
+  const palette = ['👍', '👎', '❤️', '😂', '🎉', '✅', '❌', '🙏', '🤔'];
+  return (
+    <span style={{ position: 'relative' }}>
+      <button
+        type="button"
+        className="reaction-add"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Add reaction"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_reaction</span>
+      </button>
+      {open && (
+        <div className="reaction-popover" onMouseLeave={() => setOpen(false)}>
+          {palette.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => { onAdd(e); setOpen(false); }}
+            >{e}</button>
+          ))}
+          <form
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              const input = (ev.currentTarget.elements.namedItem('k') as HTMLInputElement);
+              const v = input.value.trim();
+              if (v) { onAdd(v); setOpen(false); input.value = ''; }
+            }}
+          >
+            <input name="k" placeholder="…" maxLength={32} style={{ width: 40, padding: 2, font: 'inherit' }} />
+          </form>
+        </div>
+      )}
+    </span>
   );
 }
 
