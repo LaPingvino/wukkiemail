@@ -141,6 +141,16 @@ export function RoomPanel({
                 ) : (
                   <div className="comment-body">{m.body}</div>
                 )}
+                {m.reactions && m.reactions.length > 0 && (
+                  <div className="reactions">
+                    {m.reactions.map((r) => (
+                      <span key={r.key} className={`reaction ${r.selfReacted ? 'self' : ''}`}>
+                        <span>{r.key}</span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

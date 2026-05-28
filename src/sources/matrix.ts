@@ -416,6 +416,24 @@ export class MatrixSource implements Source {
     if (!room) return null;
     const messages: TimelineMessage[] = [];
     const all = room.getLiveTimeline().getEvents();
+    const selfId = this.client.getUserId() ?? '';
+
+    // Build a reactions index: target event_id -> key -> Set<senderId>.
+    // Single pass over all events so the per-message lookup is O(1).
+    const reactionIdx = new Map<string, Map<string, Set<string>>>();
+    for (const ev of all) {
+      if (ev.getType() !== 'm.reaction') continue;
+      const c = ev.getContent() as { 'm.relates_to'?: { event_id?: string; key?: string; rel_type?: string } };
+      const r = c['m.relates_to'];
+      if (!r || r.rel_type !== 'm.annotation' || !r.event_id || !r.key) continue;
+      const sender = ev.getSender() ?? '';
+      const byTarget = reactionIdx.get(r.event_id) ?? new Map<string, Set<string>>();
+      const senders = byTarget.get(r.key) ?? new Set<string>();
+      senders.add(sender);
+      byTarget.set(r.key, senders);
+      reactionIdx.set(r.event_id, byTarget);
+    }
+
     for (let i = all.length - 1; i >= 0 && messages.length < limit; i--) {
       const ev = all[i];
       const type = ev.getType();
@@ -449,6 +467,12 @@ export class MatrixSource implements Source {
           mimetype: content.info?.mimetype,
           size: content.info?.size,
         };
+      }
+      const byKey = reactionIdx.get(msg.id);
+      if (byKey && byKey.size > 0) {
+        msg.reactions = [...byKey.entries()]
+          .map(([key, senders]) => ({ key, count: senders.size, selfReacted: senders.has(selfId) }))
+          .sort((a, b) => b.count - a.count);
       }
       messages.push(msg);
     }
@@ -540,6 +564,7 @@ export interface TimelineMessage {
   msgtype: string;
   image?: { url: string; alt: string; w?: number; h?: number };
   file?: { url: string; name: string; mimetype?: string; size?: number };
+  reactions?: { key: string; count: number; selfReacted: boolean }[];
 }
 
 function isSpace(room: Room): boolean {

@@ -645,6 +645,24 @@ body {
   font-size: 13px;
 }
 .msg-file:hover { background: var(--md-sys-color-surface-container); }
+
+.reactions {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 6px;
+}
+.reaction {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 14px;
+}
+.reaction.self {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-color: transparent;
+}
 .comment-list li { min-width: 0; max-width: 100%; }
 
 .composer {
