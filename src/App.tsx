@@ -709,29 +709,6 @@ function Inbox({
             await matrixSrc.setSavedViews(next);
           }}
         />
-        {bundle !== 'all' && visible.length > 0 && matrixSrc && (
-          <div className="sweep-bar">
-            <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-              {visible.length} item{visible.length === 1 ? '' : 's'} in {bundleLabel(bundle, spaceBundles)}
-            </span>
-            <button
-              type="button"
-              className="sweep-btn"
-              onClick={async () => {
-                if (!matrixSrc) return;
-                if (!confirm(`Mark all ${visible.length} items in ${bundleLabel(bundle, spaceBundles)} as done?`)) return;
-                for (const it of visible) {
-                  const m = it.id.match(/^matrix:([^:]+)$/);
-                  if (m) await matrixSrc.markRoomRead(m[1]);
-                  await matrixSrc.setManuallyUnread(it.id, false);
-                }
-              }}
-            >
-              <span className="material-symbols-outlined">cleaning_services</span>
-              Sweep
-            </button>
-          </div>
-        )}
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 && msgHits.length === 0 ? (
@@ -813,6 +790,46 @@ function Inbox({
                           </>
                         )}
                       </div>
+                      {group === 'issue' ? (
+                        tasks.some((t) => t.priority > -1) && (
+                          <button
+                            type="button"
+                            className="section-sweep"
+                            title="Mark all tasks done"
+                            onClick={async () => {
+                              if (!matrixSrc) return;
+                              const open = tasks.filter((t) => t.priority > -1);
+                              if (!confirm(`Mark all ${open.length} task${open.length === 1 ? '' : 's'} done?`)) return;
+                              for (const it of open) {
+                                const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+                                if (m) await matrixSrc.markIssueDone(m[1], m[2]);
+                              }
+                            }}
+                          >
+                            <span className="material-symbols-outlined">done_all</span>
+                          </button>
+                        )
+                      ) : (
+                        messages.some((m) => m.unread) && (
+                          <button
+                            type="button"
+                            className="section-sweep"
+                            title="Mark all read"
+                            onClick={async () => {
+                              if (!matrixSrc) return;
+                              const unread = messages.filter((m) => m.unread);
+                              if (!confirm(`Mark all ${unread.length} message${unread.length === 1 ? '' : 's'} read?`)) return;
+                              for (const it of unread) {
+                                const m = it.id.match(/^matrix:([^:]+)$/);
+                                if (m) await matrixSrc.markRoomRead(m[1]);
+                                await matrixSrc.setManuallyUnread(it.id, false);
+                              }
+                            }}
+                          >
+                            <span className="material-symbols-outlined">mark_chat_read</span>
+                          </button>
+                        )
+                      )}
                     </div>,
                   );
                   lastGroup = group;
@@ -1148,9 +1165,13 @@ function BundleChips({
   // user might still want to do. Bundles whose items are all read /
   // all done get hidden so the bar stays tight. Snoozed is special:
   // it shows whenever there's at least one snoozed item (the whole
-  // point of going there is to wake them).
+  // point of going there is to wake them). The currently-selected bundle
+  // always stays visible, so finishing the last task in it doesn't yank
+  // the chip (and the whole view) out from under you.
   const isActive = (k: BundleKey) =>
-    k === 'snoozed' ? (counts.total.get(k) ?? 0) > 0 : (counts.active.get(k) ?? 0) > 0;
+    k === bundle ? true
+      : k === 'snoozed' ? (counts.total.get(k) ?? 0) > 0
+        : (counts.active.get(k) ?? 0) > 0;
   if (isActive('dm')) chips.push({ id: 'dm', label: 'DMs', flavor: 'matrix' });
   if (isActive('snoozed')) chips.push({ id: 'snoozed', label: 'Snoozed', flavor: null });
   for (const f of FLAVOR_ORDER) {

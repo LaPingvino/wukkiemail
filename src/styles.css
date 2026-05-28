@@ -570,7 +570,20 @@ body {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
+  flex: 1;
+  min-width: 0;
 }
+/* Per-section sweep action (mark all read / all done) in the header. */
+.section-sweep {
+  flex: 0 0 auto;
+  display: inline-grid; place-items: center;
+  width: 30px; height: 30px;
+  border: 1px solid var(--md-sys-color-outline-variant, var(--border));
+  border-radius: 50%;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.section-sweep:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
+.section-sweep .material-symbols-outlined { font-size: 18px; }
 .section-filters::-webkit-scrollbar { display: none; }
 /* Per-room done-status editor rows. */
 .done-room {
