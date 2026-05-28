@@ -16,12 +16,25 @@
 const STORAGE_KEY = 'wukkiemail.gmail.creds.v1';
 const STATE_KEY = 'wukkiemail.gmail.oauth.state';
 
+// Gmail "metadata" scope only — headers, labels, threading; NO message bodies.
+// Restricted scopes (gmail.readonly) require a Cloud Application Security
+// Assessment that's both expensive and slow. Metadata is "sensitive" but not
+// restricted: basic OAuth verification suffices once we want a hosted multi-
+// user instance. WukkieMail surfaces triage info inline and links out to
+// mail.google.com/.../<threadId> when the user wants the body.
 const SCOPES = [
   'openid',
   'email',
   'profile',
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.metadata',
 ].join(' ');
+
+// Build a deep link into the Gmail web UI for a given thread id.
+// The /u/0/ slot is "first signed-in account"; we don't know which slot the
+// user's account occupies, so we use the explicit ?authuser=<email> form.
+export function gmailThreadUrl(threadId: string, email: string): string {
+  return `https://mail.google.com/mail/?authuser=${encodeURIComponent(email)}#inbox/${threadId}`;
+}
 
 export interface GmailCreds {
   accessToken: string;
