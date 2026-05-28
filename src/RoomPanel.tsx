@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
-import { renderInline } from './markdown';
+import { renderInline, renderFormattedHtml } from './markdown';
 
 export function RoomPanel({
   matrix,
@@ -139,6 +139,8 @@ export function RoomPanel({
                     <span>{m.file.name}</span>
                     {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
                   </a>
+                ) : m.html ? (
+                  <div className="comment-body">{renderFormattedHtml(m.html)}</div>
                 ) : (
                   <div className="comment-body">{renderInline(m.body)}</div>
                 )}

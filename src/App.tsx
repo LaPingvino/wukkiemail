@@ -529,80 +529,98 @@ function Inbox({
           </div>
         ) : (
           <div className="item-list">
-            {visible.slice(0, 200).map((it, i) => {
-              const dim = it.priority <= -1;
-              return (
-              <a
-                key={it.id}
-                data-idx={i}
-                className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${dim ? 'dim' : ''}`}
-                href={it.openPath}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (it.flavor === 'issue') {
-                    const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
-                    if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
-                  } else {
-                    // matrix / bridge items: open the room timeline panel
-                    const m = it.id.match(/^matrix:(.+)$/);
-                    if (m) setSelectedRoom(m[1]);
-                  }
-                }}
-                style={{ color: 'inherit', textDecoration: 'none' }}
-              >
-                <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
-                <div className="from">
-                  {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
-                  {it.from}
-                </div>
-                <div className="subj">
-                  <strong>{it.subject}</strong> — {it.snippet}
-                </div>
-                <div className="ts">
-                  {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
-                </div>
-                {matrixSrc && (
-                  <button
-                    type="button"
-                    className="item-kebab"
-                    aria-label="Actions"
+            {(() => {
+              const rendered: React.ReactNode[] = [];
+              const shown = visible.slice(0, 200);
+              let lastGroup: 'issue' | 'message' | null = null;
+              const hasIssue = shown.some((x) => x.flavor === 'issue');
+              const hasOther = shown.some((x) => x.flavor !== 'issue');
+              const bothGroupsPresent = hasIssue && hasOther;
+              shown.forEach((it, i) => {
+                const group = it.flavor === 'issue' ? 'issue' : 'message';
+                // Section headers only when both groups are visible AND we're
+                // in the All view (otherwise they're noise — bundles already
+                // imply the group).
+                if (bundle === 'all' && bothGroupsPresent && group !== lastGroup) {
+                  rendered.push(
+                    <div key={`h-${group}`} className="section-header">
+                      {group === 'issue' ? 'Tasks' : 'Messages'}
+                    </div>,
+                  );
+                  lastGroup = group;
+                }
+                const dim = it.priority <= -1;
+                rendered.push(
+                  <a
+                    key={it.id}
+                    data-idx={i}
+                    className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${dim ? 'dim' : ''}`}
+                    href={it.openPath}
                     onClick={(e) => {
                       e.preventDefault();
-                      e.stopPropagation();
-                      setActionSheetFor(it.id);
+                      if (it.flavor === 'issue') {
+                        const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+                        if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+                      } else {
+                        const m = it.id.match(/^matrix:(.+)$/);
+                        if (m) setSelectedRoom(m[1]);
+                      }
                     }}
+                    style={{ color: 'inherit', textDecoration: 'none' }}
                   >
-                    <span className="material-symbols-outlined">more_vert</span>
-                  </button>
-                )}
-                {matrixSrc && (
-                  <ItemActions
-                    item={it}
-                    isPinned={it.bundles.includes('pinned')}
-                    snoozePopoverOpen={snoozePopoverFor === it.id}
-                    onTogglePin={async () => {
-                      await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned'));
-                    }}
-                    onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
-                    onSnooze={async (untilMs) => {
-                      setSnoozePopoverFor(null);
-                      await matrixSrc.setSnoozed(it.id, untilMs);
-                    }}
-                    onDone={async () => {
-                      // For matrix-room items, mark read. For issues, future:
-                      // set status to Done via state event.
-                      const m = it.id.match(/^matrix:([^:]+)$/);
-                      if (m) await matrixSrc.markRoomRead(m[1]);
-                      // Clear the manual-unread flag too in case it was set.
-                      await matrixSrc.setManuallyUnread(it.id, false);
-                    }}
-                    onToggleUnread={async () => {
-                      await matrixSrc.setManuallyUnread(it.id, !it.unread);
-                    }}
-                  />
-                )}
-              </a>
-            ); })}
+                    <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
+                    <div className="from">
+                      {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
+                      {it.from}
+                    </div>
+                    <div className="subj">
+                      <strong>{it.subject}</strong> — {it.snippet}
+                    </div>
+                    <div className="ts">
+                      {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
+                    </div>
+                    {matrixSrc && (
+                      <button
+                        type="button"
+                        className="item-kebab"
+                        aria-label="Actions"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActionSheetFor(it.id);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">more_vert</span>
+                      </button>
+                    )}
+                    {matrixSrc && (
+                      <ItemActions
+                        item={it}
+                        isPinned={it.bundles.includes('pinned')}
+                        snoozePopoverOpen={snoozePopoverFor === it.id}
+                        onTogglePin={async () => {
+                          await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned'));
+                        }}
+                        onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
+                        onSnooze={async (untilMs) => {
+                          setSnoozePopoverFor(null);
+                          await matrixSrc.setSnoozed(it.id, untilMs);
+                        }}
+                        onDone={async () => {
+                          const m = it.id.match(/^matrix:([^:]+)$/);
+                          if (m) await matrixSrc.markRoomRead(m[1]);
+                          await matrixSrc.setManuallyUnread(it.id, false);
+                        }}
+                        onToggleUnread={async () => {
+                          await matrixSrc.setManuallyUnread(it.id, !it.unread);
+                        }}
+                      />
+                    )}
+                  </a>,
+                );
+              });
+              return rendered;
+            })()}
             {hiddenReadCount > 0 && (
               <button
                 type="button"

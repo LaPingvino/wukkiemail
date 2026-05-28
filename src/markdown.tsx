@@ -10,6 +10,29 @@
 // formatted_body HTML support in a later iteration.
 
 import React from 'react';
+import DOMPurify from 'dompurify';
+
+// Sanitize Matrix formatted_body HTML. We allow the inline subset most
+// clients send (bold/italic/code/links/lists/blockquotes/headings/pre);
+// strip scripts, styles, iframes, event handlers. Links open in a new tab.
+export function renderFormattedHtml(html: string): React.ReactNode {
+  const clean = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['a', 'b', 'strong', 'em', 'i', 'u', 'code', 'pre', 'br', 'p', 'span', 'blockquote',
+      'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'del', 's', 'sub', 'sup',
+      'mx-reply', 'div'],
+    ALLOWED_ATTR: ['href', 'title', 'name', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+  });
+  // Force target=_blank rel=noopener on all anchors. DOMPurify's hooks
+  // are global so we patch after sanitize using a tiny DOM pass.
+  const tpl = document.createElement('template');
+  tpl.innerHTML = clean;
+  tpl.content.querySelectorAll('a').forEach((a) => {
+    a.setAttribute('target', '_blank');
+    a.setAttribute('rel', 'noopener noreferrer');
+  });
+  return <span dangerouslySetInnerHTML={{ __html: tpl.innerHTML }} />;
+}
 
 const URL_RE = /\b(https?:\/\/[^\s)]+[^\s.,;:!?)\]'"])/g;
 const INLINE_RE = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
