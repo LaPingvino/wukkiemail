@@ -18,6 +18,14 @@ import type { BundleSpec, InboxItem, Source } from './types';
 
 const ISSUE_EVENT = 'eu.kiefte.issue';
 const ISSUE_SCHEMA_EVENT = 'eu.kiefte.issues.schema';
+const TRIAGE_EVENT_TYPE = 'eu.kiefte.wukkiemail.triage';
+
+export interface TriageState {
+  pinned: string[];
+  snoozed: Record<string, number>;
+  manuallyUnread: string[]; // items the user flagged unread even if server says read
+}
+const EMPTY_TRIAGE: TriageState = { pinned: [], snoozed: {}, manuallyUnread: [] };
 
 interface SchemaField {
   key: string;
@@ -198,13 +206,31 @@ export class MatrixSource implements Source {
     if (!this.client) return [];
     const selfId = this.client.getUserId() ?? '';
     const bundleIndex = this.buildBundleIndex();
+    const triage = this.getTriageState();
+    const pinned = new Set(triage.pinned);
+    const now = Date.now();
     const rooms = this.client.getRooms().filter((r) => !isSpace(r));
     const items: InboxItem[] = [];
+    const manuallyUnread = new Set(triage.manuallyUnread);
+    const addItem = (item: InboxItem | null) => {
+      if (!item) return;
+      const snoozedUntil = triage.snoozed[item.id];
+      if (snoozedUntil && snoozedUntil > now) return;
+      const next = { ...item, bundles: [...item.bundles] };
+      if (pinned.has(item.id)) {
+        next.priority += 100;
+        next.bundles.push('pinned');
+      }
+      if (manuallyUnread.has(item.id)) {
+        next.unread = true;
+        next.priority += 1;
+      }
+      items.push(next);
+    };
     for (const room of rooms) {
       const extra = bundleIndex.get(room.roomId) ?? [];
-      const summary = roomToItem(room, selfId, extra);
-      if (summary) items.push(summary);
-      items.push(...issueItemsForRoom(room, extra));
+      addItem(roomToItem(room, selfId, extra));
+      for (const issueItem of issueItemsForRoom(room, extra)) addItem(issueItem);
     }
     return items.sort((a, b) => b.ts - a.ts);
   }
@@ -221,6 +247,53 @@ export class MatrixSource implements Source {
     const more = await this.client.paginateEventTimeline(timeline, { backwards: true, limit });
     this.notify();
     return more;
+  }
+
+  // ── Triage state (pin / snooze) via account data ────────────────────
+  //
+  // Persisted as a single account-data event 'eu.kiefte.wukkiemail.triage'
+  // so it syncs across this user's devices automatically. Per-item keyed
+  // by InboxItem.id (e.g. 'matrix:!room:server').
+  //
+  //   { pinned: string[], snoozed: { [id]: untilTsMs } }
+
+  getTriageState(): TriageState {
+    if (!this.client) return EMPTY_TRIAGE;
+    const ev = this.client.getAccountData(TRIAGE_EVENT_TYPE as never);
+    const c = (ev?.getContent() ?? {}) as Partial<TriageState>;
+    return {
+      pinned: Array.isArray(c.pinned) ? c.pinned : [],
+      snoozed: c.snoozed && typeof c.snoozed === 'object' ? c.snoozed : {},
+      manuallyUnread: Array.isArray(c.manuallyUnread) ? c.manuallyUnread : [],
+    };
+  }
+
+  async setManuallyUnread(itemId: string, unread: boolean): Promise<void> {
+    const s = this.getTriageState();
+    const set = new Set(s.manuallyUnread);
+    if (unread) set.add(itemId); else set.delete(itemId);
+    await this.setTriageState({ ...s, manuallyUnread: [...set] });
+  }
+
+  private async setTriageState(next: TriageState): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.setAccountData(TRIAGE_EVENT_TYPE as never, next as never);
+    this.notify();
+  }
+
+  async setPinned(itemId: string, pinned: boolean): Promise<void> {
+    const s = this.getTriageState();
+    const set = new Set(s.pinned);
+    if (pinned) set.add(itemId); else set.delete(itemId);
+    await this.setTriageState({ ...s, pinned: [...set] });
+  }
+
+  async setSnoozed(itemId: string, untilMs: number | null): Promise<void> {
+    const s = this.getTriageState();
+    const snoozed = { ...s.snoozed };
+    if (untilMs && untilMs > Date.now()) snoozed[itemId] = untilMs;
+    else delete snoozed[itemId];
+    await this.setTriageState({ ...s, snoozed });
   }
 
   // Send a plain text message to a room. For encrypted rooms this will

@@ -207,6 +207,14 @@ function Inbox({
   const [cursor, setCursor] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showRead, setShowRead] = useState(false);
+  const [snoozePopoverFor, setSnoozePopoverFor] = useState<string | null>(null);
+  // Refresh ticker: bumped every 60s so snoozed items re-evaluate
+  // around their due time without an explicit per-snooze timer.
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setRefreshTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
 
@@ -253,7 +261,7 @@ function Inbox({
       refresh();
     }, 3_000);
     return () => { cancelled = true; unsub(); clearInterval(poller); };
-  }, [matrixSrc]);
+  }, [matrixSrc, refreshTick]);
 
   const counts = useMemo(() => {
     const total = new Map<BundleKey, number>();
@@ -449,11 +457,40 @@ function Inbox({
                 style={{ color: 'inherit', textDecoration: 'none' }}
               >
                 <Avatar name={it.from} flavor={it.flavor} />
-                <div className="from">{it.from}</div>
+                <div className="from">
+                  {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
+                  {it.from}
+                </div>
                 <div className="subj">
                   <strong>{it.subject}</strong> — {it.snippet}
                 </div>
                 <div className="ts">{formatTs(it.ts)}</div>
+                {matrixSrc && (
+                  <ItemActions
+                    item={it}
+                    isPinned={it.bundles.includes('pinned')}
+                    snoozePopoverOpen={snoozePopoverFor === it.id}
+                    onTogglePin={async () => {
+                      await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned'));
+                    }}
+                    onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
+                    onSnooze={async (untilMs) => {
+                      setSnoozePopoverFor(null);
+                      await matrixSrc.setSnoozed(it.id, untilMs);
+                    }}
+                    onDone={async () => {
+                      // For matrix-room items, mark read. For issues, future:
+                      // set status to Done via state event.
+                      const m = it.id.match(/^matrix:([^:]+)$/);
+                      if (m) await matrixSrc.markRoomRead(m[1]);
+                      // Clear the manual-unread flag too in case it was set.
+                      await matrixSrc.setManuallyUnread(it.id, false);
+                    }}
+                    onToggleUnread={async () => {
+                      await matrixSrc.setManuallyUnread(it.id, !it.unread);
+                    }}
+                  />
+                )}
               </a>
             ); })}
             {hiddenReadCount > 0 && (
@@ -495,6 +532,63 @@ function Inbox({
       <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} spaceBundles={spaceBundles} />
     </div>
   );
+}
+
+function ItemActions({
+  item, isPinned, snoozePopoverOpen, onTogglePin, onOpenSnoozePopover, onSnooze, onDone, onToggleUnread,
+}: {
+  item: InboxItem;
+  isPinned: boolean;
+  snoozePopoverOpen: boolean;
+  onTogglePin: () => void;
+  onOpenSnoozePopover: () => void;
+  onSnooze: (untilMs: number | null) => void;
+  onDone: () => void;
+  onToggleUnread: () => void;
+}) {
+  const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+  return (
+    <div className="item-actions" onClick={stop}>
+      <button type="button" title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => { stop(e); onTogglePin(); }}>
+        <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
+      </button>
+      <div style={{ position: 'relative' }}>
+        <button type="button" title="Snooze" onClick={(e) => { stop(e); onOpenSnoozePopover(); }}>
+          <span className="material-symbols-outlined">schedule</span>
+        </button>
+        {snoozePopoverOpen && (
+          <div className="snooze-popover" onClick={stop}>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(Date.now() + 1 * 3600 * 1000); }}>1 hour</button>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextHourOfDay(20)); }}>This evening</button>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9)); }}>Tomorrow 9am</button>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9, 7)); }}>Next week</button>
+            {item.bundles.includes('snoozed') && (
+              <button type="button" onClick={(e) => { stop(e); onSnooze(null); }}>Unsnooze</button>
+            )}
+          </div>
+        )}
+      </div>
+      <button type="button" title={item.unread ? 'Mark read' : 'Mark unread'} onClick={(e) => { stop(e); onToggleUnread(); }}>
+        <span className="material-symbols-outlined">{item.unread ? 'mark_email_read' : 'mark_email_unread'}</span>
+      </button>
+      <button type="button" title="Done" onClick={(e) => { stop(e); onDone(); }}>
+        <span className="material-symbols-outlined">done_all</span>
+      </button>
+    </div>
+  );
+}
+
+function nextHourOfDay(hour: number): number {
+  const d = new Date();
+  if (d.getHours() >= hour) d.setDate(d.getDate() + 1);
+  d.setHours(hour, 0, 0, 0);
+  return d.getTime();
+}
+function nextDayAt(hour: number, addDays = 1): number {
+  const d = new Date();
+  d.setDate(d.getDate() + addDays);
+  d.setHours(hour, 0, 0, 0);
+  return d.getTime();
 }
 
 function BundleRow({

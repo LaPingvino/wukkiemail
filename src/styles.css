@@ -262,7 +262,18 @@ body {
   gap: 16px; padding: 12px 24px; align-items: center;
   border-bottom: 1px solid var(--border);
   transition: background 0.1s ease;
+  position: relative;
 }
+.item-actions {
+  position: absolute;
+  right: 16px; top: 50%; transform: translateY(-50%);
+  background: var(--card);
+  padding: 2px 4px;
+  border-radius: 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.item:hover .ts { opacity: 0; }
+.item.cursor .ts { opacity: 0; }
 .item:hover { background: var(--md-sys-color-surface-container); }
 .item.cursor {
   background: var(--md-sys-color-primary-container);
@@ -273,6 +284,54 @@ body {
 .item.unread .subj strong { font-weight: 600; }
 .item.dim { opacity: 0.6; }
 .item.dim:hover { opacity: 1; }
+
+.item-actions {
+  display: flex; gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  pointer-events: none;
+}
+.item:hover .item-actions,
+.item.cursor .item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.item-actions button {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.item-actions button:hover { background: rgba(127,127,127,0.2); color: var(--fg); }
+.item-actions .material-symbols-outlined { font-size: 20px; }
+
+.snooze-popover {
+  position: absolute;
+  top: 100%; right: 0;
+  margin-top: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+  display: grid;
+  min-width: 180px;
+  padding: 4px;
+  z-index: 5;
+}
+.snooze-popover button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+.snooze-popover button:hover { background: var(--md-sys-color-surface-container); }
 
 .show-read {
   display: block;
