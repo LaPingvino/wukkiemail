@@ -17,9 +17,18 @@ export function SettingsSheet({
   const [w, setW] = useState<PriorityWeights>(() => matrix.getWeights());
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [categories, setCategories] = useState<{ key: string; label: string; count: number }[]>([]);
   useEffect(() => {
     matrix.listItems(null).then(setItems).catch(() => setItems([]));
+    setCategories(matrix.getDetectedEventCategories());
   }, [matrix]);
+
+  const adjustOf = (key: string) => w.eventTypeAdjust?.[key] ?? {};
+  const setAdjust = (key: string, patch: { weight?: number; hidden?: boolean }) =>
+    setW((prev) => ({
+      ...prev,
+      eventTypeAdjust: { ...(prev.eventTypeAdjust ?? {}), [key]: { ...(prev.eventTypeAdjust?.[key] ?? {}), ...patch } },
+    }));
 
   // Re-rank using the in-flight weights. We don't persist until Save, so
   // this is a pure client-side preview.
@@ -38,12 +47,16 @@ export function SettingsSheet({
       const isBridge = it.flavor !== 'matrix' && it.flavor !== 'issue';
       if (isBridge) p -= wt.bridgeChat;
       if (it.fromAddress?.toLowerCase().includes('bot')) p -= wt.bot;
+      if (it.eventCategory) p += wt.eventTypeAdjust?.[it.eventCategory]?.weight ?? 0;
       return p;
     };
-    return [...items].sort((a, b) => (score(b) - score(a)) || (b.ts - a.ts)).slice(0, 5);
+    const hidden = (it: InboxItem) =>
+      !!it.eventCategory && w.eventTypeAdjust?.[it.eventCategory]?.hidden === true;
+    return [...items].filter((it) => !hidden(it)).sort((a, b) => (score(b) - score(a)) || (b.ts - a.ts)).slice(0, 5);
   }, [items, w]);
 
-  const slider = (key: keyof PriorityWeights, label: string, hint: string) => (
+  type NumericWeightKey = 'unread' | 'mention' | 'recent' | 'dm' | 'bridgeChat' | 'bot';
+  const slider = (key: NumericWeightKey, label: string, hint: string) => (
     <label className="slider-row" key={key}>
       <div className="slider-head">
         <strong>{label}</strong>
@@ -106,6 +119,45 @@ export function SettingsSheet({
               the bottom of the inbox. Case-insensitive.
             </span>
           </label>
+          {categories.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>By event type</div>
+              <div className="hint" style={{ marginBottom: 8 }}>
+                Detected from each room's latest event. Nudge a kind up or down,
+                or hide it entirely (pinned rooms always stay).
+              </div>
+              {categories.map((cat) => {
+                const adj = adjustOf(cat.key);
+                const weight = adj.weight ?? 0;
+                const isHidden = adj.hidden === true;
+                return (
+                  <div className="slider-row" key={cat.key} style={isHidden ? { opacity: 0.55 } : undefined}>
+                    <div className="slider-head">
+                      <strong>{cat.label} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· {cat.count}</span></strong>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                        <input
+                          type="checkbox"
+                          checked={isHidden}
+                          onChange={(e) => setAdjust(cat.key, { hidden: e.target.checked })}
+                        />
+                        Hide
+                      </label>
+                    </div>
+                    <input
+                      type="range"
+                      min={-5} max={5} step={1}
+                      value={weight}
+                      disabled={isHidden}
+                      onChange={(e) => setAdjust(cat.key, { weight: Number(e.target.value) })}
+                    />
+                    <div className="hint">
+                      {weight > 0 ? `+${weight} (pull up)` : weight < 0 ? `${weight} (sink)` : 'no change'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
               Live preview — your inbox top 5 with these weights:
