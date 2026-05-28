@@ -1142,6 +1142,7 @@ function Inbox({
           roomId={selectedIssue.roomId}
           issueId={selectedIssue.issueId}
           onClose={() => setSelectedIssue(null)}
+          onOpenChat={() => { const r = selectedIssue.roomId; setSelectedIssue(null); setSelectedRoom(r); }}
         />
       )}
       {selectedRoom && matrixSrc && (

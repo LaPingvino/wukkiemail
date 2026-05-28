@@ -13,11 +13,13 @@ export function IssuePanel({
   roomId,
   issueId,
   onClose,
+  onOpenChat,
 }: {
   matrix: MatrixSource;
   roomId: string;
   issueId: string;
   onClose: () => void;
+  onOpenChat?: () => void;
 }) {
   const [tick, setTick] = useState(0);
   useEffect(() => matrix.subscribe(() => setTick((n) => n + 1)), [matrix]);
@@ -66,6 +68,7 @@ export function IssuePanel({
         title={String(content.title ?? '(untitled)')}
         subtitle={roomName}
         onClose={onClose}
+        onOpenChat={onOpenChat}
       />
       <div className="issue-body">
         {statusField && statusField.values && (
@@ -232,7 +235,7 @@ function EditableFieldRow({
   );
 }
 
-function Header({ title, subtitle, onClose }: { title: string; subtitle?: string; onClose: () => void }) {
+function Header({ title, subtitle, onClose, onOpenChat }: { title: string; subtitle?: string; onClose: () => void; onOpenChat?: () => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -242,6 +245,11 @@ function Header({ title, subtitle, onClose }: { title: string; subtitle?: string
         <div className="issue-title">{title}</div>
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
+      {onOpenChat && (
+        <button type="button" className="hamburger" aria-label="Open chat" title="Open the chat for this room" onClick={onOpenChat}>
+          <span className="material-symbols-outlined">forum</span>
+        </button>
+      )}
     </header>
   );
 }
