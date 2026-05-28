@@ -12,6 +12,27 @@ import { CollapsibleBody } from './CollapsibleBody';
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Lazily fetch + decrypt an E2EE image into a blob URL, revoking on unmount.
+function EncryptedImage({ matrix, file, alt }: { matrix: MatrixSource; file: import('./media').EncryptedFile; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true; let made: string | null = null;
+    matrix.decryptMedia(file).then((u) => {
+      if (!live) { if (u) URL.revokeObjectURL(u); return; }
+      if (u) { made = u; setUrl(u); } else setFailed(true);
+    });
+    return () => { live = false; if (made) URL.revokeObjectURL(made); };
+  }, [matrix, file]);
+  if (failed) return <span className="msg-file"><span className="material-symbols-outlined">image</span> (couldn't decrypt image)</span>;
+  if (!url) return <span className="msg-file"><span className="material-symbols-outlined">lock</span> decrypting image…</span>;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      <img src={url} alt={alt} className="msg-image" loading="lazy" />
+    </a>
+  );
+}
+
 export function RoomPanel({
   matrix,
   roomId,
@@ -235,7 +256,9 @@ export function RoomPanel({
                   <strong>{m.senderName}</strong>
                   <span className="ts">{new Date(m.ts).toLocaleString()}</span>
                 </div>
-                {m.image ? (
+                {m.image && m.image.encrypted ? (
+                  <EncryptedImage matrix={matrix} file={m.image.encrypted} alt={m.image.alt} />
+                ) : m.image ? (
                   <a href={m.image.url} target="_blank" rel="noopener noreferrer">
                     <img
                       src={m.image.url}
@@ -305,7 +328,9 @@ export function RoomPanel({
                       onClick={() => void matrix.toggleReaction(roomId, m.id, r.key)}
                       title={r.selfReacted ? 'Remove your reaction' : 'Add your reaction'}
                     >
-                      <span>{r.key}</span>
+                      {r.key.startsWith('mxc://')
+                        ? <img className="reaction-emoji" src={matrix.mxcToHttp(r.key, 32, 32) ?? ''} alt="reaction" />
+                        : <span>{r.key}</span>}
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
                     </button>
                   ))}

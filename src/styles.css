@@ -1132,6 +1132,7 @@ body {
   font-size: 14px;
 }
 .reaction { cursor: pointer; font-family: inherit; }
+.reaction-emoji { height: 18px; width: auto; vertical-align: middle; display: block; }
 .reaction.self {
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
