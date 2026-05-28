@@ -104,6 +104,11 @@ body {
 .next-btn-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
 .next-btn-label { font-size: 11px; color: var(--muted); font-weight: 600; }
 .next-btn-sub { font-size: 12px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Matrix custom emoji rendered inline in message HTML. */
+.inline-emoji {
+  height: 1.4em; width: auto; vertical-align: -0.28em;
+  object-fit: contain; margin: 0 1px;
+}
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;

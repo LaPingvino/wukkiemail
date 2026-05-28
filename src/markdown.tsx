@@ -15,12 +15,15 @@ import DOMPurify from 'dompurify';
 // Sanitize Matrix formatted_body HTML. We allow the inline subset most
 // clients send (bold/italic/code/links/lists/blockquotes/headings/pre);
 // strip scripts, styles, iframes, event handlers. Links open in a new tab.
-export function renderFormattedHtml(html: string): React.ReactNode {
+export function renderFormattedHtml(
+  html: string,
+  opts?: { mxcToHttp?: (mxc: string) => string | null },
+): React.ReactNode {
   const clean = DOMPurify.sanitize(html, {
     ALLOWED_TAGS: ['a', 'b', 'strong', 'em', 'i', 'u', 'code', 'pre', 'br', 'p', 'span', 'blockquote',
       'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'del', 's', 'sub', 'sup',
-      'mx-reply', 'div'],
-    ALLOWED_ATTR: ['href', 'title', 'name', 'target', 'rel'],
+      'mx-reply', 'div', 'img'],
+    ALLOWED_ATTR: ['href', 'title', 'name', 'target', 'rel', 'src', 'alt', 'width', 'height'],
     ALLOW_DATA_ATTR: false,
   });
   // Force target=_blank rel=noopener on all anchors. DOMPurify's hooks
@@ -30,6 +33,22 @@ export function renderFormattedHtml(html: string): React.ReactNode {
   tpl.content.querySelectorAll('a').forEach((a) => {
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
+  });
+  // Inline images: only Matrix custom emoji (mxc:// sources) are allowed —
+  // resolve them to HTTP and shrink to text height. Any remote http(s) image
+  // is dropped (tracking-pixel / privacy guard; the spec only sanctions mxc).
+  tpl.content.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src') ?? '';
+    const url = src.startsWith('mxc://') ? opts?.mxcToHttp?.(src) : null;
+    if (url) {
+      img.setAttribute('src', url);
+      img.setAttribute('loading', 'lazy');
+      img.classList.add('inline-emoji');
+      img.removeAttribute('width');
+      img.removeAttribute('height');
+    } else {
+      img.remove();
+    }
   });
   return <span dangerouslySetInnerHTML={{ __html: tpl.innerHTML }} />;
 }

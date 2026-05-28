@@ -251,7 +251,7 @@ export function RoomPanel({
                     {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
                   </a>
                 ) : m.html ? (
-                  <CollapsibleBody className="comment-body">{renderFormattedHtml(m.html)}</CollapsibleBody>
+                  <CollapsibleBody className="comment-body">{renderFormattedHtml(m.html, { mxcToHttp: (mxc) => matrix.mxcToHttp(mxc, 64, 64) })}</CollapsibleBody>
                 ) : (
                   <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
                 )}

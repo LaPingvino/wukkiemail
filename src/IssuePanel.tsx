@@ -110,7 +110,7 @@ export function IssuePanel({
                   <span className="ts">{new Date(c.ts).toLocaleString()}</span>
                 </div>
                 <div className="comment-body">
-                  {c.html ? renderFormattedHtml(c.html) : renderInline(c.body)}
+                  {c.html ? renderFormattedHtml(c.html, { mxcToHttp: (mxc) => matrix.mxcToHttp(mxc, 64, 64) }) : renderInline(c.body)}
                 </div>
               </li>
             ))}
