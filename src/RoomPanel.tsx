@@ -22,6 +22,21 @@ export function RoomPanel({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickFile = () => fileInputRef.current?.click();
+  const onFileSelected = async (file: File) => {
+    setUploading(true);
+    setSendError(null);
+    try {
+      await matrix.uploadAndSendFile(roomId, file);
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  };
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
@@ -231,10 +246,29 @@ export function RoomPanel({
           disabled={sending || undefined}
           style={{ flex: 1, minWidth: 0 }}
         />
+        <button
+          type="button"
+          className="hamburger"
+          aria-label="Attach file"
+          onClick={pickFile}
+          disabled={uploading}
+        >
+          <span className="material-symbols-outlined">attach_file</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onFileSelected(f);
+            e.target.value = '';
+          }}
+        />
         <md-icon-button
           aria-label="Send"
           onClick={() => void send()}
-          disabled={sending || !composeText.trim() || undefined}
+          disabled={sending || uploading || !composeText.trim() || undefined}
         >
           <md-icon>send</md-icon>
         </md-icon-button>

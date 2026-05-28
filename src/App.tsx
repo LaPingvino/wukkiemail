@@ -505,7 +505,14 @@ function Inbox({
               style={{ flex: 1 }}
             />
             {query && (
-              <md-text-button onClick={() => setQuery('')}>Clear</md-text-button>
+              <button
+                type="button"
+                className="hamburger"
+                aria-label="Clear search"
+                onClick={() => setQuery('')}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
             )}
           </div>
         </div>
