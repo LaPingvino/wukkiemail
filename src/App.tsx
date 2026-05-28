@@ -570,7 +570,43 @@ function Inbox({
           onClose={() => setSelectedIssue(null)}
         />
       )}
+      <BottomNav bundle={bundle} setBundle={setBundle} counts={counts} />
     </div>
+  );
+}
+
+function BottomNav({
+  bundle,
+  setBundle,
+  counts,
+}: {
+  bundle: BundleKey;
+  setBundle: (k: BundleKey) => void;
+  counts: { total: Map<BundleKey, number>; unread: Map<BundleKey, number> };
+}) {
+  // Pick the 5 most-populated bundles (always include 'all') for the bottom bar.
+  const populated = BUNDLE_ORDER
+    .filter((k) => k === 'all' || (counts.total.get(k) ?? 0) > 0)
+    .slice(0, 5);
+  return (
+    <nav className="bottom-nav" aria-label="Inbox bundles">
+      {populated.map((key) => {
+        const unread = counts.unread.get(key) ?? 0;
+        return (
+          <button
+            key={key}
+            className={`tab ${bundle === key ? 'active' : ''}`}
+            onClick={() => setBundle(key)}
+            aria-label={BUNDLE_LABELS[key]}
+            aria-current={bundle === key ? 'page' : undefined}
+          >
+            <span className={`src ${key === 'all' ? '' : key}`} />
+            {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+            <span>{BUNDLE_LABELS[key]}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
