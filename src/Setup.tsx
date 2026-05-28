@@ -91,13 +91,27 @@ export function SetupScreen({ onBack }: { onBack: () => void }) {
         </p>
       </Step>
 
-      <Step n={4} title="Notes on scope">
+      <Step n={4} title="About the &quot;unverified app&quot; warning">
+        <p style={{ color: 'var(--muted)' }}>
+          The first time you (or any of your Test Users) sign in, Google shows
+          a scary "Google hasn't verified this app" screen. That's expected
+          while your OAuth client is in <strong>Testing</strong> mode —
+          click <strong>Advanced → Continue (unsafe)</strong>.
+        </p>
+        <p style={{ color: 'var(--muted)' }}>
+          You only need to go through Google's verification process if you want
+          to let arbitrary strangers (not on your Test Users list) sign in.
+          For personal or small-group use, Testing mode is enough.
+        </p>
+      </Step>
+
+      <Step n={5} title="Notes on scope">
         <p style={{ color: 'var(--muted)' }}>
           WukkieMail requests only the <code>gmail.metadata</code> scope — headers,
           labels, threading. No message bodies. Clicking a thread opens it in
           mail.google.com so you can read it there. This means your Google client
           stays at "basic" verification (no expensive security assessment) if you
-          ever want to publish it for other users.
+          ever do submit for verification.
         </p>
       </Step>
     </div>

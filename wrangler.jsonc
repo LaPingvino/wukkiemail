@@ -1,13 +1,12 @@
 {
-  // Unified Workers + assets model. `wrangler deploy` reads this and
-  // uploads dist/ as static assets, with functions/ as the Worker
-  // entrypoint via the Pages-Functions-compatible compat flag set.
-  // CF's dashboard "deploy command" defaults to `npx wrangler deploy`,
-  // which only works if this file is present.
+  // Unified Workers + assets. Worker handles /api/* (OAuth token swap,
+  // refresh); everything else hits the SPA via the ASSETS binding.
   "name": "wukkiemail",
   "compatibility_date": "2026-05-01",
+  "main": "src/worker.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   }
 }
