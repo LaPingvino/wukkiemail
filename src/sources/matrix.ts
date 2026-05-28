@@ -27,19 +27,20 @@ export interface TriageState {
 }
 const EMPTY_TRIAGE: TriageState = { pinned: [], snoozed: {}, manuallyUnread: [] };
 
-interface SchemaField {
+export interface SchemaField {
   key: string;
   type: 'text' | 'enum' | 'user' | 'date' | 'follow';
   label: string;
   kanban_group?: boolean;
+  values?: string[];
 }
-interface IssueSchema { fields: SchemaField[]; }
+export interface IssueSchema { fields: SchemaField[]; }
 
 const DEFAULT_SCHEMA: IssueSchema = {
   fields: [
     { key: 'title', type: 'text', label: 'Title' },
-    { key: 'status', type: 'enum', label: 'Status', kanban_group: true },
-    { key: 'priority', type: 'enum', label: 'Priority' },
+    { key: 'status', type: 'enum', label: 'Status', kanban_group: true, values: ['Backlog', 'To Do', 'In Progress', 'Done'] },
+    { key: 'priority', type: 'enum', label: 'Priority', values: ['Low', 'Medium', 'High', 'Critical'] },
   ],
 };
 
@@ -299,6 +300,19 @@ export class MatrixSource implements Source {
         };
       })
       .sort((a, b) => (a.isDm === b.isDm ? a.name.localeCompare(b.name) : (a.isDm ? -1 : 1)));
+  }
+
+  // Patch an issue's content. Merges the partial with the current
+  // state_event content and re-sends. Caller surfaces errors.
+  async updateIssue(roomId: string, issueId: string, patch: Record<string, unknown>): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    const room = this.client.getRoom(roomId);
+    if (!room) throw new Error(`room not found: ${roomId}`);
+    const ev = room.currentState.getStateEvents(ISSUE_EVENT, issueId);
+    const current = (ev?.getContent() ?? {}) as Record<string, unknown>;
+    const next = { ...current, ...patch };
+    await this.client.sendStateEvent(roomId, ISSUE_EVENT as never, next as never, issueId);
+    this.notify();
   }
 
   // Create a new issue in a target room. Caller picks the room and we

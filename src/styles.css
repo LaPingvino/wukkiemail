@@ -583,6 +583,15 @@ body {
 .issue-title { font-size: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .issue-subtitle { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .issue-body { padding: 16px 24px; overflow-y: auto; }
+.status-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 16px;
+}
+.status-chips .chip {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
 .issue-fields { display: grid; gap: 8px; margin: 0; }
 .issue-fields .field-row {
   display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline;

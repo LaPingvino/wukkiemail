@@ -1,7 +1,9 @@
 // Inline issue detail — opens when you click an issue item in the inbox.
 // Reads the issue state event + comments via MatrixSource.getIssueDetail,
-// renders the schema fields, the comment timeline, and a back button.
+// renders the schema fields, the comment timeline, status chips for
+// quick state changes, and a back button.
 
+import { useEffect, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 
 export function IssuePanel({
@@ -15,7 +17,10 @@ export function IssuePanel({
   issueId: string;
   onClose: () => void;
 }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => matrix.subscribe(() => setTick((n) => n + 1)), [matrix]);
   const detail = matrix.getIssueDetail(roomId, issueId);
+  void tick;
 
   if (!detail) {
     return (
@@ -31,14 +36,37 @@ export function IssuePanel({
 
   const { content, schema, comments, roomName } = detail;
   const title = String(content.title ?? '(untitled)');
+  // Find the kanban-group enum field, if any — used for the inline
+  // status chip bar. Falls back to first enum field with values.
+  const statusField = schema.fields.find((f) => f.kanban_group && f.type === 'enum' && f.values?.length)
+    ?? schema.fields.find((f) => f.type === 'enum' && f.values?.length);
+
+  const changeStatus = async (next: string) => {
+    try { await matrix.updateIssue(roomId, issueId, { [statusField!.key]: next }); }
+    catch (e) { console.warn('[wukkiemail] updateIssue failed', e); }
+  };
 
   return (
     <div className="issue-panel">
       <Header title={title} subtitle={roomName} onClose={onClose} />
       <div className="issue-body">
+        {statusField && statusField.values && (
+          <div className="status-chips">
+            {statusField.values.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`chip ${content[statusField.key] === v ? 'active' : ''}`}
+                onClick={() => void changeStatus(v)}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
         <dl className="issue-fields">
           {schema.fields
-            .filter((f) => f.key !== 'title')
+            .filter((f) => f.key !== 'title' && (!statusField || f.key !== statusField.key))
             .map((f) => {
               const v = content[f.key];
               if (v === undefined || v === '' || v === null) return null;
