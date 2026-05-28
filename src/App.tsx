@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import { loginWithPassword, saveCreds, clearCreds } from './auth/matrix';
+import {
+  beginLogin as beginGmailLogin,
+  consumeReturnFragment as consumeGmailReturn,
+  clearCreds as clearGmailCreds,
+} from './auth/gmail';
 import { MatrixSource } from './sources/matrix';
+import { GmailSource } from './sources/gmail';
 import type { InboxItem } from './sources/types';
 
 type AppState =
   | { kind: 'booting' }
   | { kind: 'connect' }
   | { kind: 'connecting' }
-  | { kind: 'ready'; matrix: MatrixSource };
+  | { kind: 'ready'; matrix: MatrixSource | null; gmail: GmailSource | null };
 
 export function App() {
   const [state, setState] = useState<AppState>({ kind: 'booting' });
@@ -15,13 +21,22 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const restored = MatrixSource.tryRestore();
-    if (!restored) {
+    // First: if we landed on the Gmail OAuth return URL, consume the
+    // fragment and clean up the address bar before doing anything else.
+    if (consumeGmailReturn()) {
+      window.history.replaceState({}, '', '/');
+    }
+
+    const matrix = MatrixSource.tryRestore();
+    const gmail = GmailSource.tryRestore();
+
+    if (!matrix && !gmail) {
       setState({ kind: 'connect' });
       return;
     }
-    restored.start().then(
-      () => { if (!cancelled) setState({ kind: 'ready', matrix: restored }); },
+
+    Promise.all([matrix?.start(), gmail?.start()]).then(
+      () => { if (!cancelled) setState({ kind: 'ready', matrix, gmail }); },
       (e: Error) => {
         if (cancelled) return;
         setError(e.message);
@@ -49,7 +64,7 @@ export function App() {
             saveCreds(creds);
             const src = new MatrixSource(creds);
             await src.start();
-            setState({ kind: 'ready', matrix: src });
+            setState({ kind: 'ready', matrix: src, gmail: GmailSource.tryRestore() });
           } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
             setState({ kind: 'connect' });
@@ -61,9 +76,12 @@ export function App() {
   return (
     <Inbox
       matrix={state.matrix}
+      gmail={state.gmail}
       onSignOut={async () => {
-        await state.matrix.stop();
+        await state.matrix?.stop();
+        await state.gmail?.stop();
         clearCreds();
+        clearGmailCreds();
         setState({ kind: 'connect' });
       }}
     />
@@ -110,7 +128,13 @@ function ConnectScreen({
         />
         <button type="submit">Connect Matrix</button>
       </form>
-      <button className="secondary" onClick={() => alert('Gmail OAuth wiring next iteration.')}>
+      <button
+        className="secondary"
+        onClick={() => {
+          try { beginGmailLogin(); }
+          catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+        }}
+      >
         Connect Gmail
       </button>
       {error && <p style={{ color: '#e57373', margin: 0, fontSize: 13 }}>{error}</p>}
@@ -130,20 +154,29 @@ const inputStyle: React.CSSProperties = {
   font: 'inherit',
 };
 
-function Inbox({ matrix, onSignOut }: { matrix: MatrixSource; onSignOut: () => void }) {
+function Inbox({
+  matrix,
+  gmail,
+  onSignOut,
+}: {
+  matrix: MatrixSource | null;
+  gmail: GmailSource | null;
+  onSignOut: () => void;
+}) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    matrix.listItems(null).then((xs) => {
-      if (!cancelled) {
-        setItems(xs);
-        setLoading(false);
-      }
+    const sources = [matrix, gmail].filter((s): s is NonNullable<typeof s> => s !== null);
+    Promise.all(sources.map((s) => s.listItems(null))).then((batches) => {
+      if (cancelled) return;
+      const merged = batches.flat().sort((a, b) => b.ts - a.ts);
+      setItems(merged);
+      setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [matrix]);
+  }, [matrix, gmail]);
 
   return (
     <div className="app">
