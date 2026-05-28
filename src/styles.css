@@ -172,8 +172,8 @@ body {
 
 /* List rows: hover lift like Inbox cards. */
 .item {
-  display: grid; grid-template-columns: 12px 220px 1fr auto;
-  gap: 16px; padding: 14px 24px; align-items: center;
+  display: grid; grid-template-columns: 40px 220px 1fr auto;
+  gap: 16px; padding: 12px 24px; align-items: center;
   border-bottom: 1px solid var(--border);
   transition: background 0.1s ease;
 }
@@ -183,15 +183,42 @@ body {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: -2px;
 }
+.item.unread .from { font-weight: 600; }
+.item.unread .subj strong { font-weight: 600; }
 
-.item .src { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
-.item .src.gmail { background: #ea4335; }
-.item .src.matrix { background: #0dbd8b; }
-.item .src.whatsapp { background: #25d366; }
-.item .src.meta { background: #0866ff; }
-.item .src.irc { background: #6b7280; }
-.item .src.signal { background: #3a76f0; }
-.item .src.issue { background: #f9ab00; }
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: white; font-weight: 600; font-size: 14px;
+  letter-spacing: 0.5px;
+  position: relative;
+  user-select: none;
+}
+.avatar-badge {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--card);
+  background: var(--muted);
+}
+.avatar-badge.gmail { background: #ea4335; }
+.avatar-badge.matrix { background: #0dbd8b; }
+.avatar-badge.whatsapp { background: #25d366; }
+.avatar-badge.meta { background: #0866ff; }
+.avatar-badge.irc { background: #6b7280; }
+.avatar-badge.signal { background: #3a76f0; }
+.avatar-badge.issue { background: #f9ab00; }
+
+/* Legacy .src dots still used in the sidebar account chips and bundle row */
+.item .src, .src { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.src.gmail { background: #ea4335; }
+.src.matrix { background: #0dbd8b; }
+.src.whatsapp { background: #25d366; }
+.src.meta { background: #0866ff; }
+.src.irc { background: #6b7280; }
+.src.signal { background: #3a76f0; }
+.src.issue { background: #f9ab00; }
 
 .item .from { color: var(--fg); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .item .subj { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }

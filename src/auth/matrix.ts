@@ -83,24 +83,36 @@ export async function loginWithPassword(
 }
 
 // Build a client backed by IndexedDB so the next page load is fast.
-// dbName is per-user so multi-account works once we add it. Falls back
-// to MemoryStore on private-mode browsers (where indexedDB is blocked
-// or returns nothing usable) so the app still works, just slower.
+// URL flags for debugging:
+//   ?nostore — skip IndexedDB, use MemoryStore (rules out store corruption)
+//   ?reset   — delete the IndexedDB before building, fresh start
 export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
+  const params = new URLSearchParams(window.location.search);
   const dbName = `wukkiemail:matrix:${creds.userId}`;
   let store: IndexedDBStore | MemoryStore;
-  try {
-    const idb = new IndexedDBStore({
-      indexedDB: window.indexedDB,
-      localStorage: window.localStorage,
-      dbName,
-    });
-    await idb.startup();
-    store = idb;
-  } catch (e) {
+  if (params.has('reset')) {
     // eslint-disable-next-line no-console
-    console.warn('[wukkiemail] IndexedDB store unavailable, falling back to MemoryStore', e);
+    console.warn('[wukkiemail] ?reset — deleting IndexedDB', dbName);
+    try { window.indexedDB.deleteDatabase(dbName); } catch (e) { console.warn(e); }
+  }
+  if (params.has('nostore')) {
+    // eslint-disable-next-line no-console
+    console.warn('[wukkiemail] ?nostore — using MemoryStore');
     store = new MemoryStore({ localStorage: window.localStorage });
+  } else {
+    try {
+      const idb = new IndexedDBStore({
+        indexedDB: window.indexedDB,
+        localStorage: window.localStorage,
+        dbName,
+      });
+      await idb.startup();
+      store = idb;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] IndexedDB store unavailable, falling back to MemoryStore', e);
+      store = new MemoryStore({ localStorage: window.localStorage });
+    }
   }
   return createClient({
     baseUrl: creds.homeserverUrl,

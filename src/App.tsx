@@ -536,7 +536,7 @@ function Inbox({
               <a
                 key={it.id}
                 data-idx={i}
-                className={`item ${i === cursor ? 'cursor' : ''}`}
+                className={`item ${i === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''}`}
                 href={it.openPath}
                 target={it.flavor === 'gmail' ? '_blank' : '_self'}
                 rel={it.flavor === 'gmail' ? 'noopener noreferrer' : undefined}
@@ -551,7 +551,7 @@ function Inbox({
                 }}
                 style={{ color: 'inherit', textDecoration: 'none' }}
               >
-                <div className={`src ${it.flavor}`} />
+                <Avatar name={it.from} flavor={it.flavor} />
                 <div className="from">{it.from}</div>
                 <div className="subj">
                   <strong>{it.subject}</strong> — {it.snippet}
@@ -570,6 +570,32 @@ function Inbox({
           onClose={() => setSelectedIssue(null)}
         />
       )}
+    </div>
+  );
+}
+
+// Deterministic per-name HSL: same sender gets the same color across reloads.
+function hashHue(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function initials(name: string): string {
+  // Strip "@..." mxids down to the localpart; strip <email> wrappers.
+  const cleaned = name.replace(/^@/, '').replace(/<[^>]+>/g, '').trim();
+  const parts = cleaned.split(/[\s_:.-]+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function Avatar({ name, flavor }: { name: string; flavor: string }) {
+  const hue = hashHue(name);
+  return (
+    <div className="avatar" style={{ background: `hsl(${hue} 55% 50%)` }}>
+      <span>{initials(name)}</span>
+      <span className={`avatar-badge ${flavor}`} title={flavor} />
     </div>
   );
 }
