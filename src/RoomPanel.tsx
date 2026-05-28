@@ -310,6 +310,21 @@ export function RoomPanel({
               }
             });
             el.addEventListener('blur', () => { void matrix.sendTyping(roomId, false); });
+            el.addEventListener('paste', (ev: Event) => {
+              const pe = ev as ClipboardEvent;
+              const items = pe.clipboardData?.items;
+              if (!items) return;
+              for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    ev.preventDefault();
+                    void onFileSelected(file);
+                    return;
+                  }
+                }
+              }
+            });
           }}
           disabled={sending || undefined}
           style={{ flex: 1, minWidth: 0 }}

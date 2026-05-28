@@ -330,7 +330,8 @@ function Inbox({
     const allUnread = counts.unread.get('all') ?? 0;
     const base = 'WukkieMail';
     document.title = allUnread > 0 ? `(${allUnread}) ${base}` : base;
-    return () => { document.title = 'WukkieMail'; };
+    setFaviconDot(allUnread > 0);
+    return () => { document.title = 'WukkieMail'; setFaviconDot(false); };
   }, [counts]);
 
   const visible = useMemo(() => {
@@ -1051,6 +1052,29 @@ function SourceStatus({ label, loading, error }: { label: string; loading: boole
     </div>
   );
   return null;
+}
+
+// Swap favicon between plain wukkie.svg and a version with a red dot
+// overlay. We inline a tiny SVG via data: URI so it doesn't need a
+// separate fetched file and updates immediately on toggle.
+function setFaviconDot(unread: boolean) {
+  const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+  if (!link) return;
+  if (!unread) { link.href = '/icons/wukkie.svg'; return; }
+  // Same shape as wukkie.svg, plus a small red disc top-right.
+  const dotted = `<svg viewBox='0 0 18 18' xmlns='http://www.w3.org/2000/svg'>
+    <defs>
+      <mask id='c'>
+        <rect x='0' y='0' width='18' height='18' fill='black'/>
+        <polygon points='4.2,5.2 13.0,5.2 14.0,4.2 5.2,4.2' fill='white'/>
+        <rect x='4.2' y='5.2' width='8.8' height='8.8' fill='white'/>
+      </mask>
+    </defs>
+    <circle cx='9' cy='9' r='8.5' fill='#14b8a6' stroke='#0f766e' stroke-width='1'/>
+    <rect x='0' y='0' width='18' height='18' fill='#fff' mask='url(#c)'/>
+    <circle cx='14' cy='4' r='3' fill='#ef4444' stroke='#fff' stroke-width='0.6'/>
+  </svg>`;
+  link.href = `data:image/svg+xml;utf8,${encodeURIComponent(dotted)}`;
 }
 
 function formatTs(ts: number): string {
