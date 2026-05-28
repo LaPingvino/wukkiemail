@@ -41,9 +41,11 @@ Vite + React + TS SPA. Single `MatrixSource` adapter abstraction over `matrix-js
 - Section-header sweep (replaced the bundle sweep-bar): Messages header "Mark all read", Tasks header "Mark all done" (`markIssueDone` resolves room done value). Selected bundle chip now always stays visible so finishing the last task doesn't yank the view (user-reported).
 - "None" status chip for tasks with no kanban value (user-reported: they vanished when any status chip was toggled).
 - JMAP email source FOUNDATION (`src/sources/jmap.ts`): `JmapSource implements Source`, session discovery + bearer token, Mailbox/get → bundles, Email/query+get → InboxItem (reuses 'gmail'/'Mail' flavor). NOT wired into App login yet — follow-up is account multiplexing (MatrixSource + JmapSource behind one inbox) + a JMAP login UI + compose/EmailSubmission. Built to keep the InboxItem/Source model honest for email.
+- Tasks "Mine" filter: Tasks-header chip hides tasks not referencing me in ANY schema user-typed field (not just 'assignee'). `InboxItem.userValues` (all user-field values) populated by issueItemsForRoom; loose self-match (mxid/localpart/display name). Chip only shows when tasks carry user fields.
+- Item provenance for combined inbox: `InboxItem.accountId` + `originLabel`, stamped by MatrixSource (mxid + localpart) and JmapSource (email). App renders a per-row origin tag, gated on >1 distinct account present (hidden for single-account). Groundwork for the combined view.
 
 ## What's queued
-- **Wire JMAP into the app**: login UI (sessionUrl + token), account multiplexing so the inbox merges Matrix + JMAP items, then compose via EmailSubmission. Foundation already in `src/sources/jmap.ts`.
+- **Wire JMAP + combined multi-account view** (user wants this): login UI (sessionUrl + token), then run multiple sources (Matrix slots + JMAP) behind ONE merged inbox. Design the user asked for: a combined view where every element makes clear which inbox/chat/account it came from — the provenance fields (`accountId`/`originLabel`) + `.origin-tag` rendering already exist and auto-activate once >1 source feeds `items`. The multiplexer is the missing piece: a top-level component that merges `listItems()` across sources, fans `subscribe`/triage to the right one by item id prefix, and merges `listBundles`. Then JMAP compose via EmailSubmission. Foundation in `src/sources/jmap.ts`.
 - **Wally voice/video room creation**: extend FAB menu, mirror what Wally does
 - **Mobile sync trace**: user said they'd paste console output if Matrix sync still misbehaves on their phone
 
