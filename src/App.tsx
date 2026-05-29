@@ -321,6 +321,13 @@ function Inbox({
   const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
   // When on, hide tasks not assigned to me (matched on any schema user field).
   const [mineOnly, setMineOnly] = useState(false);
+  // Per-bundle status/mine overrides, keyed by bundle node key. The global
+  // issueStatusFilter/mineOnly above stay scoped to the All-view section
+  // headers; an opened bundle's chips tune only its own entry here, so
+  // filtering tasks in one space no longer affects another (or the top view).
+  // Read filter stays global for now — it's tied to `visible`/counts, unlike
+  // these pure render-time display filters.
+  const [bundleFilters, setBundleFilters] = useState<Record<string, { status?: Set<string>; mine?: boolean }>>({});
   // Bundled-stream view: which bundles are folded open (accordion).
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   // The config bundle (settings + accounts) at the top of the stream.
@@ -661,10 +668,11 @@ function Inbox({
 
   // Per-section/per-bundle display filter for tasks (status chips + Mine).
   // Applied at render so the controlling chips never vanish with their items.
-  const displayFilter = (it: InboxItem): boolean => {
+  const displayFilter = (it: InboxItem, scopeKey?: string): boolean => {
     if (it.flavor !== 'issue') return true;
-    if (issueStatusFilter.size > 0 && !issueStatusFilter.has(it.statusValue ?? '')) return false;
-    if (mineOnly && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
+    const status = scopedStatus(scopeKey);
+    if (status.size > 0 && !status.has(it.statusValue ?? '')) return false;
+    if (scopedMine(scopeKey) && !issueAssignedToSelf(it.userValues, selfMxid)) return false;
     return true;
   };
 
@@ -692,22 +700,9 @@ function Inbox({
     [items],
   );
 
-  // Status counts for the Tasks-header status chips. Computed across every
-  // task visible in the current bundle (not just the Issues bundle) so the
-  // chips work in the All view too. Counts ignore the status filter itself
-  // so toggling a chip never makes the other chips disappear.
-  const issueStatusCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const it of items) {
-      if (it.flavor !== 'issue') continue;
-      if (bundle !== 'all' && !it.bundles.includes(bundle)) continue;
-      // Tasks with no kanban status bucket under '' so they get a "None"
-      // chip — otherwise selecting any status chip would silently hide them.
-      const key = it.statusValue ?? '';
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [items, bundle]);
+  // (Status-chip counts are computed per scope inside renderFilterChips from
+  // the items actually in that section/bundle, so they're correct everywhere
+  // and ignore the active status filter.)
 
   // Don't reset the filter when leaving the Issues bundle — the chips
   // live with the Tasks section header now and apply wherever tasks
@@ -1130,41 +1125,69 @@ function Inbox({
     </a>
   );
 
-  const toggleStatus = (status: string) =>
-    setIssueStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status); else next.add(status);
-      return next;
-    });
+  // Scoped filter access. scopeKey === undefined → the global All-view section
+  // state; a bundle node key → that bundle's own override (default: no filter,
+  // independent of the global one).
+  const EMPTY_STATUS: Set<string> = new Set();
+  const scopedStatus = (key?: string): Set<string> =>
+    key ? (bundleFilters[key]?.status ?? EMPTY_STATUS) : issueStatusFilter;
+  const scopedMine = (key?: string): boolean =>
+    key ? (bundleFilters[key]?.mine ?? false) : mineOnly;
+  const setScopedStatus = (key: string | undefined, next: Set<string>) => {
+    if (!key) { setIssueStatusFilter(next); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], status: next } }));
+  };
+  const toggleScopedStatus = (key: string | undefined, status: string) => {
+    const next = new Set(scopedStatus(key));
+    if (next.has(status)) next.delete(status); else next.add(status);
+    setScopedStatus(key, next);
+  };
+  const setScopedMine = (key: string | undefined, val: boolean) => {
+    if (!key) { setMineOnly(val); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], mine: val } }));
+  };
 
-  // The per-section / per-bundle filter controls. `items` scopes the sweep
-  // and (for the status chips inside a bundle) the available statuses.
-  const renderFilterChips = (hasIssues: boolean, hasMessages: boolean, scope: InboxItem[]): React.ReactNode => (
+  // The per-section / per-bundle filter controls. `scope` provides the sweep
+  // targets and the available task statuses (with counts). `scopeKey` selects
+  // whose filter state the chips drive: undefined for the global All-view
+  // section headers, or a bundle node key for that bundle's own state. Status
+  // counts come straight from `scope` so they're correct per-bundle and ignore
+  // the active status filter (so a chip never hides the others).
+  const renderFilterChips = (hasIssues: boolean, hasMessages: boolean, scope: InboxItem[], scopeKey?: string): React.ReactNode => {
+    const status = scopedStatus(scopeKey);
+    const mine = scopedMine(scopeKey);
+    const statusCounts = new Map<string, number>();
+    if (hasIssues) for (const it of scope) {
+      if (it.flavor !== 'issue') continue;
+      const k = it.statusValue ?? '';
+      statusCounts.set(k, (statusCounts.get(k) ?? 0) + 1);
+    }
+    return (
     <div className="section-filters">
       {hasIssues && (
         <>
           <button
             type="button"
-            className={`mini-chip ${issueStatusFilter.size === 0 ? 'active' : ''}`}
-            onClick={() => setIssueStatusFilter(new Set())}
+            className={`mini-chip ${status.size === 0 ? 'active' : ''}`}
+            onClick={() => setScopedStatus(scopeKey, new Set())}
           >All</button>
-          {[...issueStatusCounts.entries()].sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+          {[...statusCounts.entries()].sort((a, b) => b[1] - a[1]).map(([s, count]) => (
             <button
-              key={status || '∅none'}
+              key={s || '∅none'}
               type="button"
-              className={`mini-chip ${issueStatusFilter.has(status) ? 'active' : ''}`}
-              onClick={() => toggleStatus(status)}
+              className={`mini-chip ${status.has(s) ? 'active' : ''}`}
+              onClick={() => toggleScopedStatus(scopeKey, s)}
             >
-              {status || 'None'}
+              {s || 'None'}
               <span className="chip-badge">{count}</span>
             </button>
           ))}
           {anyAssignableTasks && (
             <button
               type="button"
-              className={`mini-chip ${mineOnly ? 'active' : ''}`}
+              className={`mini-chip ${mine ? 'active' : ''}`}
               title="Show only tasks assigned to me"
-              onClick={() => setMineOnly((v) => !v)}
+              onClick={() => setScopedMine(scopeKey, !mine)}
             >Mine</button>
           )}
         </>
@@ -1215,7 +1238,8 @@ function Inbox({
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   // Hide / restore / convert auto bundles. Hiding routes a default bundle's
   // items into "Other"; converting turns it into an editable manual filter.
@@ -1340,8 +1364,9 @@ function Inbox({
               g.items.some((x) => x.flavor === 'issue'),
               g.items.some((x) => x.flavor !== 'issue'),
               g.items,
+              g.key,
             )}
-            {g.items.filter(displayFilter).slice(0, 200).map((it) => renderItem(it, counter.n++))}
+            {g.items.filter((it) => displayFilter(it, g.key)).slice(0, 200).map((it) => renderItem(it, counter.n++))}
             {g.children.map((child) => renderBundleNode(child, depth + 1, counter))}
             {g.items.length === 0 && g.children.length === 0 && g.key !== 'other' && (
               <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
@@ -1574,7 +1599,7 @@ function Inbox({
                 // the group list, so they also show as part of the bundle.
                 for (const g of bundled.groups) {
                   if (g.manual?.display !== 'inline') continue;
-                  const its = collectBundleItems(g).filter(displayFilter);
+                  const its = collectBundleItems(g).filter((it) => displayFilter(it, g.key));
                   if (its.length === 0) continue;
                   rendered.push(
                     <div key={`inline-h-${g.key}`} className="section-header">
