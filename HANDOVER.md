@@ -130,12 +130,13 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - `RoomPanel` reused for the thread view via `threadRootId` + `onOpenThread` props (header "Thread"). Each main message has a forum "reply in thread" button; roots with replies show a "N replies" chip. App layers a second RoomPanel as the overlay; Escape closes thread first, auto-closes on room change.
 - NOT yet done: a threads *drawer* (list of all threads in a room). Current UX is per-message entry only — add a drawer later if wanted.
 
-### 2. Widgets port
-- Wally files: `src/app/hooks/useRoomWidgets.ts` (46L), `src/app/features/room/WidgetsDrawer.tsx` (443L), `src/app/features/call/SmallWidget.ts` (464L) + `SmallWidgetDriver.ts` (639L) + `CinnyWidget.ts`, `src/app/widget/IssueBoardWidget.tsx`.
-- Dep needed: `matrix-widget-api@1.13.0` (npm install). Wally's `SmallWidgetDriver` is a trimmed WidgetDriver (capabilities, to-device, state events, OpenID) — that's the load-bearing piece to port.
-- Widgets live in `im.vector.modular.widgets` / `m.widget` state events (account or room). useRoomWidgets reads them; WidgetsDrawer renders an iframe + drives it via ClientWidgetApi + the driver.
-- Scope: read room widgets → list → open in an iframe panel (like CallView) with the widget driver wired to our MatrixClient. Issue-board widget is the concrete use case.
-- Gotcha: widget iframe needs `allow`/sandbox attrs; capabilities negotiation is where bugs hide — port SmallWidgetDriver faithfully.
+### 2. Widgets port — DONE (2026-05-29)
+- Ported: `src/SmallWidgetDriver.ts` (full WidgetDriver: send/read events+state, to-device w/ E2EE batching, OpenID, relations, user search, media, TURN streaming), `src/SmallWidget.ts` (binds IApp -> iframe via ClientWidgetApi, read-up-to marker), `src/CinnyWidget.ts`. Dropped EC URL builders and the node EventEmitter base (TS in this repo can't construct `events`; UI doesn't consume the lifecycle events anyway).
+- `MatrixSource`: `getRoomWidgets` / `canManageWidgets` / `addWidget` / `removeWidget` over `im.vector.modular.widgets` state events; `RoomWidget` type.
+- `src/WidgetPanel.tsx`: full-screen panel (like CallView) — widget tabs, embedded iframe (template-var substitution, widgetId/parentUrl params, **start messaging BEFORE setting src**, depend on id+url only so a live iframe isn't torn down on every state echo), add/remove gated on `state_default` power.
+- RoomPanel header `widgets` button (shown when room has widgets OR user can manage); App renders WidgetPanel via `widgetRoom` state.
+- `matrix-widget-api ^1.17.0` declared explicitly (was transitive; lockfile already had it as root dep).
+- NOT done: account-level widgets (`m.widget` in account data), toolbar-pin shortcuts, the IssueBoardWidget itself (that's hosted widget content, separate). Capabilities are broad (trusted) — fine since widgets come from room state, but if we ever embed untrusted widgets, gate capabilities per-widget.
 
 ### 3. Proper emoji picker (incl. custom emoji)
 - Today: `src/emoji.ts` is a tiny hardcoded shortcode table; `expandShortcodes` swaps `:smile:`→😄 in the composer input. No picker, no custom (mxc) emoji, no `:`-autocomplete dropdown.
