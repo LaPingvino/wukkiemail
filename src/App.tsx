@@ -234,6 +234,20 @@ function collectBundleItems(node: BundleNode): InboxItem[] {
   return out;
 }
 
+// Extract the Matrix room id from an inbox item id. Item ids are
+// `matrix:<roomId>`, and a Matrix room id ALWAYS contains a colon
+// (!localpart:homeserver), so the old `/^matrix:([^:]+)$/` matched nothing —
+// markRoomRead was never actually called from the bundle/item handlers, which
+// is why "mark all read" did nothing for rooms with genuine unread (e.g. the
+// IRC bundle). Issue items are `matrix:<roomId>:issue:<issueId>`; we strip the
+// suffix so this returns the room id for those too.
+function itemRoomId(id: string): string | null {
+  if (!id.startsWith('matrix:')) return null;
+  const rest = id.slice('matrix:'.length);
+  const i = rest.indexOf(':issue:');
+  return i >= 0 ? rest.slice(0, i) : rest;
+}
+
 // Does a task's user-field set reference me? User fields may hold a full
 // mxid, a bare localpart, or a display name, so match loosely: equal to
 // the mxid, equal to the localpart, or either containing the other.
@@ -884,8 +898,8 @@ function Inbox({
     const ids: string[] = [];
     const seen = new Set<string>();
     const push = (it: InboxItem) => {
-      const m = it.id.match(/^matrix:([^:]+)$/);
-      if (m && !seen.has(m[1])) { seen.add(m[1]); ids.push(m[1]); }
+      const r = itemRoomId(it.id);
+      if (r && !seen.has(r)) { seen.add(r); ids.push(r); }
     };
     for (const it of bundled.loose) push(it);
     const walk = (nodes: BundleNode[]) => {
@@ -908,8 +922,8 @@ function Inbox({
     const seen = new Set<string>();
     const pushUnread = (it: InboxItem) => {
       if (!it.unread) return;
-      const m = it.id.match(/^matrix:([^:]+)$/);
-      if (m && !seen.has(m[1])) { seen.add(m[1]); ids.push(m[1]); }
+      const r = itemRoomId(it.id);
+      if (r && !seen.has(r)) { seen.add(r); ids.push(r); }
     };
     for (const it of bundled.loose) pushUnread(it);
     const walk = (nodes: BundleNode[]) => {
@@ -985,8 +999,8 @@ function Inbox({
             // "done" by marking the room read.
             const im = it.id.match(/^matrix:(.+):issue:(.+)$/);
             if (im) { await matrixSrc.markIssueDone(im[1], im[2]); return; }
-            const m = it.id.match(/^matrix:([^:]+)$/);
-            if (m) await matrixSrc.markRoomRead(m[1]);
+            const r = itemRoomId(it.id);
+            if (r) await matrixSrc.markRoomRead(r);
             await matrixSrc.setManuallyUnread(it.id, false);
           }}
           onToggleUnread={async () => { await matrixSrc.setManuallyUnread(it.id, !it.unread); }}
@@ -1070,8 +1084,8 @@ function Inbox({
             const unread = scope.filter((m) => m.flavor !== 'issue' && m.unread);
             if (!confirm(`Mark all ${unread.length} message${unread.length === 1 ? '' : 's'} read?`)) return;
             for (const it of unread) {
-              const m = it.id.match(/^matrix:([^:]+)$/);
-              if (m) await matrixSrc.markRoomRead(m[1]);
+              const r = itemRoomId(it.id);
+              if (r) await matrixSrc.markRoomRead(r);
               await matrixSrc.setManuallyUnread(it.id, false);
             }
           }}
@@ -1159,7 +1173,7 @@ function Inbox({
                 // (which live in g.children) were being missed entirely.
                 const all = collectBundleItems(g);
                 const msgs = all.filter((i) => i.flavor !== 'issue');
-                for (const it of msgs) { const r = it.id.match(/^matrix:([^:]+)$/)?.[1]; if (r) await matrixSrc.markRoomRead(r); }
+                for (const it of msgs) { const r = itemRoomId(it.id); if (r) await matrixSrc.markRoomRead(r); }
                 await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), false);
                 for (const it of all.filter((i) => i.flavor === 'issue')) {
                   const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
@@ -1561,7 +1575,7 @@ function Inbox({
         const allItems = collectBundleItems(g);
         const msgs = allItems.filter((i) => i.flavor !== 'issue');
         const tasks = allItems.filter((i) => i.flavor === 'issue');
-        const roomId = (id: string) => id.match(/^matrix:([^:]+)$/)?.[1];
+        const roomId = (id: string) => itemRoomId(id) ?? undefined;
         const close = () => setBundleActionFor(null);
         const canPinBundle = !['pinned', 'snoozed', 'other'].includes(g.key);
         return (
@@ -1741,8 +1755,8 @@ function Inbox({
                 {target.unread ? 'Mark read' : 'Mark unread'}
               </button>
               <button onClick={async () => {
-                const m = target.id.match(/^matrix:([^:]+)$/);
-                if (m) await matrixSrc.markRoomRead(m[1]);
+                const r = itemRoomId(target.id);
+                if (r) await matrixSrc.markRoomRead(r);
                 await matrixSrc.setManuallyUnread(target.id, false);
                 setActionSheetFor(null);
               }}>
