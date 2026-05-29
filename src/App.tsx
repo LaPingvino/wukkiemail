@@ -288,6 +288,13 @@ function Inbox({
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  // Thread overlay: a RoomPanel layered on top of the room, filtered to one
+  // thread (root event). Closing returns to the room.
+  const [openThread, setOpenThread] = useState<{ roomId: string; rootId: string } | null>(null);
+  // Close the thread overlay if its room is no longer the open one.
+  useEffect(() => {
+    setOpenThread((t) => (t && t.roomId === selectedRoom ? t : null));
+  }, [selectedRoom]);
   const [cursor, setCursor] = useState(0);
   // Read-state filter for messages: unread-only (default), read-only, or all.
   const [readFilter, setReadFilter] = useState<'unread' | 'read' | 'all'>('unread');
@@ -693,6 +700,7 @@ function Inbox({
         return;
       }
       if (e.key === 'Escape') {
+        if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
         if (query) { setQuery(''); return; }
@@ -722,7 +730,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);
@@ -1514,9 +1522,18 @@ function Inbox({
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
             onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
+            onOpenThread={(rootId) => setOpenThread({ roomId: selectedRoom, rootId })}
           />
         );
       })()}
+      {openThread && matrixSrc && (
+        <RoomPanel
+          matrix={matrixSrc}
+          roomId={openThread.roomId}
+          threadRootId={openThread.rootId}
+          onClose={() => setOpenThread(null)}
+        />
+      )}
       {callRoom && matrixSrc && (
         <CallView matrix={matrixSrc} roomId={callRoom.roomId} roomName={callRoom.name} onClose={() => setCallRoom(null)} />
       )}

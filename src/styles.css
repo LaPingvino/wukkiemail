@@ -1560,6 +1560,21 @@ body {
 .msg-reply .material-symbols-outlined { font-size: 15px; }
 .msg-reply:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
 
+/* "N replies" entry point under a message that roots a thread. */
+.thread-summary {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--md-sys-color-primary, #6750a4);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--md-sys-color-primary, #6750a4);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+}
+.thread-summary:hover { background: var(--md-sys-color-primary-container, #eaddff); }
+.thread-summary-ts { color: var(--muted); font-weight: 400; }
+
 .read-by {
   display: flex;
   gap: 2px;

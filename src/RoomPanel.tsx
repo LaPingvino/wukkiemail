@@ -40,6 +40,8 @@ export function RoomPanel({
   onNext,
   nextLabel,
   onStartCall,
+  threadRootId,
+  onOpenThread,
 }: {
   matrix: MatrixSource;
   roomId: string;
@@ -47,8 +49,14 @@ export function RoomPanel({
   onNext?: () => void;
   nextLabel?: string;
   onStartCall?: (roomName: string) => void;
+  // When set, this panel is a thread view: the timeline is filtered to the
+  // thread, the composer threads new messages, and there is no "N replies"
+  // affordance (we're already inside the thread).
+  threadRootId?: string;
+  // Open the thread hanging off a given message (main timeline only).
+  onOpenThread?: (rootEventId: string) => void;
 }) {
-  const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200));
+  const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200, threadRootId));
   const [composeText, setComposeText] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -122,11 +130,11 @@ export function RoomPanel({
 
   useEffect(() => {
     const unsub = matrix.subscribe(() => {
-      setSnap(matrix.getRoomTimeline(roomId, 200));
+      setSnap(matrix.getRoomTimeline(roomId, 200, threadRootId));
     });
     void matrix.markRoomRead(roomId);
     return unsub;
-  }, [matrix, roomId]);
+  }, [matrix, roomId, threadRootId]);
 
   // Auto-scroll: on initial open jump to the bottom; on subsequent
   // updates, stay glued to the bottom only if we were already there.
@@ -203,7 +211,7 @@ export function RoomPanel({
         await matrix.editMessage(roomId, editing.eventId, body, html);
         setEditing(null);
       } else {
-        await matrix.sendMessage(roomId, body, html, replyTo, mentionIds);
+        await matrix.sendMessage(roomId, body, html, replyTo, mentionIds, threadRootId);
         setReplyTo(null);
       }
       acceptedMentions.current.clear();
@@ -247,12 +255,12 @@ export function RoomPanel({
   return (
     <div className="issue-panel room-panel">
       <Header
-        title={snap.roomName}
-        subtitle={`${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
+        title={threadRootId ? 'Thread' : snap.roomName}
+        subtitle={threadRootId ? snap.roomName : `${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
         onClose={onClose}
-        onNext={onNext}
+        onNext={threadRootId ? undefined : onNext}
         nextLabel={nextLabel}
-        onStartCall={onStartCall ? () => onStartCall(snap.roomName) : undefined}
+        onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
       />
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
@@ -317,6 +325,18 @@ export function RoomPanel({
                 {m.edited && (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}> (edited)</span>
                 )}
+                {!threadRootId && m.threadSummary && onOpenThread && (
+                  <button
+                    type="button"
+                    className="thread-summary"
+                    onClick={() => onOpenThread(m.id)}
+                    aria-label={`Open thread, ${m.threadSummary.count} repl${m.threadSummary.count === 1 ? 'y' : 'ies'}`}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>forum</span>
+                    <span>{m.threadSummary.count} repl{m.threadSummary.count === 1 ? 'y' : 'ies'}</span>
+                    <span className="thread-summary-ts">{new Date(m.threadSummary.latestTs).toLocaleString()}</span>
+                  </button>
+                )}
                 <div className="reactions">
                   {m.reactions?.map((r) => (
                     <button
@@ -344,6 +364,17 @@ export function RoomPanel({
                   >
                     <span className="material-symbols-outlined">reply</span>
                   </button>
+                  {!threadRootId && onOpenThread && (
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label="Reply in thread"
+                      title="Reply in thread"
+                      onClick={() => onOpenThread(m.id)}
+                    >
+                      <span className="material-symbols-outlined">forum</span>
+                    </button>
+                  )}
                   {m.senderId === selfId && (
                     <>
                       <button
