@@ -361,7 +361,13 @@ body {
   .item .subj { grid-area: subj; flex-direction: column; align-items: stretch; gap: 1px; }
   .item .subj .who { max-width: 100%; }
   .item .subj .who::after { content: none; }
-  .item .subj .snip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .subj .snip {
+    white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+    /* A long unbreakable token (URL, hash) won't wrap at the clamp edge and
+       spills over the card border — break it anywhere instead. */
+    overflow-wrap: anywhere; word-break: break-word;
+  }
   .item .ts { grid-area: ts; }
   .issue-panel { width: 100vw; }
   .connect {
@@ -1188,6 +1194,7 @@ body {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  overflow-wrap: anywhere; word-break: break-word;
 }
 .comment-body mx-reply blockquote strong { color: var(--md-sys-color-primary); }
 
