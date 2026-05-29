@@ -840,6 +840,32 @@ function Inbox({
     return ids;
   }, [bundled]);
 
+  // The "Next" triage order: every unread chat, not just top-level ones.
+  // Top-level (loose) unread come first; then bundles in descending order of
+  // how many unread chats each holds (recursing into nested spaces the same
+  // way). Within a bundle, its own unread chats precede its children's.
+  const nextUnreadOrder = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const pushUnread = (it: InboxItem) => {
+      if (!it.unread) return;
+      const m = it.id.match(/^matrix:([^:]+)$/);
+      if (m && !seen.has(m[1])) { seen.add(m[1]); ids.push(m[1]); }
+    };
+    for (const it of bundled.loose) pushUnread(it);
+    const walk = (nodes: BundleNode[]) => {
+      const ranked = nodes
+        .filter((g) => g.key !== 'snoozed' && g.unread > 0)
+        .sort((a, b) => b.unread - a.unread); // most unread chats first
+      for (const g of ranked) {
+        for (const it of g.items) pushUnread(it);
+        walk(g.children);
+      }
+    };
+    walk(bundled.groups);
+    return ids;
+  }, [bundled]);
+
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
   const renderItem = (it: InboxItem, idx: number): React.ReactNode => (
@@ -1355,15 +1381,13 @@ function Inbox({
         />
       )}
       {selectedRoom && matrixSrc && (() => {
-        // "Next" walks the inbox most-unread first (natural triage order):
-        // jump to whichever other room has the most unread. Once nothing is
-        // unread, fall back to plain stream order so you can still page on.
+        // "Next" walks every unread chat in triage order (top-level first,
+        // then bundles by how many unread they hold). Once nothing is unread,
+        // fall back to plain stream order so you can still page through.
         const unreadOf = (rid: string) => items.find((x) => x.id === `matrix:${rid}`)?.unreadCount ?? 0;
-        const byUnread = roomNavOrder
-          .filter((rid) => rid !== selectedRoom && unreadOf(rid) > 0)
-          .sort((a, b) => unreadOf(b) - unreadOf(a)); // stable: ties keep stream order
         const i = roomNavOrder.indexOf(selectedRoom);
-        const nextRoom = byUnread[0] ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
+        const nextRoom = nextUnreadOrder.find((rid) => rid !== selectedRoom)
+          ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
         const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
         const nextCount = nextRoom ? unreadOf(nextRoom) : 0;
         const nextLabel = nextItem

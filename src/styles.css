@@ -1156,10 +1156,15 @@ body {
   position: relative;
 }
 .comment-head {
-  display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+  gap: 0 8px; margin-bottom: 4px;
   font-size: 13px;
 }
-.comment-head .ts { color: var(--muted); font-size: 11px; }
+.comment-head strong { min-width: 0; overflow-wrap: anywhere; }
+/* nowrap + margin-left:auto keeps the timestamp right-aligned; flex-wrap lets
+   it drop to its own line when the name leaves no room, instead of spilling
+   past the bubble's right edge. */
+.comment-head .ts { color: var(--muted); font-size: 11px; white-space: nowrap; margin-left: auto; }
 .comment-body {
   white-space: pre-wrap;
   font-size: 14px;
