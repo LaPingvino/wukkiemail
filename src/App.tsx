@@ -189,6 +189,24 @@ const FLAVOR_LABELS: Record<ItemFlavor, string> = {
 
 
 
+// App-level inbox cache in localStorage. The SDK's only persistent store is
+// IndexedDB, which on some browser profiles throws "Query failed:
+// UnknownError" and forces MemoryStore (full re-sync every reload). Caching
+// the computed item list here lets the inbox render instantly on reload
+// regardless, while the SDK re-syncs in the background.
+const itemsCacheKey = () => `wukkiemail.items.cache.v1.${getActiveSlot() ?? ''}`;
+function loadCachedItems(): InboxItem[] {
+  try {
+    const raw = localStorage.getItem(itemsCacheKey());
+    const arr = raw ? (JSON.parse(raw) as InboxItem[]) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function saveCachedItems(items: InboxItem[]): void {
+  try { localStorage.setItem(itemsCacheKey(), JSON.stringify(items.slice(0, 300))); }
+  catch { /* quota / serialization — non-fatal */ }
+}
+
 // A node in the bundled stream. Space bundles can nest (children); manual
 // and flavor/dm bundles are leaves. count/unread include descendants.
 interface BundleNode {
@@ -237,10 +255,12 @@ function Inbox({
   matrix: SourceState;
   onSignOut: () => void;
 }) {
-  const [items, setItems] = useState<InboxItem[]>([]);
+  // Hydrate the inbox from the localStorage cache immediately, so a reload
+  // shows the last-known items at once (the SDK then refreshes them).
+  const [items, setItems] = useState<InboxItem[]>(loadCachedItems);
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
   const [spaceTree, setSpaceTree] = useState<SpaceNode[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => loadCachedItems().length === 0);
   // The bundled stream is the only view now; bundle scoping is always 'all'.
   const bundle: BundleKey = 'all';
   const [query, setQuery] = useState('');
@@ -337,7 +357,9 @@ function Inbox({
           }
         }
         if (cancelled) return;
-        setItems(all.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts)));
+        const sorted = all.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+        setItems(sorted);
+        saveCachedItems(sorted);
         setLoading(false);
       })().catch((e) => {
         // eslint-disable-next-line no-console

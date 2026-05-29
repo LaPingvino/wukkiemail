@@ -198,6 +198,9 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
       // eslint-disable-next-line no-console
       console.warn('[wukkiemail] IndexedDB startup failed — rebuilding the local store', e);
       try {
+        // Close the failed store's connection first, or deleteDatabase is
+        // blocked and the "fresh" store just reopens the same broken DB.
+        try { await (store as unknown as { destroy?: () => Promise<void> }).destroy?.(); } catch { /* ignore */ }
         await new Promise<void>((resolve) => {
           const req = window.indexedDB.deleteDatabase(dbName);
           req.onsuccess = req.onerror = req.onblocked = () => resolve();
