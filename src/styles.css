@@ -1693,6 +1693,10 @@ body {
   padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto;
 }
 .emoji-search input { flex: 1; border: none; background: transparent; color: var(--fg); font: inherit; outline: none; }
+.emoji-tones { display: flex; gap: 1px; flex: 0 0 auto; }
+.emoji-tone { background: none; border: none; padding: 2px; font-size: 16px; line-height: 1; cursor: pointer; border-radius: 6px; opacity: 0.55; }
+.emoji-tone:hover { opacity: 1; }
+.emoji-tone.active { opacity: 1; background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.1)); }
 .emoji-scroll { overflow-y: auto; padding: 4px 8px 8px; }
 .emoji-loading { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
 .emoji-section h4 {

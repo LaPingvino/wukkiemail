@@ -20,6 +20,15 @@ const pushRecent = (item: RecentItem) => {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
 };
 
+// Skin-tone preference (0 = default/no tone, 1-5 = light→dark), persisted so it
+// sticks across picker opens. Swatches use the raised-hand emoji in each tone.
+const TONE_KEY = 'wukkiemail:emoji-tone';
+const TONE_SWATCHES = ['✋', '✋\u{1F3FB}', '✋\u{1F3FC}', '✋\u{1F3FD}', '✋\u{1F3FE}', '✋\u{1F3FF}'];
+const loadTone = (): number => {
+  const n = parseInt(localStorage.getItem(TONE_KEY) || '0', 10);
+  return n >= 0 && n <= 5 ? n : 0;
+};
+
 export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }: {
   onPick: (pick: EmojiPick) => void;
   onClose: () => void;
@@ -30,7 +39,13 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
   const [emojis, setEmojis] = useState<EmojiEntry[] | null>(null);
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState<RecentItem[]>(loadRecent);
+  const [tone, setTone] = useState<number>(loadTone);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Apply the chosen skin tone to an emoji that supports it; base char otherwise.
+  const toned = (e: EmojiEntry): string =>
+    (tone && e.skins?.find((s) => s.tone === tone)?.char) || e.char;
+  const chooseTone = (t: number) => { setTone(t); try { localStorage.setItem(TONE_KEY, String(t)); } catch { /* ignore */ } };
 
   useEffect(() => { void loadEmojis().then(setEmojis); }, []);
 
@@ -51,9 +66,10 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
   const filtered = useMemo(() => (emojis ? searchEmojis(emojis, query, q ? 60 : 9999) : []), [emojis, query, q]);
 
   const pickUnicode = (e: EmojiEntry) => {
-    pushRecent({ char: e.char, shortcode: e.shortcodes[0] });
+    const ch = toned(e);
+    pushRecent({ char: ch, shortcode: e.shortcodes[0] });
     setRecent(loadRecent());
-    onPick({ char: e.char });
+    onPick({ char: ch });
   };
   const pickCustom = (c: CustomEmoji) => {
     pushRecent({ mxc: c.mxc, shortcode: c.shortcode });
@@ -84,6 +100,17 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <div className="emoji-tones" role="group" aria-label="Skin tone">
+          {TONE_SWATCHES.map((sw, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`emoji-tone ${tone === i ? 'active' : ''}`}
+              title={i === 0 ? 'Default skin tone' : `Skin tone ${i}`}
+              onClick={() => chooseTone(i)}
+            >{sw}</button>
+          ))}
+        </div>
       </div>
       <div className="emoji-scroll">
         {!emojis && customMatches.length === 0 && <div className="emoji-loading">Loading emoji…</div>}
@@ -124,7 +151,7 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
             {filtered.length === 0 && customMatches.length === 0 && <div className="emoji-loading">No matches.</div>}
             <div className="emoji-grid">
               {filtered.map((e) => (
-                <button key={e.char} type="button" className="emoji-btn" title={e.shortcodes[0] ? `:${e.shortcodes[0]}:` : e.label} onClick={() => pickUnicode(e)}>{e.char}</button>
+                <button key={e.char} type="button" className="emoji-btn" title={e.shortcodes[0] ? `:${e.shortcodes[0]}:` : e.label} onClick={() => pickUnicode(e)}>{toned(e)}</button>
               ))}
             </div>
           </section>
@@ -134,7 +161,7 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
               <h4>{GROUP_LABELS[group]}</h4>
               <div className="emoji-grid">
                 {items.map((e) => (
-                  <button key={e.char} type="button" className="emoji-btn" title={e.shortcodes[0] ? `:${e.shortcodes[0]}:` : e.label} onClick={() => pickUnicode(e)}>{e.char}</button>
+                  <button key={e.char} type="button" className="emoji-btn" title={e.shortcodes[0] ? `:${e.shortcodes[0]}:` : e.label} onClick={() => pickUnicode(e)}>{toned(e)}</button>
                 ))}
               </div>
             </section>

@@ -12,6 +12,9 @@ export interface EmojiEntry {
   order: number;
   shortcodes: string[];
   tags: string[];
+  // Single-person skin-tone variants (tone 1-5 -> toned char), when the emoji
+  // supports them. Multi-person tone combos are skipped (base char only).
+  skins?: { tone: number; char: string }[];
 }
 
 // emojibase group index -> display label. Group 2 (component, e.g. skin tones)
@@ -46,6 +49,7 @@ export async function loadEmojis(): Promise<EmojiEntry[]> {
     ]);
     const compact = (compactMod.default ?? compactMod) as Array<{
       hexcode: string; label: string; unicode: string; group?: number; order?: number; tags?: string[];
+      skins?: Array<{ unicode: string; tone: number | number[] }>;
     }>;
     const sc = (shortcodesMod.default ?? shortcodesMod) as Record<string, string | string[]>;
 
@@ -54,6 +58,11 @@ export async function loadEmojis(): Promise<EmojiEntry[]> {
       .map((e) => {
         const raw = sc[e.hexcode];
         const shortcodes = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+        // Keep only single-person tone variants (tone is a lone number 1-5);
+        // multi-person combos (tone is an array) fall back to the base char.
+        const skins = e.skins
+          ?.filter((s) => typeof s.tone === 'number')
+          .map((s) => ({ tone: s.tone as number, char: s.unicode }));
         return {
           char: e.unicode,
           label: e.label,
@@ -61,6 +70,7 @@ export async function loadEmojis(): Promise<EmojiEntry[]> {
           order: e.order ?? 0,
           shortcodes,
           tags: e.tags ?? [],
+          ...(skins && skins.length ? { skins } : {}),
         };
       })
       .sort((a, b) => a.group - b.group || a.order - b.order);
