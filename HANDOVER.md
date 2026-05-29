@@ -123,11 +123,12 @@ The big direction, captured so it survives. Build it ON the filter system — do
 
 Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so SDK-level logic ports cleanly; only the cinny UI (jotai/Box/folds) needs rewriting in wukkiemail's plain-React style. We already ported calls this way (CallView/useLiveKitRoom/sfu/MatrixKeyProvider from PersistentCallContainer).
 
-### 1. Threads port
-- Wally files: `src/app/features/room/ThreadView.tsx` (170L), `ThreadsDrawer.tsx` (337L).
-- Wally uses the SDK `Thread` object when present, falling back to a main-timeline scan of `m.thread`/`rel_type` events when not.
-- WukkieMail today: `getInitialTimeline(room, threadId)` already scans the live timeline for `m.thread`/`io.element.thread` and builds a synthetic timeline (see MEMORY "Thread view architecture"). RoomPanel renders flat. Plan: add a threads drawer/affordance + a ThreadView (RootEventHeader + threaded RoomTimeline + composer with `rel_type: m.thread`). Sending: `sendMessage` needs an `m.relates_to: { rel_type: 'm.thread', event_id, is_falling_back, m.in_reply_to }`. `threadSupport: true` MUST be set in createClient (currently? verify — if not, SDK thread methods no-op).
-- Reuse our RoomPanel message renderer; thread is just a filtered timeline + thread-aware send.
+### 1. Threads port — DONE (2026-05-29)
+- `threadSupport: true` is set in `startClient` (NOT createClient — it's a `IStartClientOpts` field in this SDK fork; createClient rejects it).
+- `getRoomTimeline(roomId, limit, threadRootId?)`: builds a thread index (root -> count/latestTs/latestEventId). Main timeline hides `m.thread` replies and annotates root messages with `threadSummary`. Thread mode returns only the root + its replies.
+- `sendMessage(..., threadRootId?)`: plain thread msg falls back to a reply to the latest thread event (`is_falling_back: true`); in-thread reply targets the chosen message (`is_falling_back: false`). `latestThreadEventId` helper picks the fallback target.
+- `RoomPanel` reused for the thread view via `threadRootId` + `onOpenThread` props (header "Thread"). Each main message has a forum "reply in thread" button; roots with replies show a "N replies" chip. App layers a second RoomPanel as the overlay; Escape closes thread first, auto-closes on room change.
+- NOT yet done: a threads *drawer* (list of all threads in a room). Current UX is per-message entry only — add a drawer later if wanted.
 
 ### 2. Widgets port
 - Wally files: `src/app/hooks/useRoomWidgets.ts` (46L), `src/app/features/room/WidgetsDrawer.tsx` (443L), `src/app/features/call/SmallWidget.ts` (464L) + `SmallWidgetDriver.ts` (639L) + `CinnyWidget.ts`, `src/app/widget/IssueBoardWidget.tsx`.
