@@ -1390,6 +1390,21 @@ body {
   position: relative;
 }
 .composer md-outlined-text-field { flex: 1; }
+
+/* Full-screen embedded call (Element Call iframe). */
+.call-panel {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  background: #000;
+}
+.call-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.call-title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-head .hamburger[aria-label="Leave call"] .material-symbols-outlined { color: var(--md-sys-color-error); }
+.call-frame { flex: 1; width: 100%; border: none; background: #000; }
 /* Send error floats ABOVE the input row (composer is position:relative) so it
    never sits in the flex row and squeezes/covers the text field. Dismissable. */
 .send-error {

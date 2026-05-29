@@ -11,6 +11,8 @@ import { PersonPicker } from './PersonPicker';
 import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
+import { CallPanel } from './CallPanel';
+import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE } from './call';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
@@ -310,6 +312,7 @@ function Inbox({
   const [doneValuesOpen, setDoneValuesOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  const [callRoom, setCallRoom] = useState<{ roomId: string; name: string } | null>(null);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -1268,6 +1271,10 @@ function Inbox({
                         </div>
                         {matrixSrc && <button type="button" className="config-btn" onClick={() => setEncryptionOpen(true)}>Encryption &amp; key backup…</button>}
                         {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
+                        <button type="button" className="config-btn" onClick={() => {
+                          const v = window.prompt('Call URL template — uses Element Call by default. {roomId} and {roomName} are substituted.', getCallTemplate());
+                          if (v !== null) { setCallTemplate(v); }
+                        }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Element Call (default)' : 'custom'}</button>
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
                         {jmapSrc
@@ -1428,9 +1435,13 @@ function Inbox({
             onClose={() => setSelectedRoom(null)}
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
+            onStartCall={(name) => setCallRoom({ roomId: selectedRoom, name })}
           />
         );
       })()}
+      {callRoom && (
+        <CallPanel roomId={callRoom.roomId} roomName={callRoom.name} onClose={() => setCallRoom(null)} />
+      )}
       {settingsOpen && matrixSrc && (
         <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />
       )}

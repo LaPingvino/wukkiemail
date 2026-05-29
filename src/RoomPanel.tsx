@@ -39,12 +39,14 @@ export function RoomPanel({
   onClose,
   onNext,
   nextLabel,
+  onStartCall,
 }: {
   matrix: MatrixSource;
   roomId: string;
   onClose: () => void;
   onNext?: () => void;
   nextLabel?: string;
+  onStartCall?: (roomName: string) => void;
 }) {
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200));
   const [composeText, setComposeText] = useState('');
@@ -178,13 +180,24 @@ export function RoomPanel({
     try {
       // Turn accepted @mentions still present in the body into matrix.to
       // pills and collect their user ids for m.mentions.
-      let html = markdownToHtml(body);
       const mentionIds: string[] = [];
+      const used: Array<[string, string]> = [];
       for (const [name, uid] of acceptedMentions.current) {
         if (!body.includes(`@${name}`)) continue;
         mentionIds.push(uid);
-        const pill = `<a href="https://matrix.to/#/${uid}">@${escapeHtml(name)}</a>`;
-        if (html) html = html.split(`@${escapeHtml(name)}`).join(pill);
+        used.push([name, uid]);
+      }
+      // Build formatted_body. If there's no markdown but there ARE mentions, we
+      // still need HTML so the pills are sent as proper <a> mentions — some
+      // bots (and clients) only recognise mentions in formatted_body. Fall back
+      // to an escaped plain body in that case.
+      let html = markdownToHtml(body);
+      if (!html && used.length) html = escapeHtml(body).replace(/\n/g, '<br/>');
+      if (html) {
+        for (const [name, uid] of used) {
+          const pill = `<a href="https://matrix.to/#/${uid}">${escapeHtml(`@${name}`)}</a>`;
+          html = html.split(escapeHtml(`@${name}`)).join(pill);
+        }
       }
       if (editing) {
         await matrix.editMessage(roomId, editing.eventId, body, html);
@@ -239,6 +252,7 @@ export function RoomPanel({
         onClose={onClose}
         onNext={onNext}
         nextLabel={nextLabel}
+        onStartCall={onStartCall ? () => onStartCall(snap.roomName) : undefined}
       />
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
@@ -615,7 +629,7 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Header({ title, subtitle, onClose, onNext, nextLabel }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string }) {
+function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -625,6 +639,11 @@ function Header({ title, subtitle, onClose, onNext, nextLabel }: { title: string
         <div className="issue-title">{title}</div>
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
+      {onStartCall && (
+        <button type="button" className="hamburger" aria-label="Start voice or video call" title="Start call" onClick={onStartCall}>
+          <span className="material-symbols-outlined">videocam</span>
+        </button>
+      )}
       {onNext && (
         <button type="button" className="next-btn" title={nextLabel ? `Next: ${nextLabel}` : 'Next conversation'} onClick={onNext}>
           <span className="next-btn-text">
