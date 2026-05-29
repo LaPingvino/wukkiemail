@@ -800,12 +800,20 @@ function Inbox({
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
     const hiddenSet = new Set(hiddenBundles);
     const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
-    const assign = (it: InboxItem): string => {
+    // A manual (saved-filter) bundle matching this item — or null. Manual
+    // bundles are an EXPLICIT grouping, so they capture their matches even when
+    // the item is high-priority; otherwise high-priority matches leaked into
+    // the loose stream and the bundle (and its inline "Top section") rendered
+    // empty.
+    const matchManual = (it: InboxItem): string | null => {
       for (const { b, f } of manualParsed) {
         if (matchItem(f, it, { selfMxid })) return `manual:${b.id}`;
       }
+      return null;
+    };
+    // Auto-grouping for non-manual items: primary key, or "Other" if hidden.
+    const assignAuto = (it: InboxItem): string => {
       const k = primaryKey(it);
-      // Items whose auto-bundle the user has hidden collect in "Other".
       return hiddenSet.has(k) ? 'other' : k;
     };
     const loose: InboxItem[] = [];
@@ -816,8 +824,12 @@ function Inbox({
       // pinned items collect in a Pinned bundle at the top.
       if (it.bundles.includes('snoozed')) { pushTo('snoozed', it); continue; }
       if (it.bundles.includes('pinned')) { pushTo('pinned', it); continue; }
+      // Manual bundles win over the loose/priority heuristic so they actually
+      // collect their items (a Top-section bundle must, to show anything).
+      const manualKey = matchManual(it);
+      if (manualKey) { pushTo(manualKey, it); continue; }
       if (it.priority >= topLevel) { loose.push(it); continue; }
-      pushTo(assign(it), it);
+      pushTo(assignAuto(it), it);
     }
     loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
     const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
@@ -1221,6 +1233,7 @@ function Inbox({
           {matrixSrc && (
             <BundleActions
               node={g}
+              issuesOnly={(() => { const xs = collectBundleItems(g); return xs.length > 0 && xs.every((i) => i.flavor === 'issue'); })()}
               snoozeOpen={bundleSnoozeFor === g.key}
               onTogglePin={async () => { await matrixSrc.setPinnedBundle(g.key, !g.pinned); }}
               onOpenSnooze={() => setBundleSnoozeFor(bundleSnoozeFor === g.key ? null : g.key)}
@@ -1942,19 +1955,19 @@ function ItemActions({
         )}
       </div>
       {item.flavor === 'issue' ? (
-        // Tasks: a single "mark done" action.
+        // Issues are "done".
         <button type="button" title="Mark done" onClick={(e) => { stop(e); onDone(); }}>
           <span className="material-symbols-outlined">done_all</span>
         </button>
       ) : item.unread ? (
-        // Unread message: the primary action is "done" (mark read).
-        <button type="button" title="Done (mark read)" onClick={(e) => { stop(e); onDone(); }}>
-          <span className="material-symbols-outlined">done_all</span>
+        // Messages are "read".
+        <button type="button" title="Mark read" onClick={(e) => { stop(e); onDone(); }}>
+          <span className="material-symbols-outlined">mark_chat_read</span>
         </button>
       ) : (
         // Already read: the only useful toggle is back to unread.
         <button type="button" title="Mark unread" onClick={(e) => { stop(e); onToggleUnread(); }}>
-          <span className="material-symbols-outlined">mark_email_unread</span>
+          <span className="material-symbols-outlined">mark_chat_unread</span>
         </button>
       )}
     </div>
@@ -1965,9 +1978,10 @@ function ItemActions({
 // ItemActions. Same look and reveal-on-hover; the operations are batched
 // (pin the bundle as a unit, snooze/mark-done all members at once).
 function BundleActions({
-  node, snoozeOpen, onTogglePin, onOpenSnooze, onSnooze, onMarkDone, onMarkUnread, onMore,
+  node, issuesOnly, snoozeOpen, onTogglePin, onOpenSnooze, onSnooze, onMarkDone, onMarkUnread, onMore,
 }: {
   node: BundleNode;
+  issuesOnly: boolean;   // bundle holds only issues → "done" wording; else messages → "read"
   snoozeOpen: boolean;
   onTogglePin: () => void;
   onOpenSnooze: () => void;
@@ -2002,12 +2016,13 @@ function BundleActions({
         </div>
       )}
       {node.unread > 0 ? (
-        <button type="button" title="Mark all done" onClick={(e) => { stop(e); onMarkDone(); }}>
-          <span className="material-symbols-outlined">done_all</span>
+        // Issues are "done"; messages are "read".
+        <button type="button" title={issuesOnly ? 'Mark all done' : 'Mark all read'} onClick={(e) => { stop(e); onMarkDone(); }}>
+          <span className="material-symbols-outlined">{issuesOnly ? 'done_all' : 'mark_chat_read'}</span>
         </button>
       ) : (
         <button type="button" title="Mark all unread" onClick={(e) => { stop(e); onMarkUnread(); }}>
-          <span className="material-symbols-outlined">mark_email_unread</span>
+          <span className="material-symbols-outlined">mark_chat_unread</span>
         </button>
       )}
       <button type="button" title="More actions" onClick={(e) => { stop(e); onMore(); }}>
