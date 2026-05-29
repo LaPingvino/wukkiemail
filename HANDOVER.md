@@ -168,3 +168,19 @@ leave, knock) — fork commits 47114d3d6 / d5df99ae3 on wally-dist. Affects Wall
 too. Consumers pick it up on a fresh install (lockfile is gitignored, dep
 tracks the wally-dist branch). App-side mitigations remain: syncSpaceRooms on
 space-open + the Force-full-resync settings button.
+
+## Sliding sync (2026-05-29)
+
+WukkieMail uses simplified sliding sync (MSC4186) when the server advertises it
+(MatrixSource.maybeBuildSlidingSync -> SlidingSync.create), else classic /sync.
+Toggle: settings "Sync: sliding/classic" or ?classicsync / ?slidingsync.
+Two lists: dedicated spaces list (room_types m.space) + recency "all" list whose
+window auto-grows to cover all rooms. required_state is EXPLICIT (Continuwuity
+doesn't honour the ["*","*"] wildcard, which had left spaces with no
+m.space.child). Rooms opened in RoomPanel get a per-room subscription.
+
+SDK fork carries the load-bearing pieces (wally-dist): SlidingSync.create
+factory, per-room sync resilience (join/invite/leave/knock + onRoomData),
+storeRoom listener-leak guard (don't re-store on window growth), and demoted
+timeline-bucketing log spam. NB: SDK-only fixes need a WukkieMail redeploy so CF
+reinstalls the fork.
