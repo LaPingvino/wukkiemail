@@ -8,7 +8,11 @@
 // The template supports {roomId} and {roomName} placeholders.
 
 const KEY = 'wukkiemail.callUrlTemplate';
-export const DEFAULT_CALL_TEMPLATE = 'https://call.element.io/room/#?roomId={roomId}';
+// Default to the Wally Conference guest page (standalone LiveKit client, no
+// Element Call / Matrix auth → no "Join as Guest" prompt). Point it at your
+// wally-conference deployment; the {roomId} segment is the Matrix room id. The
+// bot must be in the room (!wc activate). Editable in settings → Call link.
+export const DEFAULT_CALL_TEMPLATE = 'https://chat.kiefte.eu/guest/{roomId}';
 
 export function getCallTemplate(): string {
   try { return localStorage.getItem(KEY) || DEFAULT_CALL_TEMPLATE; } catch { return DEFAULT_CALL_TEMPLATE; }

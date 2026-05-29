@@ -1281,9 +1281,9 @@ function Inbox({
                         {matrixSrc && <button type="button" className="config-btn" onClick={() => setEncryptionOpen(true)}>Encryption &amp; key backup…</button>}
                         {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
                         <button type="button" className="config-btn" onClick={() => {
-                          const v = window.prompt('Call URL template — uses Element Call by default. {roomId} and {roomName} are substituted.', getCallTemplate());
+                          const v = window.prompt('Call URL template. {roomId} and {roomName} are substituted. Default is the Wally Conference guest page (standalone LiveKit, no login).', getCallTemplate());
                           if (v !== null) { setCallTemplate(v); }
-                        }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Element Call (default)' : 'custom'}</button>
+                        }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Wally Conference (default)' : 'custom'}</button>
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
                         {jmapSrc
