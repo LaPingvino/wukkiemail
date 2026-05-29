@@ -27,6 +27,7 @@ export interface InboxItem {
   unread: boolean;
   unreadCount?: number;  // number of unread notifications (for "most unread" ordering); 0/absent when read
   invite?: boolean;      // a pending invite (you're invited but haven't joined) — shows Accept/Decline
+  joinable?: boolean;    // a room listed in a space you're in but haven't joined — shows Join
   threadCount: number;
   priority: number;      // higher = more important; sorted desc with ts as tie-break
   snoozedUntil?: number; // ms epoch when this item wakes from snooze

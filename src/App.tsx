@@ -999,6 +999,7 @@ function Inbox({
       <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
       <div className="from">
         {it.invite && <span className="invite-badge">Invite</span>}
+        {it.joinable && <span className="invite-badge joinable-badge">Join</span>}
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
         {it.subject}
         {showOrigin && it.originLabel && (
@@ -1044,6 +1045,24 @@ function Inbox({
             }}
           >
             <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      ) : matrixSrc && it.joinable ? (
+        // A room in a space we're in but haven't joined — one Join button.
+        <div className="invite-actions">
+          <button
+            type="button"
+            className="invite-accept"
+            title="Join room"
+            onClick={async (e) => {
+              e.preventDefault(); e.stopPropagation();
+              const r = itemRoomId(it.id);
+              if (!r) return;
+              try { await matrixSrc.acceptInvite(r); setSelectedRoom(r); }
+              catch (err) { console.warn('[wukkiemail] join failed', err); }
+            }}
+          >
+            <span className="material-symbols-outlined">add</span> Join
           </button>
         </div>
       ) : matrixSrc && (

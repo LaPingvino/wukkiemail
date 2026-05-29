@@ -607,6 +607,12 @@ body {
   vertical-align: middle;
 }
 .item.invite { background: var(--md-sys-color-primary-container, #eaddff33); }
+/* Joinable (in-space, not joined) badge — outlined, lower-key than invites. */
+.joinable-badge {
+  background: transparent !important;
+  color: var(--md-sys-color-primary, #6750a4) !important;
+  border: 1px solid var(--md-sys-color-primary, #6750a4);
+}
 .invite-actions { display: inline-flex; align-items: center; gap: 6px; }
 .invite-accept {
   display: inline-flex; align-items: center; gap: 4px;
