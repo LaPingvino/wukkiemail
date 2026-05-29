@@ -36,6 +36,54 @@ function EncryptedImage({ matrix, file, alt }: { matrix: MatrixSource; file: imp
   );
 }
 
+// Encrypted file / video / audio. Unlike images we decrypt LAZILY on click —
+// these can be large (a video) and we don't want to fetch+decrypt every
+// attachment in a scrollback. Once decrypted, A/V plays inline; anything else
+// becomes a download link with the original filename.
+function EncryptedFileLink({ matrix, file, name, mimetype, size, fmtBytes }: {
+  matrix: MatrixSource;
+  file: import('./media').EncryptedFile;
+  name: string;
+  mimetype?: string;
+  size?: number;
+  fmtBytes: (n: number) => string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const madeRef = useRef<string | null>(null);
+  useEffect(() => () => { if (madeRef.current) URL.revokeObjectURL(madeRef.current); }, []);
+  const decrypt = async () => {
+    if (url || busy) return;
+    setBusy(true); setFailed(false);
+    const u = await matrix.decryptMedia(file, mimetype);
+    setBusy(false);
+    if (u) { madeRef.current = u; setUrl(u); } else setFailed(true);
+  };
+  if (url && mimetype?.startsWith('video/')) {
+    return <video src={url} controls className="msg-image" />;
+  }
+  if (url && mimetype?.startsWith('audio/')) {
+    return <audio src={url} controls style={{ maxWidth: '100%' }} />;
+  }
+  if (url) {
+    return (
+      <a href={url} download={name} className="msg-file">
+        <span className="material-symbols-outlined">download</span>
+        <span>{name}</span>
+        {size != null && <span style={{ color: 'var(--muted)' }}>· {fmtBytes(size)}</span>}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className="msg-file" onClick={() => void decrypt()} disabled={busy} style={{ cursor: 'pointer' }}>
+      <span className="material-symbols-outlined">{failed ? 'error' : 'lock'}</span>
+      <span>{failed ? "Couldn't decrypt" : busy ? 'Decrypting…' : name}</span>
+      {size != null && <span style={{ color: 'var(--muted)' }}>· {fmtBytes(size)}</span>}
+    </button>
+  );
+}
+
 export function RoomPanel({
   matrix,
   roomId,
@@ -414,6 +462,8 @@ export function RoomPanel({
                       loading="lazy"
                     />
                   </a>
+                ) : m.file && m.file.encrypted ? (
+                  <EncryptedFileLink matrix={matrix} file={m.file.encrypted} name={m.file.name} mimetype={m.file.mimetype} size={m.file.size} fmtBytes={formatBytes} />
                 ) : m.file ? (
                   <a href={m.file.url} target="_blank" rel="noopener noreferrer" className="msg-file">
                     <span className="material-symbols-outlined">attach_file</span>
