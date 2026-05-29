@@ -985,6 +985,27 @@ body {
   font: inherit;
 }
 .snooze-popover button:hover { background: var(--md-sys-color-surface-container); }
+.snooze-custom {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 8px; margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+.snooze-custom input {
+  font: inherit; font-size: 13px; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px; width: 100%; box-sizing: border-box;
+}
+.snooze-custom .snooze-custom-go {
+  text-align: center; font-size: 13px; font-weight: 500;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.snooze-popover .snooze-unsnooze {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px; border-top: 1px solid var(--border);
+  color: var(--md-sys-color-primary); font-weight: 500;
+}
+.snooze-popover .snooze-unsnooze .material-symbols-outlined { font-size: 18px; }
 
 .show-read {
   display: block;

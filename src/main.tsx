@@ -22,6 +22,15 @@ async function requestPersistentStorage(): Promise<void> {
     const granted = await navigator.storage.persist();
     // eslint-disable-next-line no-console
     console.info(`[wukkiemail] persistent storage ${granted ? 'granted' : 'denied'}`);
+    // Quota pressure is a common cause of IndexedDB "UnknownError"/eviction
+    // (per matrix-js-sdk storage notes) — surface it for diagnosis.
+    if (navigator.storage.estimate) {
+      const { usage, quota } = await navigator.storage.estimate();
+      if (typeof usage === 'number' && typeof quota === 'number') {
+        // eslint-disable-next-line no-console
+        console.info(`[wukkiemail] storage ~${Math.round(usage / 1e6)}MB used of ~${Math.round(quota / 1e6)}MB (${Math.round((usage / quota) * 100)}%)`);
+      }
+    }
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[wukkiemail] storage.persist() failed', e);

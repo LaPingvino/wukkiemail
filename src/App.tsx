@@ -1460,14 +1460,23 @@ function Inbox({
                   {g.pinned ? 'Unpin bundle' : 'Pin bundle to top'}
                 </button>
               )}
-              <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextHourOfDay(20)); close(); }}>
-                <span className="material-symbols-outlined">schedule</span>
-                Snooze all until this evening
-              </button>
-              <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextDayAt(9)); close(); }}>
-                <span className="material-symbols-outlined">schedule</span>
-                Snooze all until tomorrow
-              </button>
+              {g.key === 'snoozed' ? (
+                <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), null); close(); }}>
+                  <span className="material-symbols-outlined">alarm_off</span>
+                  Unsnooze all
+                </button>
+              ) : (
+                <>
+                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextHourOfDay(20)); close(); }}>
+                    <span className="material-symbols-outlined">schedule</span>
+                    Snooze all until this evening
+                  </button>
+                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextDayAt(9)); close(); }}>
+                    <span className="material-symbols-outlined">schedule</span>
+                    Snooze all until tomorrow
+                  </button>
+                </>
+              )}
               {g.manual && (
                 <button onClick={() => { setBundleActionFor(null); setBundleSheet({ editing: g.manual }); }}>
                   <span className="material-symbols-outlined">edit</span>
@@ -1657,25 +1666,25 @@ function ItemActions({
   onToggleUnread: () => void;
 }) {
   const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const isSnoozed = item.bundles.includes('snoozed');
   return (
     <div className="item-actions" onClick={stop}>
       <button type="button" title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => { stop(e); onTogglePin(); }}>
         <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
       </button>
+      {/* Snoozed items get a one-click unsnooze; the schedule button still
+          opens the chooser for re-scheduling. */}
+      {isSnoozed && (
+        <button type="button" title="Unsnooze" onClick={(e) => { stop(e); onSnooze(null); }}>
+          <span className="material-symbols-outlined">alarm_off</span>
+        </button>
+      )}
       <div style={{ position: 'relative' }}>
-        <button type="button" title="Snooze" onClick={(e) => { stop(e); onOpenSnoozePopover(); }}>
+        <button type="button" title={isSnoozed ? 'Reschedule snooze' : 'Snooze'} onClick={(e) => { stop(e); onOpenSnoozePopover(); }}>
           <span className="material-symbols-outlined">schedule</span>
         </button>
         {snoozePopoverOpen && (
-          <div className="snooze-popover" onClick={stop}>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(Date.now() + 1 * 3600 * 1000); }}>1 hour</button>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextHourOfDay(20)); }}>This evening</button>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9)); }}>Tomorrow 9am</button>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9, 7)); }}>Next week</button>
-            {item.bundles.includes('snoozed') && (
-              <button type="button" onClick={(e) => { stop(e); onSnooze(null); }}>Unsnooze</button>
-            )}
-          </div>
+          <SnoozeMenu snoozed={isSnoozed} currentUntil={item.snoozedUntil} onSnooze={onSnooze} />
         )}
       </div>
       {item.flavor === 'issue' ? (
@@ -1723,15 +1732,11 @@ function BundleActions({
         </button>
       )}
       <div style={{ position: 'relative' }}>
-        <button type="button" title="Snooze all" onClick={(e) => { stop(e); onOpenSnooze(); }}>
+        <button type="button" title={node.key === 'snoozed' ? 'Reschedule / unsnooze all' : 'Snooze all'} onClick={(e) => { stop(e); onOpenSnooze(); }}>
           <span className="material-symbols-outlined">schedule</span>
         </button>
         {snoozeOpen && (
-          <div className="snooze-popover" onClick={stop}>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextHourOfDay(20)); }}>This evening</button>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9)); }}>Tomorrow 9am</button>
-            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9, 7)); }}>Next week</button>
-          </div>
+          <SnoozeMenu snoozed={node.key === 'snoozed'} allLabel onSnooze={onSnooze} />
         )}
       </div>
       {node.unread > 0 ? (
@@ -1761,6 +1766,67 @@ function nextDayAt(hour: number, addDays = 1): number {
   d.setDate(d.getDate() + addDays);
   d.setHours(hour, 0, 0, 0);
   return d.getTime();
+}
+// Upcoming Saturday at `hour` (today if it's already the weekend before then).
+function nextWeekendAt(hour: number): number {
+  const d = new Date();
+  const day = d.getDay(); // 0 Sun … 6 Sat
+  let add = (6 - day + 7) % 7; // days until Saturday
+  if (add === 0 && d.getHours() >= hour) add = 7;
+  d.setDate(d.getDate() + add);
+  d.setHours(hour, 0, 0, 0);
+  return d.getTime();
+}
+// Format a ms-epoch for a datetime-local input's value (local, no tz suffix).
+function toDatetimeLocal(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Shared snooze chooser: presets + a custom date/time, and (when already
+// snoozed) a prominent unsnooze. Used by both ItemActions and BundleActions.
+function SnoozeMenu({ snoozed, onSnooze, currentUntil, allLabel }: {
+  snoozed: boolean;
+  onSnooze: (untilMs: number | null) => void;
+  currentUntil?: number;
+  allLabel?: boolean;
+}) {
+  const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const [custom, setCustom] = useState(() => toDatetimeLocal(currentUntil ?? nextDayAt(9)));
+  const opt = (label: string, ms: number) => (
+    <button type="button" onClick={(e) => { stop(e); onSnooze(ms); }}>{label}</button>
+  );
+  const commitCustom = (e: React.MouseEvent) => {
+    stop(e);
+    const t = new Date(custom).getTime();
+    if (!isNaN(t) && t > Date.now()) onSnooze(t);
+  };
+  return (
+    <div className="snooze-popover" onClick={stop}>
+      {opt('In 1 hour', Date.now() + 3600_000)}
+      {opt('In 3 hours', Date.now() + 3 * 3600_000)}
+      {opt('This evening', nextHourOfDay(20))}
+      {opt('Tomorrow 9am', nextDayAt(9))}
+      {opt('This weekend', nextWeekendAt(9))}
+      {opt('Next week', nextDayAt(9, 7))}
+      <div className="snooze-custom" onClick={stop}>
+        <input
+          type="datetime-local"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onClick={stop}
+        />
+        <button type="button" className="snooze-custom-go" onClick={commitCustom}>Snooze until…</button>
+      </div>
+      {snoozed && (
+        <button type="button" className="snooze-unsnooze" onClick={(e) => { stop(e); onSnooze(null); }}>
+          <span className="material-symbols-outlined">alarm_off</span>
+          {allLabel ? 'Unsnooze all' : 'Unsnooze'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function hashHue(s: string): number {
