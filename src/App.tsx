@@ -218,6 +218,7 @@ interface BundleNode {
   unread: number;       // incl. descendants
   count: number;        // incl. descendants
   children: BundleNode[];
+  pinned?: boolean;     // bundle pinned as a unit → floats to the top intact
 }
 
 // Does a task's user-field set reference me? User fields may hold a full
@@ -292,6 +293,7 @@ function Inbox({
   // User-authored bundles (saved filters), and the create/edit sheet.
   const [manualBundles, setManualBundles] = useState<ManualBundle[]>([]);
   const [hiddenBundles, setHiddenBundles] = useState<string[]>([]);
+  const [pinnedBundleKeys, setPinnedBundleKeys] = useState<string[]>([]);
   const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
@@ -370,6 +372,7 @@ function Inbox({
       if (!cancelled) setSpaceTree(matrixSrc.getSpaceTree());
       if (!cancelled) setManualBundles(matrixSrc.getManualBundles());
       if (!cancelled) setHiddenBundles(matrixSrc.getHiddenBundles());
+      if (!cancelled) setPinnedBundleKeys(matrixSrc.getPinnedBundleKeys());
     };
     refresh();
     let pending = false;
@@ -790,18 +793,28 @@ function Inbox({
     const pinnedNode = pinnedItems.length > 0 ? mkNode('pinned', 'Pinned', pinnedItems) : null;
     const snoozedNode = snoozedItems.length > 0 ? mkNode('snoozed', 'Snoozed', snoozedItems) : null;
     const otherNode = (otherItems.length > 0 || hiddenBundles.length > 0) ? mkNode('other', 'Other', otherItems) : null;
+
+    // Bundle-level pin: a pinned bundle floats to the top as a unit (its
+    // items stay inside it), as opposed to per-item pinning which dissolves
+    // members into the synthetic Pinned bundle above. Only manual/auto/space
+    // bundles can be bundle-pinned; the synthetic pinned/snoozed/other can't.
+    const pinnedKeySet = new Set(pinnedBundleKeys);
+    const middle = [...manualList, ...autoTop].map((n) =>
+      (pinnedKeySet.has(n.key) ? { ...n, pinned: true } : n));
+    const pinnedMiddle = middle.filter((n) => n.pinned);
+    const restMiddle = middle.filter((n) => !n.pinned);
     return {
       loose,
       groups: [
         ...(pinnedNode ? [pinnedNode] : []),
-        ...manualList,
-        ...autoTop,
+        ...pinnedMiddle,
+        ...restMiddle,
         ...(otherNode ? [otherNode] : []),
         ...(snoozedNode ? [snoozedNode] : []),
       ] as BundleNode[],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, selfMxid]);
+  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid]);
 
   // Message rooms in the exact order they appear in the stream (loose, then
   // each bundle's items, recursing into nested spaces; Snoozed excluded).
@@ -1038,6 +1051,10 @@ function Inbox({
               : <span className={`src ${g.flavor}`} />;
           })()}
           <span className="bundle-label">{g.label}</span>
+          {g.pinned && (
+            <span className="material-symbols-outlined" title="Pinned bundle"
+              style={{ color: 'var(--accent)', fontSize: 16 }}>push_pin</span>
+          )}
           <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
           {g.manual && (
             <span className="section-sweep" role="button" aria-label="Edit bundle" title="Edit bundle"
@@ -1346,19 +1363,25 @@ function Inbox({
         const tasks = g.items.filter((i) => i.flavor === 'issue');
         const roomId = (id: string) => id.match(/^matrix:([^:]+)$/)?.[1];
         const close = () => setBundleActionFor(null);
-        const forEachMsg = async (fn: (it: InboxItem) => Promise<void>) => { for (const it of msgs) await fn(it); close(); };
+        const canPinBundle = !['pinned', 'snoozed', 'other'].includes(g.key);
         return (
           <div className="sheet-scrim" onClick={close}>
             <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="action-sheet-title">{g.label} — {g.items.length} item{g.items.length === 1 ? '' : 's'}</div>
               {msgs.length > 0 && (
-                <button onClick={() => void forEachMsg(async (it) => { const r = roomId(it.id); if (r) await matrixSrc.markRoomRead(r); await matrixSrc.setManuallyUnread(it.id, false); })}>
+                <button onClick={async () => {
+                  // Read receipts are per-room API calls (safe to loop); the
+                  // manuallyUnread clear is one batched account-data write.
+                  for (const it of msgs) { const r = roomId(it.id); if (r) await matrixSrc.markRoomRead(r); }
+                  await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), false);
+                  close();
+                }}>
                   <span className="material-symbols-outlined">mark_chat_read</span>
                   Mark all read
                 </button>
               )}
               {msgs.length > 0 && (
-                <button onClick={() => void forEachMsg(async (it) => { await matrixSrc.setManuallyUnread(it.id, true); })}>
+                <button onClick={async () => { await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), true); close(); }}>
                   <span className="material-symbols-outlined">mark_email_unread</span>
                   Mark all unread
                 </button>
@@ -1369,15 +1392,17 @@ function Inbox({
                   Mark all tasks done
                 </button>
               )}
-              <button onClick={async () => { for (const it of g.items) await matrixSrc.setPinned(it.id, true); close(); }}>
-                <span className="material-symbols-outlined">keep</span>
-                Pin all
-              </button>
-              <button onClick={async () => { for (const it of g.items) await matrixSrc.setSnoozed(it.id, nextHourOfDay(20)); close(); }}>
+              {canPinBundle && (
+                <button onClick={async () => { await matrixSrc.setPinnedBundle(g.key, !g.pinned); close(); }}>
+                  <span className="material-symbols-outlined">{g.pinned ? 'push_pin' : 'keep'}</span>
+                  {g.pinned ? 'Unpin bundle' : 'Pin bundle to top'}
+                </button>
+              )}
+              <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextHourOfDay(20)); close(); }}>
                 <span className="material-symbols-outlined">schedule</span>
                 Snooze all until this evening
               </button>
-              <button onClick={async () => { for (const it of g.items) await matrixSrc.setSnoozed(it.id, nextDayAt(9)); close(); }}>
+              <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextDayAt(9)); close(); }}>
                 <span className="material-symbols-outlined">schedule</span>
                 Snooze all until tomorrow
               </button>
