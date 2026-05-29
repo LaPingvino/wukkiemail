@@ -274,6 +274,10 @@ function Inbox({
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
   const [spaceTree, setSpaceTree] = useState<SpaceNode[]>([]);
   const [loading, setLoading] = useState(() => loadCachedItems().length === 0);
+  // True while the SDK is still doing its initial sync. Drives a small
+  // non-blocking banner at the bottom of the list (rather than a full-screen
+  // notice that covers the cached items we already showed instantly).
+  const [syncing, setSyncing] = useState(true);
   // The bundled stream is the only view now; bundle scoping is always 'all'.
   const bundle: BundleKey = 'all';
   const [query, setQuery] = useState('');
@@ -372,6 +376,7 @@ function Inbox({
       return;
     }
     const refresh = () => {
+      if (!cancelled) setSyncing(!matrixSrc.isInitialSyncComplete());
       // Merge Matrix items with JMAP mail items (if a mail account is
       // connected). JMAP items get the shared triage overlay so pin/snooze/
       // unread work across sources. Sort by priority desc, then ts desc.
@@ -389,6 +394,16 @@ function Inbox({
         }
         if (cancelled) return;
         const sorted = all.slice().sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+        // While the initial sync is still running the SDK store may briefly
+        // report zero rooms (rehydrating from IndexedDB). Don't blow away the
+        // cached list we're already showing — that's what made the inbox flash
+        // empty (and get covered by the "Syncing…" notice) right after it had
+        // loaded instantly from cache. Keep the cache until real data lands or
+        // the sync completes; the bottom banner signals work-in-progress.
+        if (sorted.length === 0 && !matrixSrc.isInitialSyncComplete()) {
+          setLoading(false);
+          return;
+        }
         setItems(sorted);
         saveCachedItems(sorted);
         setLoading(false);
@@ -1241,7 +1256,7 @@ function Inbox({
                 initial sync AND has no rooms cached yet — so a reload doesn't
                 flash "No items yet", but a fully-synced empty inbox still reads
                 as empty (not stuck on "Syncing"). */}
-            {matrixSrc && !matrixSrc.isInitialSyncComplete() && matrixSrc.describe().rooms === 0
+            {syncing && matrixSrc && matrixSrc.describe().rooms === 0
               ? <p>Syncing your conversations…</p>
               : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>}
           </div>
@@ -1454,6 +1469,12 @@ function Inbox({
                 ))}
               </>
             )}
+          </div>
+        )}
+        {syncing && !loading && (
+          <div className="sync-banner" role="status" aria-live="polite">
+            <span className="sync-banner-spinner" aria-hidden="true" />
+            <span>Syncing your conversations…</span>
           </div>
         )}
       </main>

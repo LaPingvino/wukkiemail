@@ -599,6 +599,22 @@ body {
   color: var(--muted); text-align: center; padding: 24px;
 }
 
+/* Non-blocking "still syncing" notice. Sits at the bottom of the list so the
+   cached items stay visible and usable immediately on reload; it just signals
+   that fresher data is on the way, then disappears when the sync completes. */
+.sync-banner {
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  padding: 10px 16px; margin: 4px auto 12px;
+  font-size: 13px; color: var(--muted);
+}
+.sync-banner-spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--md-sys-color-outline-variant, #cbd5e1);
+  border-top-color: var(--md-sys-color-primary, #6750a4);
+  animation: wm-spin 0.8s linear infinite;
+}
+@keyframes wm-spin { to { transform: rotate(360deg); } }
+
 .connect {
   display: grid; gap: 16px;
   max-width: 480px; margin: 64px auto; padding: 32px;
