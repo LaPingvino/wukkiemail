@@ -228,6 +228,22 @@ export function RoomPanel({
     }
   };
 
+  // Auto-backfill on open when the timeline is sparse — under sliding sync the
+  // live timeline is just ~1 event until paginated, so an already-read chat
+  // would otherwise open near-empty and force a manual "Load older" click.
+  // Capped so a genuinely short room doesn't loop, and reset per room.
+  const autoLoadCount = useRef(0);
+  useEffect(() => { autoLoadCount.current = 0; }, [roomId, threadRootId]);
+  useEffect(() => {
+    if (!snap || threadRootId) return;             // threads scan the live timeline, no backfill
+    if (snap.messages.length >= 15) return;        // enough to fill the view
+    if (loadingOlder || !hasMore) return;
+    if (autoLoadCount.current >= 4) return;         // ~200 events max, then stop
+    autoLoadCount.current += 1;
+    void loadOlder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap, loadingOlder, hasMore, roomId, threadRootId]);
+
   // Auto-load when the message list is scrolled near the top.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
