@@ -168,7 +168,9 @@ export function RoomPanel({
   // user inserted as ":shortcode:" text (converted to <img data-mx-emoticon> at
   // send, exactly like the mention pills).
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [stickerOpen, setStickerOpen] = useState(false);
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>(() => matrix.getCustomEmojis(roomId));
+  const [stickers, setStickers] = useState<CustomEmoji[]>(() => matrix.getStickers(roomId));
   const usedCustomEmojis = useRef<Map<string, string>>(new Map()); // shortcode -> mxc
   const emojiListRef = useRef<EmojiEntry[]>([]);
   // ":word" autocomplete (parallel to the @-mention menu). Never triggers on
@@ -180,7 +182,11 @@ export function RoomPanel({
   useEffect(() => { void loadEmojis().then((l) => { emojiListRef.current = l; }); }, []);
   useEffect(() => {
     setCustomEmojis(matrix.getCustomEmojis(roomId));
-    const unsub = matrix.subscribe(() => setCustomEmojis(matrix.getCustomEmojis(roomId)));
+    setStickers(matrix.getStickers(roomId));
+    const unsub = matrix.subscribe(() => {
+      setCustomEmojis(matrix.getCustomEmojis(roomId));
+      setStickers(matrix.getStickers(roomId));
+    });
     return unsub;
   }, [matrix, roomId]);
 
@@ -693,6 +699,14 @@ export function RoomPanel({
             }}
           />
         )}
+        {stickerOpen && (
+          <StickerPicker
+            stickers={stickers}
+            mxcToHttp={(mxc) => matrix.mxcToHttp(mxc, 128, 128)}
+            onClose={() => setStickerOpen(false)}
+            onPick={(s) => { setStickerOpen(false); void matrix.sendSticker(roomId, s.shortcode, s.mxc); }}
+          />
+        )}
         <md-outlined-text-field
           label="Reply"
           placeholder="Type a message…"
@@ -815,6 +829,17 @@ export function RoomPanel({
         >
           <span className="material-symbols-outlined">mood</span>
         </button>
+        {stickers.length > 0 && (
+          <button
+            type="button"
+            className="hamburger"
+            aria-label="Sticker"
+            title="Sticker"
+            onClick={() => setStickerOpen((o) => !o)}
+          >
+            <span className="material-symbols-outlined">imagesmode</span>
+          </button>
+        )}
         <button
           type="button"
           className="hamburger"
@@ -925,6 +950,38 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// A grid of the room's available stickers (im.ponies usage=sticker). Picking
+// one sends it immediately as an m.sticker event. Outside-click / Escape close.
+function StickerPicker({ stickers, mxcToHttp, onClose, onPick }: {
+  stickers: CustomEmoji[];
+  mxcToHttp: (mxc: string) => string | null;
+  onClose: () => void;
+  onPick: (s: CustomEmoji) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+  return (
+    <div className="sticker-picker" ref={ref}>
+      <div className="sticker-grid">
+        {stickers.map((s) => {
+          const url = mxcToHttp(s.mxc);
+          return (
+            <button key={s.shortcode + s.mxc} type="button" className="sticker-cell" title={s.shortcode} onClick={() => onPick(s)}>
+              {url ? <img src={url} alt={s.shortcode} loading="lazy" /> : <span>{s.shortcode}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // Lists every thread in the room (its root messages, newest activity first) so
