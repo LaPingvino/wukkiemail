@@ -191,6 +191,9 @@ errors/warns per room (hundreds of times each):
 - MatrixRTCSessionManager.onRoomState "Got room state event for unknown room"
   -> demoted to debug (commit 6dc4b27f7). RTC sessions still register via
   ClientEvent.Room -> onRoom -> refreshRoom once the room is added.
+- MatrixRTCSession membership filtering "Ignoring expired device membership"
+  (+ different-session / not-in-room) re-ran every sync pass per stale device
+  -> demoted info to debug (commit bb7eedafe).
 - EventTimelineSet canContain / "does not belong in timeline" -> debug.
 - SlidingSyncSdk account-data / ephemeral "room doesn't exist" -> debug.
 - push-rules Missing/Adding default rule storm -> guarded (commit e52a5c9dc).
