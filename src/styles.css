@@ -120,6 +120,9 @@ body {
 .email-html a { color: var(--md-sys-color-primary); }
 .email-html table { max-width: 100%; }
 .email-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
+.email-images-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 0 0 12px; border-radius: 8px; background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.05)); font-size: 13px; color: var(--muted); }
+.email-images-bar .material-symbols-outlined { font-size: 20px; }
+.email-images-bar .config-btn { flex: 0 0 auto; }
 .reply-textarea {
   flex: 1; min-width: 0; resize: vertical;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;

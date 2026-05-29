@@ -1,14 +1,17 @@
 // Full-screen reader for a JMAP email. Fetches the message body on open and
-// marks it $seen. HTML bodies are sanitized; remote images are stripped for
-// v1 (tracking-pixel guard) — a "load images" toggle can come later.
+// marks it $seen. HTML bodies are sanitized; remote images are stripped by
+// default (tracking-pixel guard) and only loaded when the user opts in via the
+// "Load images" toggle — then restricted to https + no-referrer + lazy.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import type { JmapSource, JmapEmailFull } from './sources/jmap';
 
-function sanitizeEmailHtml(html: string): string {
+function sanitizeEmailHtml(html: string, allowImages: boolean): string {
+  const forbidTags = ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta'];
+  if (!allowImages) forbidTags.push('img');
   const clean = DOMPurify.sanitize(html, {
-    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'img', 'link', 'meta'],
+    FORBID_TAGS: forbidTags,
     FORBID_ATTR: ['style'],
     ALLOW_DATA_ATTR: false,
   });
@@ -18,7 +21,27 @@ function sanitizeEmailHtml(html: string): string {
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
   });
+  if (allowImages) {
+    tpl.content.querySelectorAll('img').forEach((img) => {
+      const src = img.getAttribute('src') ?? '';
+      // Only https remote images; drop cid:/data:/http: so the toggle can't be
+      // a vector for mixed-content or inline-payload tricks. srcset stripped so
+      // it can't smuggle a non-https source past this check.
+      if (!/^https:\/\//i.test(src)) { img.remove(); return; }
+      img.removeAttribute('srcset');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.setAttribute('loading', 'lazy');
+      img.setAttribute('decoding', 'async');
+      img.style.maxWidth = '100%';
+    });
+  }
   return tpl.innerHTML;
+}
+
+// Does the raw HTML reference a remote image? Decides whether to offer the
+// toggle at all (no point showing it for image-free mail).
+function hasRemoteImages(html: string | undefined): boolean {
+  return !!html && /<img\b[^>]*\bsrc\s*=\s*["']?https?:/i.test(html);
 }
 
 export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailId: string; onClose: () => void }) {
@@ -28,15 +51,24 @@ export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailI
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [loadImages, setLoadImages] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setLoadImages(false); // re-arm the tracking guard for each opened message
     jmap.getEmail(emailId)
       .then((e) => { if (!cancelled) setEmail(e); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
     void jmap.markEmailSeen(emailId).catch(() => { /* best effort */ });
     return () => { cancelled = true; };
   }, [jmap, emailId]);
+
+  // Sanitize once per (body, toggle) — not on every reply keystroke.
+  const safeHtml = useMemo(
+    () => (email?.html ? sanitizeEmailHtml(email.html, loadImages) : null),
+    [email?.html, loadImages],
+  );
+  const offerImages = hasRemoteImages(email?.html);
 
   const fromStr = email?.from?.map((a) => a.name || a.email).join(', ') ?? '';
   const when = email?.receivedAt ? new Date(email.receivedAt).toLocaleString() : '';
@@ -70,9 +102,20 @@ export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailI
       <div className="issue-body" style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
         {error && <p style={{ color: 'var(--md-sys-color-error)' }}>{error}</p>}
         {!email && !error && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+        {email && offerImages && (
+          <div className="email-images-bar">
+            <span className="material-symbols-outlined" aria-hidden="true">{loadImages ? 'image' : 'hide_image'}</span>
+            <span style={{ flex: 1 }}>
+              {loadImages ? 'Remote images loaded.' : 'Remote images are hidden to protect your privacy.'}
+            </span>
+            {!loadImages && (
+              <button type="button" className="config-btn" onClick={() => setLoadImages(true)}>Load images</button>
+            )}
+          </div>
+        )}
         {email && (
-          email.html
-            ? <div className="email-html" dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(email.html) }} />
+          safeHtml !== null
+            ? <div className="email-html" dangerouslySetInnerHTML={{ __html: safeHtml }} />
             : <pre className="email-text">{email.text ?? '(no body)'}</pre>
         )}
       </div>
