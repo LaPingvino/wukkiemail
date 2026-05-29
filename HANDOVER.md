@@ -109,6 +109,9 @@ The big direction, captured so it survives. Build it ON the filter system — do
 ## Gotchas already hit
 
 - `IndexedDBStore.startup()` must be called AFTER createClient (was the smoking gun for `sync=null`)
+- IndexedDBStore.startup can throw "Query failed: UnknownError" on a corrupt DB. buildClient now deletes+rebuilds the DB once on failure (NOT permanent MemoryStore fallback) — otherwise every reload does a full re-sync. If reloads are slow/"Syncing" forever, check the console for this.
+- Full-screen panels: RoomPanel/EmailView use `.issue-panel.room-panel`. The RoomPanel !snap loading branch ALSO needs `room-panel` or it flashes the old 560px side overlay on hash-refresh. IssuePanel stays a side panel by design.
+- Hash routing (#/m/room, #/m/room/issue/id, #/mail/id) drives the content panels; they're NOT in the sheet pushState cascade. applyHash on mount + hashchange; a state→hash effect mirrors them.
 - Encryption banner needs `getSecretStorageKey` cryptoCallback wired in createClient (fixed)
 - CF Pages 3.x wrangler needs `run_worker_first: true` (not array form)
 - Material `<md-icon-button>` click events don't always bubble to React onClick — use plain `<button>` for those
