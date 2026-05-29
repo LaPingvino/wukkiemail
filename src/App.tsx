@@ -271,8 +271,8 @@ function bundleLabel(key: BundleKey, spaceBundles: BundleSpec[]): string {
     const f = key.slice(7) as ItemFlavor;
     return FLAVOR_LABELS[f] ?? f;
   }
-  if (key.startsWith('space:')) {
-    return spaceBundles.find((b) => b.id === key)?.label ?? 'Space';
+  if (key.startsWith('space:') || key.startsWith('mailbox:')) {
+    return spaceBundles.find((b) => b.id === key)?.label ?? (key.startsWith('mailbox:') ? 'Mailbox' : 'Space');
   }
   return key;
 }
@@ -289,6 +289,7 @@ function Inbox({
   // shows the last-known items at once (the SDK then refreshes them).
   const [items, setItems] = useState<InboxItem[]>(loadCachedItems);
   const [spaceBundles, setSpaceBundles] = useState<BundleSpec[]>([]);
+  const [mailBundles, setMailBundles] = useState<BundleSpec[]>([]);
   const [spaceTree, setSpaceTree] = useState<SpaceNode[]>([]);
   const [loading, setLoading] = useState(() => loadCachedItems().length === 0);
   // True while the SDK is still doing its initial sync. Drives a small
@@ -430,6 +431,8 @@ function Inbox({
           try {
             const ji = matrixSrc.applyExternalTriage(await jmapSrc.listItems(null));
             all = [...matrixItems, ...ji];
+            const mb = await jmapSrc.listBundles();
+            if (!cancelled) setMailBundles(mb);
           } catch (e) {
             // eslint-disable-next-line no-console
             console.warn('[wukkiemail] jmap listItems failed', e);
@@ -783,6 +786,12 @@ function Inbox({
     const space = it.bundles.find((b) => b.startsWith('space:'));
     if (space) return space;
     if (it.bundles.includes('dm')) return 'dm';
+    // JMAP mail groups by its mailbox (Inbox/Sent/Archive/…), nested under a
+    // synthetic "Mail" parent below. An email can be in several mailboxes; pick
+    // the first the server listed (stable per email). Mail with no mailbox falls
+    // through to the flavor bundle.
+    const mailbox = it.bundles.find((b) => b.startsWith('mailbox:'));
+    if (mailbox) return mailbox;
     return `flavor:${it.flavor}`;
   };
 
@@ -883,10 +892,31 @@ function Inbox({
     const otherItems = sortItems(groups.get('other') ?? []);
     groups.delete('other');
 
+    // Mail mailboxes nest under a synthetic "Mail" parent, mirroring how rooms
+    // nest under spaces. Each mailbox:<id> group becomes a child; mail with no
+    // mailbox (the flavor:gmail group) sits as the parent's direct items.
+    const mailLabelOf = new Map(mailBundles.map((m) => [m.id, m.label]));
+    const mailboxNodes: BundleNode[] = [];
+    for (const [key, gItems] of [...groups.entries()]) {
+      if (!key.startsWith('mailbox:')) continue;
+      groups.delete(key);
+      const xs = sortItems(gItems);
+      mailboxNodes.push({ key, label: mailLabelOf.get(key) ?? 'Mailbox', flavor: 'gmail', items: xs, unread: unreadOf(xs), count: xs.length, children: [] });
+    }
+    mailboxNodes.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
+    let mailNode: BundleNode | null = null;
+    if (mailboxNodes.length > 0) {
+      const looseMail = sortItems(groups.get('flavor:gmail') ?? []);
+      groups.delete('flavor:gmail');
+      const unread = unreadOf(looseMail) + mailboxNodes.reduce((s, c) => s + c.unread, 0);
+      const count = looseMail.length + mailboxNodes.reduce((s, c) => s + c.count, 0);
+      mailNode = { key: 'flavor:gmail', label: 'Mail', flavor: 'gmail', items: looseMail, unread, count, children: mailboxNodes };
+    }
+
     // Remaining groups (dm, flavor:X, orphan spaces) render flat.
     const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => ({
       key,
-      label: bundleLabel(key as BundleKey, spaceBundles),
+      label: bundleLabel(key as BundleKey, [...spaceBundles, ...mailBundles]),
       flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
       items: sortItems(gItems),
       unread: unreadOf(gItems),
@@ -894,7 +924,7 @@ function Inbox({
       children: [],
     }));
 
-    const autoTop = [...spaceNodes, ...flatAuto];
+    const autoTop = [...spaceNodes, ...(mailNode ? [mailNode] : []), ...flatAuto];
     autoTop.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
 
     const mkNode = (key: string, label: string, xs: InboxItem[]): BundleNode =>
@@ -924,7 +954,7 @@ function Inbox({
       ] as BundleNode[],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
+  }, [visible, spaceBundles, mailBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
 
   // Message rooms in the exact order they appear in the stream (loose, then
   // each bundle's items, recursing into nested spaces; Snoozed excluded).
@@ -1203,6 +1233,7 @@ function Inbox({
     if (key === 'dm') return 'is:dm';
     if (key.startsWith('flavor:')) return key;       // flavor:x is a valid query
     if (key.startsWith('space:')) return `in:${key}`; // in:space:!room matches item.bundles
+    if (key.startsWith('mailbox:')) return `in:${key}`; // in:mailbox:<id> matches item.bundles
     return '';
   };
   const convertToManual = async (key: string, label: string) => {
@@ -1298,7 +1329,7 @@ function Inbox({
                 {hiddenBundles.map((k) => (
                   <button key={k} type="button" className="mini-chip" title="Restore this bundle" onClick={() => void restoreBundle(k)}>
                     <span className="material-symbols-outlined" style={{ fontSize: 14 }}>undo</span>
-                    {bundleLabel(k as BundleKey, spaceBundles)}
+                    {bundleLabel(k as BundleKey, [...spaceBundles, ...mailBundles])}
                   </button>
                 ))}
               </div>
@@ -1409,7 +1440,7 @@ function Inbox({
                 as empty (not stuck on "Syncing"). */}
             {syncing && matrixSrc && matrixSrc.describe().rooms === 0
               ? <p>Syncing your conversations…</p>
-              : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>}
+              : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, [...spaceBundles, ...mailBundles])}.`}</p>}
           </div>
         ) : (
           <div className="item-list">
