@@ -26,11 +26,12 @@ export interface Filter {
   flavor: string[];   // flavor:x (OR)
   from: string[];     // from:substr (OR)
   status: string[];   // status:x issue kanban value (OR)
+  assigned: string[]; // assigned:me | assigned:@user:hs (OR) — any issue user field
   inBundle: string[]; // in:<bundleKey> matched against item.bundles (OR)
   raw: string;
 }
 
-export const EMPTY_FILTER: Filter = { text: [], is: [], flavor: [], from: [], status: [], inBundle: [], raw: '' };
+export const EMPTY_FILTER: Filter = { text: [], is: [], flavor: [], from: [], status: [], assigned: [], inBundle: [], raw: '' };
 
 // Split on whitespace but keep "double quoted" phrases together (so
 // status:"in progress" and "exact phrase" work).
@@ -43,7 +44,7 @@ function tokenize(s: string): string[] {
 }
 
 export function parseQuery(raw: string): Filter {
-  const f: Filter = { text: [], is: [], flavor: [], from: [], status: [], inBundle: [], raw };
+  const f: Filter = { text: [], is: [], flavor: [], from: [], status: [], assigned: [], inBundle: [], raw };
   for (const tokRaw of tokenize(raw.trim())) {
     // Strip surrounding quotes a key:"value" token may still carry.
     const tok = tokRaw;
@@ -57,6 +58,7 @@ export function parseQuery(raw: string): Filter {
         case 'flavor': case 'kind': f.flavor.push(val); continue;
         case 'from': case 'sender': f.from.push(val); continue;
         case 'status': case 'state': f.status.push(val); continue;
+        case 'assigned': case 'assignee': case 'to': f.assigned.push(val); continue;
         case 'in': case 'bundle': f.inBundle.push(val); continue;
         default: break; // unknown key → treat whole token as text
       }
@@ -68,7 +70,20 @@ export function parseQuery(raw: string): Filter {
 
 export function isEmptyFilter(f: Filter): boolean {
   return f.text.length === 0 && f.is.length === 0 && f.flavor.length === 0
-    && f.from.length === 0 && f.status.length === 0 && f.inBundle.length === 0;
+    && f.from.length === 0 && f.status.length === 0 && f.assigned.length === 0 && f.inBundle.length === 0;
+}
+
+// Does any of `values` reference `who`? `who` is a full mxid, bare localpart,
+// or display name; matching is loose (either side may contain the other).
+function referencesUser(values: string[] | undefined, who: string): boolean {
+  if (!values || !who) return false;
+  const w = who.toLowerCase().trim();
+  const wLocal = w.replace(/^@/, '').split(':')[0];
+  return values.some((raw) => {
+    const v = raw.toLowerCase().trim();
+    if (!v) return false;
+    return v === w || v === wLocal || v.includes(wLocal) || w.includes(v);
+  });
 }
 
 // Loose self-match for user fields / senders: full mxid, bare localpart,
@@ -110,6 +125,12 @@ export function matchItem(f: Filter, it: InboxItem, ctx: FilterContext = {}): bo
     const sv = (it.statusValue ?? '').toLowerCase();
     if (!f.status.includes(sv)) return false;
   }
+  // assigned: — any issue user field references the given person ("me" = self)
+  if (f.assigned.length) {
+    const ok = f.assigned.some((who) =>
+      who === 'me' ? referencesSelf(it.userValues, ctx.selfMxid) : referencesUser(it.userValues, who));
+    if (!ok) return false;
+  }
   // in: bundle — any
   if (f.inBundle.length && !f.inBundle.some((b) => it.bundles.includes(b))) return false;
   // from: — any substring on sender name/address
@@ -117,9 +138,13 @@ export function matchItem(f: Filter, it: InboxItem, ctx: FilterContext = {}): bo
     const hay = `${it.from} ${it.fromAddress ?? ''}`.toLowerCase();
     if (!f.from.some((s) => hay.includes(s))) return false;
   }
-  // free text — all terms, across the visible fields
+  // free text — all terms, across the visible fields plus issue field values
+  // (status + user fields) so you can search on issue contents too.
   if (f.text.length) {
-    const hay = `${it.subject} ${it.from} ${it.snippet} ${it.fromAddress ?? ''}`.toLowerCase();
+    const fields = it.flavor === 'issue'
+      ? ` ${it.statusValue ?? ''} ${(it.userValues ?? []).join(' ')}`
+      : '';
+    const hay = `${it.subject} ${it.from} ${it.snippet} ${it.fromAddress ?? ''}${fields}`.toLowerCase();
     if (!f.text.every((t) => hay.includes(t))) return false;
   }
   return true;

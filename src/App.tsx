@@ -561,10 +561,11 @@ function Inbox({
     const q = deferredQuery.trim();
     return items.filter((it) => {
       const isSnoozed = it.bundles.includes('snoozed');
-      // Read filter applies only to messages, only when not searching, and
-      // never to snoozed items — those live in the Snoozed bundle regardless
-      // of read state (issues have no read receipts, so skip them too).
-      if (!q && !isSnoozed && it.flavor !== 'issue') {
+      // Read filter applies to messages in ALL modes (including search, so the
+      // Unread/Read/All chips always take effect); never to snoozed items —
+      // those live in the Snoozed bundle regardless of read state (issues have
+      // no read receipts, so skip them too).
+      if (!isSnoozed && it.flavor !== 'issue') {
         if (readFilter === 'unread' && !it.unread) return false;
         if (readFilter === 'read' && it.unread) return false;
       }
@@ -713,6 +714,11 @@ function Inbox({
   // Manual bundles (saved filters) take precedence over auto-grouping and
   // always appear (even when empty) so they stay findable/editable.
   const bundled = useMemo(() => {
+    // During an active search we render flat mode from `visible`, not from the
+    // bundle tree — so don't pay the (expensive) tree build, sorting and space
+    // resolution on every keystroke. This was the main cause of search lag on
+    // large accounts.
+    if (deferredQuery.trim()) return { loose: [] as InboxItem[], groups: [] as BundleNode[] };
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
     const hiddenSet = new Set(hiddenBundles);
     const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
@@ -828,7 +834,7 @@ function Inbox({
       ] as BundleNode[],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid]);
+  }, [visible, spaceBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
 
   // Message rooms in the exact order they appear in the stream (loose, then
   // each bundle's items, recursing into nested spaces; Snoozed excluded).
