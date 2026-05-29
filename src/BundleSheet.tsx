@@ -23,6 +23,7 @@ export function BundleSheet({
 }) {
   const [label, setLabel] = useState(initial?.label ?? '');
   const [query, setQuery] = useState(initial?.query ?? initialQuery ?? '');
+  const [display, setDisplay] = useState<'folded' | 'expanded' | 'inline'>(initial?.display ?? 'folded');
 
   const matchCount = useMemo(() => {
     const f = parseQuery(query);
@@ -32,7 +33,7 @@ export function BundleSheet({
   const canSave = label.trim().length > 0 && query.trim().length > 0;
   const save = () => {
     if (!canSave) return;
-    onSave({ id: initial?.id ?? crypto.randomUUID(), label: label.trim(), query: query.trim() });
+    onSave({ id: initial?.id ?? crypto.randomUUID(), label: label.trim(), query: query.trim(), display });
   };
 
   return (
@@ -68,6 +69,24 @@ export function BundleSheet({
             </span>
           </label>
           <QueryChips query={query} onChange={setQuery} flavors={[...new Set(items.map((i) => i.flavor))]} />
+          <label className="sheet-label">
+            <span>Show as</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {([
+                ['folded', 'Folded', 'Collapsed row you tap to open'],
+                ['expanded', 'Expanded', 'Row open by default'],
+                ['inline', 'Top section', 'Items shown directly at the top of the inbox (like Pinned)'],
+              ] as const).map(([mode, name, desc]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`chip ${display === mode ? 'active' : ''}`}
+                  title={desc}
+                  onClick={() => setDisplay(mode)}
+                >{name}</button>
+              ))}
+            </div>
+          </label>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             Matches <strong>{matchCount}</strong> current item{matchCount === 1 ? '' : 's'}.
           </div>

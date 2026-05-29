@@ -13,7 +13,6 @@ import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
 import { CallView } from './CallView';
 import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE, getSfuServiceUrl, setSfuServiceUrl } from './call';
-import { discoverOwnFoci } from './sfu';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
@@ -313,6 +312,13 @@ function Inbox({
   const [hiddenBundles, setHiddenBundles] = useState<string[]>([]);
   const [pinnedBundleKeys, setPinnedBundleKeys] = useState<string[]>([]);
   const [bundleSheet, setBundleSheet] = useState<{ editing?: ManualBundle; initialQuery?: string } | null>(null);
+  // Manual bundles set to "Expanded" open by default. Seeded when bundles load;
+  // the user can still collapse them for the session.
+  useEffect(() => {
+    const wantOpen = manualBundles.filter((b) => b.display === 'expanded').map((b) => `manual:${b.id}`);
+    if (wantOpen.length) setExpandedBundles((prev) => new Set([...prev, ...wantOpen]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualBundles]);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -322,7 +328,6 @@ function Inbox({
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [callRoom, setCallRoom] = useState<{ roomId: string; name: string } | null>(null);
-  const [callSupported, setCallSupported] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -343,20 +348,6 @@ function Inbox({
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
   const selfMxid = matrixSrc?.id ?? null;
 
-  // Calls only work if an SFU is reachable — a manual lk-jwt-service URL, or one
-  // the homeserver advertises (.well-known rtc_foci). Like the issue tracker,
-  // hide the call affordance entirely when it isn't supported.
-  useEffect(() => {
-    if (!matrixSrc) { setCallSupported(false); return; }
-    if (getSfuServiceUrl()) { setCallSupported(true); return; }
-    const mx = matrixSrc.getClient();
-    if (!mx) return;
-    let cancelled = false;
-    discoverOwnFoci(mx)
-      .then((foci) => { if (!cancelled) setCallSupported(foci.some((f) => f.type === 'livekit' && f.livekit_service_url)); })
-      .catch(() => { /* unsupported */ });
-    return () => { cancelled = true; };
-  }, [matrixSrc]);
 
   useEffect(() => {
     if (!matrixSrc) return;
@@ -1354,8 +1345,23 @@ function Inbox({
                     )}
                   </div>,
                 );
-                // Loose (important) items shown directly at the top level.
                 const counter = { n: idx };
+                // "Top section" manual bundles: their items render directly at
+                // the top (like Pinned). The bundle row still appears below in
+                // the group list, so they also show as part of the bundle.
+                for (const g of bundled.groups) {
+                  if (g.manual?.display !== 'inline') continue;
+                  const its = collectBundleItems(g).filter(displayFilter);
+                  if (its.length === 0) continue;
+                  rendered.push(
+                    <div key={`inline-h-${g.key}`} className="section-header">
+                      <span className="section-header-label">{g.label}</span>
+                      <span className="bundle-count">{its.length}</span>
+                    </div>,
+                  );
+                  for (const it of its) rendered.push(renderItem(it, counter.n++));
+                }
+                // Loose (important) items shown directly at the top level.
                 for (const it of bundled.loose) if (displayFilter(it)) rendered.push(renderItem(it, counter.n++));
                 // Everything else folds into bundles (spaces nest), opened in place.
                 for (const g of bundled.groups) rendered.push(renderBundleNode(g, 0, counter));
@@ -1486,7 +1492,7 @@ function Inbox({
             onClose={() => setSelectedRoom(null)}
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
-            onStartCall={callSupported ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
+            onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
           />
         );
       })()}
