@@ -783,8 +783,21 @@ function ReactionAdder({ onAdd, customEmojis, mxcToHttp }: {
             <button key={e} type="button" onClick={() => { onAdd(e); setOpen(false); }}>{e}</button>
           ))}
           <button type="button" aria-label="More emoji" title="More emoji" onClick={() => setFull(true)}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add_reaction</span>
           </button>
+          {/* Free-text reaction key — kept so any string/emoji can be sent, not
+              just palette + picker entries (the full picker replaced this once
+              and dropped the ability to type an arbitrary reaction). */}
+          <form
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              const input = (ev.currentTarget.elements.namedItem('k') as HTMLInputElement);
+              const v = input.value.trim();
+              if (v) { onAdd(v); setOpen(false); input.value = ''; }
+            }}
+          >
+            <input name="k" placeholder="…" maxLength={32} style={{ width: 40, padding: 2, font: 'inherit' }} />
+          </form>
         </div>
       )}
       {open && full && (
