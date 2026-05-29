@@ -251,6 +251,8 @@ body {
   overflow-y: auto;
   display: grid; gap: 12px;
 }
+/* Stickers: smaller than a normal image, transparent-friendly, no border. */
+.msg-sticker { max-width: 160px; max-height: 160px; width: auto; height: auto; border-radius: 8px; }
 /* Threads drawer: one tappable row per thread root. */
 .thread-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border, rgba(0,0,0,0.08)); padding: 10px 4px; cursor: pointer; color: inherit; font: inherit; }
 .thread-row:hover { background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.04)); }

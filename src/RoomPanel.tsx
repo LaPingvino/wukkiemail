@@ -16,7 +16,7 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Lazily fetch + decrypt an E2EE image into a blob URL, revoking on unmount.
-function EncryptedImage({ matrix, file, alt }: { matrix: MatrixSource; file: import('./media').EncryptedFile; alt: string }) {
+function EncryptedImage({ matrix, file, alt, sticker }: { matrix: MatrixSource; file: import('./media').EncryptedFile; alt: string; sticker?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -29,6 +29,8 @@ function EncryptedImage({ matrix, file, alt }: { matrix: MatrixSource; file: imp
   }, [matrix, file]);
   if (failed) return <span className="msg-file"><span className="material-symbols-outlined">image</span> (couldn't decrypt image)</span>;
   if (!url) return <span className="msg-file"><span className="material-symbols-outlined">lock</span> decrypting image…</span>;
+  // Stickers render small and inline (no click-to-open lightbox).
+  if (sticker) return <img src={url} alt={alt} className="msg-image msg-sticker" loading="lazy" />;
   return (
     <a href={url} target="_blank" rel="noopener noreferrer">
       <img src={url} alt={alt} className="msg-image" loading="lazy" />
@@ -461,7 +463,9 @@ export function RoomPanel({
                   <span className="ts">{new Date(m.ts).toLocaleString()}</span>
                 </div>
                 {m.image && m.image.encrypted ? (
-                  <EncryptedImage matrix={matrix} file={m.image.encrypted} alt={m.image.alt} />
+                  <EncryptedImage matrix={matrix} file={m.image.encrypted} alt={m.image.alt} sticker={m.image.sticker} />
+                ) : m.image && m.image.sticker ? (
+                  <img src={m.image.url} alt={m.image.alt} className="msg-image msg-sticker" loading="lazy" />
                 ) : m.image ? (
                   <a href={m.image.url} target="_blank" rel="noopener noreferrer">
                     <img
