@@ -968,7 +968,7 @@ function Inbox({
     <a
       key={it.id}
       data-idx={idx}
-      className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''}`}
+      className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''} ${it.invite ? 'invite' : ''}`}
       href={it.openPath}
       onClick={(e) => {
         e.preventDefault();
@@ -986,6 +986,7 @@ function Inbox({
     >
       <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
       <div className="from">
+        {it.invite && <span className="invite-badge">Invite</span>}
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
         {it.subject}
         {showOrigin && it.originLabel && (
@@ -999,35 +1000,69 @@ function Inbox({
       <div className="ts">
         {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
       </div>
-      {matrixSrc && (
-        <button
-          type="button"
-          className="item-kebab"
-          aria-label="Actions"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActionSheetFor(it.id); }}
-        >
-          <span className="material-symbols-outlined">more_vert</span>
-        </button>
-      )}
-      {matrixSrc && (
-        <ItemActions
-          item={it}
-          isPinned={it.bundles.includes('pinned')}
-          snoozePopoverOpen={snoozePopoverFor === it.id}
-          onTogglePin={async () => { await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned')); }}
-          onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
-          onSnooze={async (untilMs) => { setSnoozePopoverFor(null); await matrixSrc.setSnoozed(it.id, untilMs); }}
-          onDone={async () => {
-            // A task is "done" by setting its kanban status; a message is
-            // "done" by marking the room read.
-            const im = it.id.match(/^matrix:(.+):issue:(.+)$/);
-            if (im) { await matrixSrc.markIssueDone(im[1], im[2]); return; }
-            const r = itemRoomId(it.id);
-            if (r) await matrixSrc.markRoomRead(r);
-            await matrixSrc.setManuallyUnread(it.id, false);
-          }}
-          onToggleUnread={async () => { await matrixSrc.setManuallyUnread(it.id, !it.unread); }}
-        />
+      {matrixSrc && it.invite ? (
+        // Pending invite: Accept / Decline take the place of the normal
+        // pin / snooze / mark-read actions.
+        <div className="invite-actions">
+          <button
+            type="button"
+            className="invite-accept"
+            title="Accept invite"
+            onClick={async (e) => {
+              e.preventDefault(); e.stopPropagation();
+              const r = itemRoomId(it.id);
+              if (!r) return;
+              try { await matrixSrc.acceptInvite(r); setSelectedRoom(r); }
+              catch (err) { console.warn('[wukkiemail] acceptInvite failed', err); }
+            }}
+          >
+            <span className="material-symbols-outlined">check</span> Accept
+          </button>
+          <button
+            type="button"
+            className="invite-decline"
+            aria-label="Decline invite"
+            title="Decline invite"
+            onClick={async (e) => {
+              e.preventDefault(); e.stopPropagation();
+              const r = itemRoomId(it.id);
+              if (!r) return;
+              try { await matrixSrc.rejectInvite(r); }
+              catch (err) { console.warn('[wukkiemail] rejectInvite failed', err); }
+            }}
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      ) : matrixSrc && (
+        <>
+          <button
+            type="button"
+            className="item-kebab"
+            aria-label="Actions"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActionSheetFor(it.id); }}
+          >
+            <span className="material-symbols-outlined">more_vert</span>
+          </button>
+          <ItemActions
+            item={it}
+            isPinned={it.bundles.includes('pinned')}
+            snoozePopoverOpen={snoozePopoverFor === it.id}
+            onTogglePin={async () => { await matrixSrc.setPinned(it.id, !it.bundles.includes('pinned')); }}
+            onOpenSnoozePopover={() => setSnoozePopoverFor(snoozePopoverFor === it.id ? null : it.id)}
+            onSnooze={async (untilMs) => { setSnoozePopoverFor(null); await matrixSrc.setSnoozed(it.id, untilMs); }}
+            onDone={async () => {
+              // A task is "done" by setting its kanban status; a message is
+              // "done" by marking the room read.
+              const im = it.id.match(/^matrix:(.+):issue:(.+)$/);
+              if (im) { await matrixSrc.markIssueDone(im[1], im[2]); return; }
+              const r = itemRoomId(it.id);
+              if (r) await matrixSrc.markRoomRead(r);
+              await matrixSrc.setManuallyUnread(it.id, false);
+            }}
+            onToggleUnread={async () => { await matrixSrc.setManuallyUnread(it.id, !it.unread); }}
+          />
+        </>
       )}
     </a>
   );

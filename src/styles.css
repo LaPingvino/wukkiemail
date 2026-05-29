@@ -599,6 +599,29 @@ body {
   color: var(--muted); text-align: center; padding: 24px;
 }
 
+/* Pending invite rows: a small badge + Accept/Decline in the action slot. */
+.invite-badge {
+  display: inline-block; margin-right: 6px; padding: 1px 7px;
+  border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--md-sys-color-primary, #6750a4); color: #fff;
+  vertical-align: middle;
+}
+.item.invite { background: var(--md-sys-color-primary-container, #eaddff33); }
+.invite-actions { display: inline-flex; align-items: center; gap: 6px; }
+.invite-accept {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: none; border-radius: 999px; cursor: pointer;
+  padding: 5px 12px; font: inherit; font-weight: 600; font-size: 13px;
+  background: var(--md-sys-color-primary, #6750a4); color: #fff;
+}
+.invite-accept .material-symbols-outlined { font-size: 16px; }
+.invite-decline {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+  width: 32px; height: 32px; background: transparent; color: var(--muted);
+}
+.invite-decline:hover { background: var(--md-sys-color-error, #ba1a1a); color: #fff; border-color: transparent; }
+
 /* Incoming-call banner — sits at the top of the list, above everything, and
    pulses to draw the eye (like a phone ringing). */
 .incoming-calls {

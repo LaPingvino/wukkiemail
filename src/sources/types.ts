@@ -26,6 +26,7 @@ export interface InboxItem {
   ts: number;            // ms epoch of most recent activity
   unread: boolean;
   unreadCount?: number;  // number of unread notifications (for "most unread" ordering); 0/absent when read
+  invite?: boolean;      // a pending invite (you're invited but haven't joined) — shows Accept/Decline
   threadCount: number;
   priority: number;      // higher = more important; sorted desc with ts as tie-break
   snoozedUntil?: number; // ms epoch when this item wakes from snooze
