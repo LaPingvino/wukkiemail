@@ -321,6 +321,7 @@ function Inbox({
   );
   const [cryptoStatus, setCryptoStatus] = useState<'none' | 'setup' | 'unverified' | 'verified'>('none');
   const [hasEncRoom, setHasEncRoom] = useState(false);
+  const [cryptoPersistent, setCryptoPersistent] = useState(true);
   // Refresh ticker: bumped every 60s so snoozed items re-evaluate
   // around their due time without an explicit per-snooze timer.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -340,6 +341,7 @@ function Inbox({
         const s = await matrixSrc.getCryptoStatus();
         if (!cancelled) setCryptoStatus(s);
         if (!cancelled) setHasEncRoom(matrixSrc.hasAnyEncryptedRoom());
+        if (!cancelled) setCryptoPersistent(matrixSrc.isCryptoPersistent());
       } catch { /* swallow */ }
     };
     void refresh();
@@ -1252,6 +1254,13 @@ function Inbox({
                                 ? 'You have encrypted chats this device can’t read yet. Verify to decrypt history.'
                                 : 'Verify this device for end-to-end encrypted chats.'}
                             </p>
+                            {!cryptoPersistent && (
+                              <p className="encryption-block-sub" style={{ fontWeight: 600 }}>
+                                ⚠ This device can’t store keys (IndexedDB unavailable), so you’ll need to verify again
+                                each reload. Try turning on Lite storage below — it keeps the small key store while
+                                skipping the big sync database.
+                              </p>
+                            )}
                             <EncryptionSetup matrix={matrixSrc} />
                           </div>
                         )}
@@ -1293,10 +1302,13 @@ function Inbox({
                         <button
                           type="button"
                           className="config-btn"
-                          title="Keep the large sync data in memory instead of the local database. Helps on devices where the local database is broken or fills up; tradeoff is a fuller resync on each load."
+                          title="Keep the large sync data in memory instead of the local database, while still persisting the small encryption key store. Helps on devices where the local database is broken or fills up; tradeoff is a fuller resync on each load."
                           onClick={() => { setLiteStorage(!isLiteStorage()); window.location.reload(); }}
                         >
                           Lite storage: {isLiteStorage() ? 'on' : 'off'}
+                          {matrixSrc && (cryptoStatus !== 'none')
+                            ? ` · keys ${cryptoPersistent ? 'persist ✓' : 'in-memory ✗'}`
+                            : ''}
                         </button>
                         <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
                       </div>
