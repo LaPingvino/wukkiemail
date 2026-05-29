@@ -7,6 +7,9 @@ import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 import { expandShortcodes } from './emoji';
+import { loadEmojis, searchEmojis, type EmojiEntry } from './emojiData';
+import { EmojiPicker, type EmojiPick } from './EmojiPicker';
+import type { CustomEmoji } from './sources/matrix';
 import { CollapsibleBody } from './CollapsibleBody';
 
 const escapeHtml = (s: string) =>
@@ -102,6 +105,28 @@ export function RoomPanel({
   // matrix.to pills + m.mentions even though the composer is plain text.
   const acceptedMentions = useRef<Map<string, string>>(new Map());
 
+  // ── emoji ──
+  // Full picker open state, the loaded room custom emoji, the emojibase set
+  // (for the ":" autocomplete), and the shortcode→mxc map for custom emoji the
+  // user inserted as ":shortcode:" text (converted to <img data-mx-emoticon> at
+  // send, exactly like the mention pills).
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>(() => matrix.getCustomEmojis(roomId));
+  const usedCustomEmojis = useRef<Map<string, string>>(new Map()); // shortcode -> mxc
+  const emojiListRef = useRef<EmojiEntry[]>([]);
+  // ":word" autocomplete (parallel to the @-mention menu). Never triggers on
+  // :P / :D / :) — see EMOJI_TRIGGER below (needs ≥2 word chars after the colon).
+  const [emojiAc, setEmojiAc] = useState<{ query: string; index: number } | null>(null);
+  const emojiAcRef = useRef<{ query: string; index: number } | null>(null);
+  emojiAcRef.current = emojiAc;
+
+  useEffect(() => { void loadEmojis().then((l) => { emojiListRef.current = l; }); }, []);
+  useEffect(() => {
+    setCustomEmojis(matrix.getCustomEmojis(roomId));
+    const unsub = matrix.subscribe(() => setCustomEmojis(matrix.getCustomEmojis(roomId)));
+    return unsub;
+  }, [matrix, roomId]);
+
   useEffect(() => {
     let cancelled = false;
     // Seed with whatever's already known, then fetch the full roster — with
@@ -129,6 +154,38 @@ export function RoomPanel({
     setComposeText(newV);
     setMention(null);
     fieldEl.focus();
+  };
+
+  // ":word" with ≥2 word chars at the end, the colon preceded by start/space.
+  // This is what keeps :P / :D / :) / :-) from popping the menu (1 char, or a
+  // non-word char after the colon → no match).
+  const EMOJI_TRIGGER = /(^|\s):([a-z0-9_+]{2,})$/i;
+  type EmojiMatch = { kind: 'unicode'; char: string; label: string } | { kind: 'custom'; shortcode: string; mxc: string };
+  const computeEmojiMatches = (query: string): EmojiMatch[] => {
+    const ql = query.toLowerCase();
+    const custom: EmojiMatch[] = customEmojis
+      .filter((c) => c.shortcode.toLowerCase().includes(ql))
+      .slice(0, 4)
+      .map((c) => ({ kind: 'custom', shortcode: c.shortcode, mxc: c.mxc }));
+    const uni: EmojiMatch[] = searchEmojis(emojiListRef.current, query, 8)
+      .map((e) => ({ kind: 'unicode', char: e.char, label: e.shortcodes[0] ?? e.label }));
+    return [...custom, ...uni].slice(0, 8);
+  };
+  const emojiMatches = emojiAc ? computeEmojiMatches(emojiAc.query) : [];
+
+  // Insert a unicode char or a custom :shortcode: at the caret position,
+  // replacing whatever the user has typed so far. `replaceTrigger` swaps the
+  // trailing ":query" (autocomplete path); otherwise we append.
+  const insertEmoji = (pick: EmojiPick, fieldEl: (HTMLElement & { value: string }) | null, replaceTrigger: boolean) => {
+    const v = composeTextRef.current;
+    const piece = 'char' in pick ? pick.char : `:${pick.custom.shortcode}:`;
+    if ('custom' in pick) usedCustomEmojis.current.set(pick.custom.shortcode, pick.custom.mxc);
+    const newV = replaceTrigger
+      ? v.replace(EMOJI_TRIGGER, (_f, lead: string) => `${lead}${piece}`)
+      : v + piece;
+    setComposeText(newV);
+    if (fieldEl) { fieldEl.value = newV; fieldEl.focus(); }
+    setEmojiAc(null);
   };
 
   useEffect(() => {
@@ -210,6 +267,20 @@ export function RoomPanel({
           html = html.split(escapeHtml(`@${name}`)).join(pill);
         }
       }
+      // Custom emoji: any inserted :shortcode: we tracked becomes a
+      // data-mx-emoticon image in formatted_body; the plain body keeps the
+      // :shortcode: text as the spec-mandated fallback.
+      const usedEmoji: Array<[string, string]> = [];
+      for (const [sc, mxc] of usedCustomEmojis.current) {
+        if (body.includes(`:${sc}:`)) usedEmoji.push([sc, mxc]);
+      }
+      if (usedEmoji.length && !html) html = escapeHtml(body).replace(/\n/g, '<br/>');
+      if (html) {
+        for (const [sc, mxc] of usedEmoji) {
+          const img = `<img data-mx-emoticon src="${mxc}" alt="${escapeHtml(`:${sc}:`)}" title="${escapeHtml(`:${sc}:`)}" height="20" />`;
+          html = html.split(escapeHtml(`:${sc}:`)).join(img);
+        }
+      }
       if (editing) {
         await matrix.editMessage(roomId, editing.eventId, body, html);
         setEditing(null);
@@ -218,6 +289,7 @@ export function RoomPanel({
         setReplyTo(null);
       }
       acceptedMentions.current.clear();
+      usedCustomEmojis.current.clear();
       setComposeText('');
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
@@ -356,7 +428,11 @@ export function RoomPanel({
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
                     </button>
                   ))}
-                  <ReactionAdder onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)} />
+                  <ReactionAdder
+                    onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)}
+                    customEmojis={customEmojis}
+                    mxcToHttp={(mxc) => matrix.mxcToHttp(mxc, 32, 32)}
+                  />
                   {/* Reply / edit / delete: after the react button, always shown
                       (no hover reveal, so the message never reflows). */}
                   <button
@@ -491,6 +567,42 @@ export function RoomPanel({
             ))}
           </div>
         )}
+        {emojiAc && emojiMatches.length > 0 && (
+          <div className="mention-menu emoji-menu" role="listbox">
+            {emojiMatches.map((m, i) => (
+              <button
+                key={(m.kind === 'unicode' ? m.char : m.mxc) + i}
+                type="button"
+                role="option"
+                aria-selected={i === emojiAc.index}
+                className={`mention-item ${i === emojiAc.index ? 'active' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+                  insertEmoji(m.kind === 'unicode' ? { char: m.char } : { custom: { shortcode: m.shortcode, mxc: m.mxc } }, field, true);
+                }}
+              >
+                <span className="emoji-menu-glyph">
+                  {m.kind === 'unicode'
+                    ? m.char
+                    : <img src={matrix.mxcToHttp(m.mxc, 32, 32) ?? ''} alt={m.shortcode} />}
+                </span>
+                <span className="mention-name">:{m.kind === 'unicode' ? m.label : m.shortcode}:</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {emojiOpen && (
+          <EmojiPicker
+            customEmojis={customEmojis}
+            mxcToHttp={(mxc) => matrix.mxcToHttp(mxc, 32, 32)}
+            onClose={() => setEmojiOpen(false)}
+            onPick={(pick) => {
+              const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+              insertEmoji(pick, field, false);
+            }}
+          />
+        )}
         <md-outlined-text-field
           label="Reply"
           placeholder="Type a message…"
@@ -515,6 +627,10 @@ export function RoomPanel({
               // Detect a trailing "@query" to drive the mention dropdown.
               const m = v.match(TRAILING_MENTION);
               setMention(m ? { query: m[2], index: 0 } : null);
+              // …and a trailing ":word" (≥2 chars) for the emoji menu. Never
+              // matches :P / :D / :) so those emoticons type through untouched.
+              const em = v.match(EMOJI_TRIGGER);
+              setEmojiAc(em ? { query: em[2], index: 0 } : null);
               void matrix.sendTyping(roomId, v.length > 0, 30_000);
             });
             el.addEventListener('keydown', (ev: Event) => {
@@ -547,6 +663,34 @@ export function RoomPanel({
                   }
                 }
               }
+              // Emoji autocomplete navigation (same gestures as mentions).
+              const em = emojiAcRef.current;
+              if (em) {
+                const matches = computeEmojiMatches(em.query);
+                if (matches.length > 0) {
+                  if (ke.key === 'ArrowDown') {
+                    ev.preventDefault();
+                    setEmojiAc({ ...em, index: (em.index + 1) % matches.length });
+                    return;
+                  }
+                  if (ke.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    setEmojiAc({ ...em, index: (em.index - 1 + matches.length) % matches.length });
+                    return;
+                  }
+                  if (ke.key === 'Enter' || ke.key === 'Tab') {
+                    ev.preventDefault();
+                    const m2 = matches[em.index];
+                    insertEmoji(m2.kind === 'unicode' ? { char: m2.char } : { custom: { shortcode: m2.shortcode, mxc: m2.mxc } }, target, true);
+                    return;
+                  }
+                  if (ke.key === 'Escape') {
+                    ev.preventDefault();
+                    setEmojiAc(null);
+                    return;
+                  }
+                }
+              }
               if (ke.key === 'Enter' && !ke.shiftKey) {
                 ev.preventDefault();
                 void sendRef.current();
@@ -572,6 +716,15 @@ export function RoomPanel({
           }}
           style={{ flex: 1, minWidth: 0 }}
         />
+        <button
+          type="button"
+          className="hamburger"
+          aria-label="Emoji"
+          title="Emoji"
+          onClick={() => setEmojiOpen((o) => !o)}
+        >
+          <span className="material-symbols-outlined">mood</span>
+        </button>
         <button
           type="button"
           className="hamburger"
@@ -603,10 +756,16 @@ export function RoomPanel({
   );
 }
 
-function ReactionAdder({ onAdd }: { onAdd: (key: string) => void }) {
+function ReactionAdder({ onAdd, customEmojis, mxcToHttp }: {
+  onAdd: (key: string) => void;
+  customEmojis: CustomEmoji[];
+  mxcToHttp: (mxc: string) => string | null;
+}) {
   const [open, setOpen] = useState(false);
-  // Tiny built-in palette + free-text. Full emoji picker is a separate
-  // dependency we'll add later if needed.
+  const [full, setFull] = useState(false);
+  // Tiny built-in palette for the common case; "more" opens the full picker
+  // (incl. custom mxc emoji). Custom reactions send the mxc as the key —
+  // toggleReaction + the timeline renderer already handle mxc keys.
   const palette = ['👍', '👎', '❤️', '😂', '🎉', '✅', '❌', '🙏', '🤔'];
   return (
     <span style={{ position: 'relative' }}>
@@ -618,26 +777,27 @@ function ReactionAdder({ onAdd }: { onAdd: (key: string) => void }) {
       >
         <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_reaction</span>
       </button>
-      {open && (
+      {open && !full && (
         <div className="reaction-popover" onMouseLeave={() => setOpen(false)}>
           {palette.map((e) => (
-            <button
-              key={e}
-              type="button"
-              onClick={() => { onAdd(e); setOpen(false); }}
-            >{e}</button>
+            <button key={e} type="button" onClick={() => { onAdd(e); setOpen(false); }}>{e}</button>
           ))}
-          <form
-            onSubmit={(ev) => {
-              ev.preventDefault();
-              const input = (ev.currentTarget.elements.namedItem('k') as HTMLInputElement);
-              const v = input.value.trim();
-              if (v) { onAdd(v); setOpen(false); input.value = ''; }
-            }}
-          >
-            <input name="k" placeholder="…" maxLength={32} style={{ width: 40, padding: 2, font: 'inherit' }} />
-          </form>
+          <button type="button" aria-label="More emoji" title="More emoji" onClick={() => setFull(true)}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+          </button>
         </div>
+      )}
+      {open && full && (
+        <EmojiPicker
+          customEmojis={customEmojis}
+          mxcToHttp={mxcToHttp}
+          title="React with emoji"
+          onClose={() => { setFull(false); setOpen(false); }}
+          onPick={(pick) => {
+            onAdd('char' in pick ? pick.char : pick.custom.mxc);
+            setFull(false); setOpen(false);
+          }}
+        />
       )}
     </span>
   );

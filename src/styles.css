@@ -1548,6 +1548,49 @@ body {
   font-size: 13px; font-weight: 600;
 }
 .mention-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Emoji ":word" autocomplete — reuses .mention-menu/.mention-item layout. */
+.emoji-menu-glyph {
+  width: 24px; height: 24px; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 20px;
+}
+.emoji-menu-glyph img { width: 22px; height: 22px; object-fit: contain; }
+
+/* Full emoji picker popover (composer + reactions). */
+.emoji-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: min(340px, 92vw);
+  max-height: 360px;
+  display: flex; flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+  z-index: 60;
+  overflow: hidden;
+}
+.composer .emoji-picker { left: 16px; }
+.emoji-search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto;
+}
+.emoji-search input { flex: 1; border: none; background: transparent; color: var(--fg); font: inherit; outline: none; }
+.emoji-scroll { overflow-y: auto; padding: 4px 8px 8px; }
+.emoji-loading { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
+.emoji-section h4 {
+  margin: 8px 2px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.emoji-btn {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 22px; line-height: 1; padding: 4px; border-radius: 8px;
+  display: grid; place-items: center; aspect-ratio: 1;
+}
+.emoji-btn:hover { background: var(--md-sys-color-surface-container); }
+.emoji-btn img { width: 24px; height: 24px; object-fit: contain; }
 .mention-mxid {
   color: var(--muted); font-size: 12px; margin-left: auto;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;

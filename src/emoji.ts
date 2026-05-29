@@ -29,11 +29,20 @@ const SHORTCODES: Record<string, string> = {
 
 const SHORTCODE_RE = /:([a-z0-9_+-]+):/gi;
 
+// The full emojibase shortcode -> char map, registered once the picker's data
+// loads (see emojiData.ts). Until then we fall back to the small built-in table
+// so typing stays instant on first paint.
+let fullShortcodes: Record<string, string> | null = null;
+export function registerFullShortcodes(map: Record<string, string>): void {
+  fullShortcodes = map;
+}
+
 // Replace any :shortcode: with its emoji. Leaves unknown shortcodes
 // alone so users can keep typing :emoji-name: as plain text.
 export function expandShortcodes(text: string): string {
   return text.replace(SHORTCODE_RE, (whole, name: string) => {
-    const e = SHORTCODES[name.toLowerCase()];
+    const key = name.toLowerCase();
+    const e = SHORTCODES[key] ?? fullShortcodes?.[key];
     return e ?? whole;
   });
 }
