@@ -715,6 +715,50 @@ body {
 }
 .config-btn:hover:not(:disabled) { background: var(--md-sys-color-surface-container); }
 .config-btn:disabled { color: var(--muted); cursor: default; }
+
+/* Inline encryption / verification block at the top of settings. */
+.encryption-block {
+  display: grid; gap: 8px;
+  padding: 12px; border-radius: 12px;
+  border: 1px solid var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.encryption-block-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.encryption-block-head .material-symbols-outlined { font-size: 20px; }
+.encryption-block-sub { margin: 0; font-size: 12px; opacity: 0.85; }
+.encryption-block .sheet-label span { color: inherit; }
+.encryption-block .chip { background: rgba(255,255,255,0.35); }
+
+/* Device manager */
+.device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.device-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
+}
+.device-icon { color: var(--muted); font-size: 22px; flex: 0 0 auto; }
+.device-icon.verified { color: var(--md-sys-color-primary); }
+.device-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.device-name { font-size: 14px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.device-meta { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.device-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+.device-tag.current { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.device-tag.ok { background: rgba(13,148,136,0.15); color: var(--md-sys-color-primary); }
+.device-tag.warn { background: rgba(245,158,11,0.18); color: #b45309; }
+.device-rename { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--md-sys-color-primary); border-radius: 6px; background: var(--bg); color: var(--fg); width: 100%; box-sizing: border-box; }
+.device-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+.device-btn {
+  display: inline-grid; place-items: center; gap: 4px;
+  min-width: 34px; height: 34px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px;
+}
+.device-btn:hover:not(:disabled) { background: var(--md-sys-color-surface-container); color: var(--fg); }
+.device-btn:disabled { opacity: 0.5; cursor: default; }
+.device-btn.danger { color: var(--md-sys-color-error); }
+.device-btn .material-symbols-outlined { font-size: 18px; }
+.device-delete-confirm { display: grid; gap: 6px; margin-top: 6px; }
+.device-delete-confirm input { font: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); box-sizing: border-box; }
 /* Per-row account/source origin tag, shown only in a combined inbox. */
 .origin-tag {
   margin-left: 6px;
@@ -1346,6 +1390,29 @@ body {
   position: relative;
 }
 .composer md-outlined-text-field { flex: 1; }
+/* Send error floats ABOVE the input row (composer is position:relative) so it
+   never sits in the flex row and squeezes/covers the text field. Dismissable. */
+.send-error {
+  position: absolute;
+  bottom: 100%; left: 0; right: 0;
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0; padding: 8px 16px;
+  background: var(--md-sys-color-error-container, #fde7e7);
+  color: var(--md-sys-color-on-error-container, #7f1d1d);
+  border-top: 1px solid var(--md-sys-color-error);
+  font-size: 12px; line-height: 1.4;
+  max-height: 38vh; overflow-y: auto;
+  z-index: 5;
+}
+.send-error-icon { font-size: 16px; flex: 0 0 auto; }
+.send-error-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.send-error-x {
+  flex: 0 0 auto; background: transparent; border: none; color: inherit;
+  cursor: pointer; display: inline-grid; place-items: center; padding: 0;
+  width: 20px; height: 20px; border-radius: 50%;
+}
+.send-error-x:hover { background: rgba(127,127,127,0.25); }
+.send-error-x .material-symbols-outlined { font-size: 16px; }
 
 /* @-mention autocomplete dropdown — floats above the composer. */
 .mention-menu {

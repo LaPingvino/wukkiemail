@@ -9,7 +9,8 @@ import { RoomPanel } from './RoomPanel';
 import { NewTaskSheet } from './NewTaskSheet';
 import { PersonPicker } from './PersonPicker';
 import { SettingsSheet } from './SettingsSheet';
-import { EncryptionSetupSheet } from './EncryptionSetupSheet';
+import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
+import { DevicesSheet } from './DevicesSheet';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
@@ -304,6 +305,7 @@ function Inbox({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [doneValuesOpen, setDoneValuesOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -461,7 +463,7 @@ function Inbox({
   // Note: the room/issue/email content panels are NOT in this cascade — they
   // live in the URL hash (see hash routing below) so a refresh restores them
   // and browser back/forward navigate them. This cascade is for sheets only.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || composeOpen;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || devicesOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || composeOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -474,6 +476,7 @@ function Inbox({
         else if (settingsOpen) setSettingsOpen(false);
         else if (doneValuesOpen) setDoneValuesOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
+        else if (devicesOpen) setDevicesOpen(false);
         else if (addAccountOpen) setAddAccountOpen(false);
         else if (jmapLoginOpen) setJmapLoginOpen(false);
         else if (bundleSheet) setBundleSheet(null);
@@ -1231,6 +1234,20 @@ function Inbox({
                     </button>
                     {configOpen && (
                       <div className="bundle-body config-body">
+                        {matrixSrc && cryptoStatus !== 'verified' && (
+                          <div className="encryption-block">
+                            <div className="encryption-block-head">
+                              <span className="material-symbols-outlined">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
+                              <strong>{cryptoStatus === 'none' ? 'Set up encryption' : 'Verify this device'}</strong>
+                            </div>
+                            <p className="encryption-block-sub">
+                              {hasEncRoom
+                                ? 'You have encrypted chats this device can’t read yet. Verify to decrypt history.'
+                                : 'Verify this device for end-to-end encrypted chats.'}
+                            </p>
+                            <EncryptionSetup matrix={matrixSrc} />
+                          </div>
+                        )}
                         <div className="accounts">
                           {slots.map((slot) => (
                             <button
@@ -1245,15 +1262,7 @@ function Inbox({
                           ))}
                           <button type="button" className="config-btn" onClick={() => setAddAccountOpen(true)}>+ Add account</button>
                         </div>
-                        {matrixSrc && hasEncRoom && cryptoStatus !== 'verified' && (
-                          <button type="button" className="crypto-banner" onClick={() => setEncryptionOpen(true)} title="Set up encryption">
-                            <span className="material-symbols-outlined">lock_open</span>
-                            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                              <strong>Set up encryption</strong>
-                              <div style={{ fontSize: 11, opacity: 0.8 }}>Cross-signing + recovery key for encrypted history.</div>
-                            </div>
-                          </button>
-                        )}
+                        {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
                         {jmapSrc
@@ -1425,6 +1434,9 @@ function Inbox({
       )}
       {doneValuesOpen && matrixSrc && (
         <DoneValuesSheet matrix={matrixSrc} onClose={() => setDoneValuesOpen(false)} />
+      )}
+      {devicesOpen && matrixSrc && (
+        <DevicesSheet matrix={matrixSrc} onClose={() => setDevicesOpen(false)} />
       )}
       {matrixSrc && bundleActionFor && (() => {
         const g = bundled.groups.find((x) => x.key === bundleActionFor);

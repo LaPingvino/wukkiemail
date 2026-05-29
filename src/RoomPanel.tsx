@@ -65,6 +65,8 @@ export function RoomPanel({
       await matrix.uploadAndSendFile(roomId, file);
     } catch (e) {
       setSendError(e instanceof Error ? e.message : String(e));
+      // Drop the failed echo so it doesn't look sent and doesn't block the queue.
+      matrix.cancelFailedEvents(roomId);
     } finally {
       setUploading(false);
     }
@@ -194,6 +196,12 @@ export function RoomPanel({
       if (field) (field as unknown as { value: string }).value = '';
     } catch (e) {
       setSendError(e instanceof Error ? e.message : String(e));
+      // Remove the failed echo (so it doesn't look sent / block the queue).
+      // The composer still holds `body`, so the user can edit and retry.
+      matrix.cancelFailedEvents(roomId);
+      setComposeText(body);
+      const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+      if (field) field.value = body;
     } finally {
       setSending(false);
     }
@@ -395,9 +403,13 @@ export function RoomPanel({
       )}
       <div className="composer">
         {sendError && (
-          <p style={{ color: 'var(--md-sys-color-error)', fontSize: 12, margin: '0 0 6px' }}>
-            Send failed: {sendError}
-          </p>
+          <div className="send-error">
+            <span className="material-symbols-outlined send-error-icon">error</span>
+            <span className="send-error-text">Send failed: {sendError}</span>
+            <button type="button" className="send-error-x" aria-label="Dismiss error" onClick={() => setSendError(null)}>
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
         )}
         {mention && mentionMatches.length > 0 && (
           <div className="mention-menu" role="listbox">
