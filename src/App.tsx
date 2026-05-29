@@ -11,7 +11,7 @@ import { PersonPicker } from './PersonPicker';
 import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
-import { CallPanel } from './CallPanel';
+import { CallView } from './CallView';
 import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE } from './call';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
@@ -1451,8 +1451,8 @@ function Inbox({
           />
         );
       })()}
-      {callRoom && (
-        <CallPanel roomId={callRoom.roomId} roomName={callRoom.name} onClose={() => setCallRoom(null)} />
+      {callRoom && matrixSrc && (
+        <CallView matrix={matrixSrc} roomId={callRoom.roomId} roomName={callRoom.name} onClose={() => setCallRoom(null)} />
       )}
       {settingsOpen && matrixSrc && (
         <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />

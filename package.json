@@ -16,6 +16,7 @@
     "@material/web": "^2.4.0",
     "dompurify": "^3.1.7",
     "lit": "^3.2.0",
+    "livekit-client": "^2.18.0",
     "matrix-js-sdk": "github:LaPingvino/matrix-js-sdk#wally-dist",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
