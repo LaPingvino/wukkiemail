@@ -349,6 +349,7 @@ function Inbox({
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [newCallOpen, setNewCallOpen] = useState(false);
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [doneValuesOpen, setDoneValuesOpen] = useState(false);
@@ -544,7 +545,7 @@ function Inbox({
   // Note: the room/issue/email content panels are NOT in this cascade — they
   // live in the URL hash (see hash routing below) so a refresh restores them
   // and browser back/forward navigate them. This cascade is for sheets only.
-  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || settingsOpen || doneValuesOpen || encryptionOpen || devicesOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || composeOpen;
+  const anyModalOpen = !!actionSheetFor || !!bundleActionFor || newTaskOpen || newDmOpen || newGroupOpen || newCallOpen || settingsOpen || doneValuesOpen || encryptionOpen || devicesOpen || addAccountOpen || jmapLoginOpen || !!bundleSheet || composeOpen;
   useEffect(() => {
     if (anyModalOpen) {
       history.pushState({ wukkieModal: true }, '');
@@ -554,6 +555,7 @@ function Inbox({
         else if (newTaskOpen) setNewTaskOpen(false);
         else if (newDmOpen) setNewDmOpen(false);
         else if (newGroupOpen) setNewGroupOpen(false);
+        else if (newCallOpen) setNewCallOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
         else if (doneValuesOpen) setDoneValuesOpen(false);
         else if (encryptionOpen) setEncryptionOpen(false);
@@ -1770,6 +1772,13 @@ function Inbox({
           onCreated={(roomId) => { setNewGroupOpen(false); setSelectedRoom(roomId); }}
         />
       )}
+      {newCallOpen && matrixSrc && (
+        <NewCallRoomSheet
+          matrix={matrixSrc}
+          onClose={() => setNewCallOpen(false)}
+          onCreated={(roomId, name) => { setNewCallOpen(false); setSelectedRoom(roomId); setCallRoom({ roomId, name }); }}
+        />
+      )}
       {matrixSrc && actionSheetFor && (() => {
         const target = items.find((x) => x.id === actionSheetFor);
         if (!target) return null;
@@ -1833,6 +1842,10 @@ function Inbox({
               <button type="button" onClick={() => { setFabMenuOpen(false); setNewGroupOpen(true); }}>
                 <span className="material-symbols-outlined">group_add</span>
                 New group
+              </button>
+              <button type="button" onClick={() => { setFabMenuOpen(false); setNewCallOpen(true); }}>
+                <span className="material-symbols-outlined">video_call</span>
+                New call room
               </button>
               {jmapSrc && (
                 <button type="button" onClick={() => { setFabMenuOpen(false); setComposeOpen(true); }}>
@@ -2151,6 +2164,65 @@ function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sourc
           {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
           <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!name.trim() || busy} style={{ justifySelf: 'end' }}>
             {busy ? 'Creating…' : 'Create group'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewCallRoomSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/matrix').MatrixSource; onClose: () => void; onCreated: (roomId: string, name: string) => void }) {
+  const [name, setName] = useState('');
+  const [video, setVideo] = useState(true);
+  const [invites, setInvites] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setError(null);
+    try { onCreated(await matrix.createCallRoom(name.trim(), video, invites), name.trim()); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New call room</div>
+        </header>
+        <div className="sheet-body">
+          <label className="sheet-label">
+            <span>Name</span>
+            <input type="text" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={video ? 'Video room' : 'Voice room'} />
+          </label>
+          <label className="sheet-label">
+            <span>Kind</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className={`chip ${video ? 'active' : ''}`} onClick={() => setVideo(true)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>videocam</span> Video
+              </button>
+              <button type="button" className={`chip ${!video ? 'active' : ''}`} onClick={() => setVideo(false)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>call</span> Voice
+              </button>
+            </div>
+            <span className="hint">A persistent call room anyone in it can join. {video ? 'Camera on by default.' : 'Audio-only by default.'}</span>
+          </label>
+          <label className="sheet-label">
+            <span>Invite (optional)</span>
+            <PersonPicker
+              matrix={matrix}
+              multi
+              value={invites}
+              onChange={setInvites}
+              placeholder="Search people or type @user:server"
+            />
+          </label>
+          {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
+          <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!name.trim() || busy} style={{ justifySelf: 'end' }}>
+            {busy ? 'Creating…' : `Create ${video ? 'video' : 'voice'} room`}
           </button>
         </div>
       </div>
