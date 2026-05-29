@@ -19,7 +19,27 @@ export function renderFormattedHtml(
   html: string,
   opts?: { mxcToHttp?: (mxc: string) => string | null },
 ): React.ReactNode {
-  const clean = DOMPurify.sanitize(html, {
+  // Resolve Matrix custom-emoji <img src="mxc://…"> to https BEFORE sanitising.
+  // DOMPurify strips the mxc: scheme (it's not in its allowed URI list), so if
+  // we sanitised first the emoji would lose their src and get dropped entirely.
+  // Parse into an inert <template> (no script execution / no network), rewrite
+  // mxc → https, drop any remote http(s) image (tracking-pixel / privacy guard;
+  // the spec only sanctions mxc), then sanitise the https result.
+  const pre = document.createElement('template');
+  pre.innerHTML = html;
+  pre.content.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src') ?? '';
+    const url = src.startsWith('mxc://') ? opts?.mxcToHttp?.(src) : null;
+    if (url) {
+      img.setAttribute('src', url);
+      img.removeAttribute('width');
+      img.removeAttribute('height');
+    } else {
+      img.remove();
+    }
+  });
+
+  const clean = DOMPurify.sanitize(pre.innerHTML, {
     ALLOWED_TAGS: ['a', 'b', 'strong', 'em', 'i', 'u', 'code', 'pre', 'br', 'p', 'span', 'blockquote',
       'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'del', 's', 'sub', 'sup',
       'mx-reply', 'div', 'img'],
@@ -34,21 +54,12 @@ export function renderFormattedHtml(
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
   });
-  // Inline images: only Matrix custom emoji (mxc:// sources) are allowed —
-  // resolve them to HTTP and shrink to text height. Any remote http(s) image
-  // is dropped (tracking-pixel / privacy guard; the spec only sanctions mxc).
+  // Every surviving <img> is now a resolved custom emoji (remote images were
+  // dropped pre-sanitise) — style it inline and lazy-load. The class is added
+  // here, after sanitise, because `class` isn't in ALLOWED_ATTR.
   tpl.content.querySelectorAll('img').forEach((img) => {
-    const src = img.getAttribute('src') ?? '';
-    const url = src.startsWith('mxc://') ? opts?.mxcToHttp?.(src) : null;
-    if (url) {
-      img.setAttribute('src', url);
-      img.setAttribute('loading', 'lazy');
-      img.classList.add('inline-emoji');
-      img.removeAttribute('width');
-      img.removeAttribute('height');
-    } else {
-      img.remove();
-    }
+    img.classList.add('inline-emoji');
+    img.setAttribute('loading', 'lazy');
   });
   return <span dangerouslySetInnerHTML={{ __html: tpl.innerHTML }} />;
 }

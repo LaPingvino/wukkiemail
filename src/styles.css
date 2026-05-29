@@ -1,8 +1,19 @@
+/* Noto Color Emoji with the Bahá'í nine-pointed star (from Wally). Used as a
+   targeted fallback only: unicode-range scopes it to U+1F7D9 so the ~10MB file
+   is fetched lazily, only when that glyph actually appears — system emoji fonts
+   handle everything else. No setting; it just works. */
+@font-face {
+  font-family: NotoColorEmojiBahai;
+  src: url('/font/NotoColorEmoji.Bahai.v0.0.1.ttf');
+  font-display: swap;
+  unicode-range: U+1F7D9;
+}
+
 /* Material 3 light/dark surface tokens. Material Web reads these
    --md-sys-color-* tokens directly. We pick a calm Inbox-ish blue. */
 :root {
   color-scheme: light dark;
-  font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif, NotoColorEmojiBahai;
   --md-sys-color-primary: #0d9488;
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: #ccfbf1;
