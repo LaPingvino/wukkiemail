@@ -135,3 +135,12 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - Widgets live in `im.vector.modular.widgets` / `m.widget` state events (account or room). useRoomWidgets reads them; WidgetsDrawer renders an iframe + drives it via ClientWidgetApi + the driver.
 - Scope: read room widgets → list → open in an iframe panel (like CallView) with the widget driver wired to our MatrixClient. Issue-board widget is the concrete use case.
 - Gotcha: widget iframe needs `allow`/sandbox attrs; capabilities negotiation is where bugs hide — port SmallWidgetDriver faithfully.
+
+### 3. Proper emoji picker (incl. custom emoji)
+- Today: `src/emoji.ts` is a tiny hardcoded shortcode table; `expandShortcodes` swaps `:smile:`→😄 in the composer input. No picker, no custom (mxc) emoji, no `:`-autocomplete dropdown.
+- Wally reference: `src/app/components/emoji-board/EmojiBoard.tsx`, `src/app/plugins/custom-emoji/*` (reads `im.ponies.emote_rooms` / `im.ponies.user_emotes` packs → mxc emoji), `src/app/hooks/useRecentEmoji.ts`, `src/app/plugins/recent-emoji.ts`. Deps: `emojibase@15.3.1` + `emojibase-data@15.3.2` for the full unicode set.
+- Wants:
+  1. A real picker UI (grid + search + groups + recent) reachable from a composer button — include CUSTOM emoji from im.ponies packs (resolve mxc via `matrix.mxcToHttp`). Picking a custom emoji must SEND it as a `formatted_body` `<img data-mx-emoticon src="mxc://…">` (the render path already handles incoming custom emoji — see markdown.tsx mxc-before-sanitize fix).
+  2. `:`-triggered autocomplete popup while typing (like the @-mention menu in RoomPanel) listing matching shortcodes + custom emoji.
+  3. CRITICAL: the `:` trigger must NOT prohibit typing emoticons like `:P`, `:D`, `:)`. So: only show the popup after ≥2 word chars (`:sm…`), never on `:` + punctuation/single-cap; Escape/space dismisses; never swallow literal text the user actually typed. Current `expandShortcodes` regex requires a closing `:` so `:P` already survives — preserve that.
+- Custom-emoji reactions (picker for the react button) is the same pack source — do both together.
