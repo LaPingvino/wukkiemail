@@ -251,6 +251,12 @@ body {
   overflow-y: auto;
   display: grid; gap: 12px;
 }
+/* Threads drawer: one tappable row per thread root. */
+.thread-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border, rgba(0,0,0,0.08)); padding: 10px 4px; cursor: pointer; color: inherit; font: inherit; }
+.thread-row:hover { background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.04)); }
+.thread-row-from { display: block; font-weight: 500; font-size: 14px; }
+.thread-row-body { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-row-meta { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
 /* SAS emoji verification grid: seven [glyph, name] tiles. */
 .sas-grid {
   display: grid;

@@ -127,6 +127,7 @@ export function RoomPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [threadsOpen, setThreadsOpen] = useState(false);
 
   const pickFile = () => fileInputRef.current?.click();
   const onFileSelected = async (file: File) => {
@@ -410,9 +411,17 @@ export function RoomPanel({
         nextLabel={nextLabel}
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
         onOpenWidgets={!threadRootId && onOpenWidgets ? () => onOpenWidgets(snap.roomName) : undefined}
+        onOpenThreads={!threadRootId && onOpenThread && snap.messages.some((m) => m.threadSummary) ? () => setThreadsOpen(true) : undefined}
         incomingCall={!threadRootId ? incomingCall : undefined}
         onPickUp={onPickUp}
       />
+      {threadsOpen && onOpenThread && (
+        <ThreadsDrawer
+          messages={snap.messages}
+          onClose={() => setThreadsOpen(false)}
+          onOpen={(rootId) => { setThreadsOpen(false); onOpenThread(rootId); }}
+        />
+      )}
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
         ref={bodyRef}
@@ -914,7 +923,45 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
+// Lists every thread in the room (its root messages, newest activity first) so
+// you can jump to one without scrolling the timeline to find its root. Reads
+// the snapshot's thread roots — those messages already carry a threadSummary
+// (count + latest activity) computed in getRoomTimeline.
+function ThreadsDrawer({ messages, onClose, onOpen }: {
+  messages: RoomTimelineSnapshot['messages'];
+  onClose: () => void;
+  onOpen: (rootId: string) => void;
+}) {
+  const roots = messages
+    .filter((m) => m.threadSummary)
+    .sort((a, b) => (b.threadSummary!.latestTs - a.threadSummary!.latestTs));
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Threads · {roots.length}</div>
+        </header>
+        <div className="sheet-body" style={{ gap: 0 }}>
+          {roots.map((m) => (
+            <button key={m.id} type="button" className="thread-row" onClick={() => onOpen(m.id)}>
+              <span className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>forum</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="thread-row-from">{m.senderName}</span>
+                <span className="thread-row-body">{m.body || '(no text)'}</span>
+              </span>
+              <span className="thread-row-meta">{m.threadSummary!.count} repl{m.threadSummary!.count === 1 ? 'y' : 'ies'} · {new Date(m.threadSummary!.latestTs).toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -933,6 +980,11 @@ function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOp
         >
           <span className="material-symbols-outlined">call</span>
           <span className="pickup-btn-text">Pick up · {incomingCall.roomName}</span>
+        </button>
+      )}
+      {onOpenThreads && (
+        <button type="button" className="hamburger" aria-label="Threads" title="Threads in this room" onClick={onOpenThreads}>
+          <span className="material-symbols-outlined">forum</span>
         </button>
       )}
       {onOpenWidgets && (
