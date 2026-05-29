@@ -87,8 +87,14 @@ export function RoomPanel({
   const acceptedMentions = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
+    let cancelled = false;
+    // Seed with whatever's already known, then fetch the full roster — with
+    // lazyLoadMembers the synchronous list is only the members seen so far,
+    // so autocomplete would otherwise miss people who haven't spoken.
     membersRef.current = matrix.getRoomMembers(roomId);
-  }, [matrix, roomId, snap]);
+    void matrix.loadRoomMembers(roomId).then((mem) => { if (!cancelled && mem.length) membersRef.current = mem; });
+    return () => { cancelled = true; };
+  }, [matrix, roomId]);
 
   const TRAILING_MENTION = /(^|\s)@([^\s@]{0,30})$/;
   const computeMatches = (query: string) => {

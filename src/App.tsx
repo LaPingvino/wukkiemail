@@ -1382,12 +1382,18 @@ function Inbox({
       )}
       {selectedRoom && matrixSrc && (() => {
         // "Next" walks every unread chat in triage order (top-level first,
-        // then bundles by how many unread they hold). Once nothing is unread,
-        // fall back to plain stream order so you can still page through.
+        // then bundles by how many unread they hold). Step FORWARD from the
+        // current room's position so it advances through the whole list rather
+        // than ping-ponging on the top unread (which happens if opening a room
+        // doesn't immediately clear its unread). When the current room is no
+        // longer unread we resume from the top of the remaining unread; once
+        // nothing is unread we fall back to plain stream order.
         const unreadOf = (rid: string) => items.find((x) => x.id === `matrix:${rid}`)?.unreadCount ?? 0;
+        const uIdx = nextUnreadOrder.indexOf(selectedRoom);
+        const remainingUnread = uIdx >= 0 ? nextUnreadOrder.slice(uIdx + 1) : nextUnreadOrder;
+        const nextUnread = remainingUnread.find((rid) => rid !== selectedRoom);
         const i = roomNavOrder.indexOf(selectedRoom);
-        const nextRoom = nextUnreadOrder.find((rid) => rid !== selectedRoom)
-          ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
+        const nextRoom = nextUnread ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
         const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
         const nextCount = nextRoom ? unreadOf(nextRoom) : 0;
         const nextLabel = nextItem
