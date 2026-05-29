@@ -181,6 +181,16 @@ m.space.child). Rooms opened in RoomPanel get a per-room subscription.
 
 SDK fork carries the load-bearing pieces (wally-dist): SlidingSync.create
 factory, per-room sync resilience (join/invite/leave/knock + onRoomData),
-storeRoom listener-leak guard (don't re-store on window growth), and demoted
-timeline-bucketing log spam. NB: SDK-only fixes need a WukkieMail redeploy so CF
-reinstalls the fork.
+storeRoom listener-leak guard (don't re-store on window growth), push-rules
+re-applied only on change, and demoted log spam. NB: SDK-only fixes need a
+WukkieMail redeploy so CF reinstalls the fork.
+
+Console-flood fixes (all SDK, wally-dist): under sliding sync, state events are
+re-emitted before the room is registered in the store, so several handlers fired
+errors/warns per room (hundreds of times each):
+- MatrixRTCSessionManager.onRoomState "Got room state event for unknown room"
+  -> demoted to debug (commit 6dc4b27f7). RTC sessions still register via
+  ClientEvent.Room -> onRoom -> refreshRoom once the room is added.
+- EventTimelineSet canContain / "does not belong in timeline" -> debug.
+- SlidingSyncSdk account-data / ephemeral "room doesn't exist" -> debug.
+- push-rules Missing/Adding default rule storm -> guarded (commit e52a5c9dc).
