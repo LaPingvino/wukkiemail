@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useDeferredValue } from 'rea
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
-import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot, isLiteStorage, setLiteStorage } from './auth/matrix';
+import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot, isLiteStorage, setLiteStorage, isClassicSync, setClassicSync } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
@@ -1508,6 +1508,14 @@ function Inbox({
                           {matrixSrc && (cryptoStatus !== 'none')
                             ? ` · keys ${cryptoPersistent ? 'persist ✓' : 'in-memory ✗'}`
                             : ''}
+                        </button>
+                        <button
+                          type="button"
+                          className="config-btn"
+                          title="Sliding sync streams a growing window of rooms (scales to huge accounts). Classic /sync downloads everything at once (can hang on very large accounts). Switch to Classic only if sliding sync misbehaves."
+                          onClick={() => { setClassicSync(!isClassicSync()); window.location.reload(); }}
+                        >
+                          Sync: {isClassicSync() ? 'classic /sync' : 'sliding (auto)'}
                         </button>
                         <button
                           type="button"

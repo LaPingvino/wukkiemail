@@ -89,6 +89,19 @@ export function setLiteStorage(on: boolean): void {
   } catch { /* ignore */ }
 }
 
+// Force classic /sync even on a server that supports sliding sync. Durable
+// fallback (the ?classicsync URL flag is the one-shot equivalent).
+const CLASSIC_SYNC_KEY = 'wukkiemail.classicSync';
+export function isClassicSync(): boolean {
+  try { return localStorage.getItem(CLASSIC_SYNC_KEY) === '1'; } catch { return false; }
+}
+export function setClassicSync(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(CLASSIC_SYNC_KEY, '1');
+    else localStorage.removeItem(CLASSIC_SYNC_KEY);
+  } catch { /* ignore */ }
+}
+
 export function clearCreds(slot?: string): void {
   const target = slot ?? getActiveSlot();
   if (!target) return;
