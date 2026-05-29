@@ -138,11 +138,19 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - `matrix-widget-api ^1.17.0` declared explicitly (was transitive; lockfile already had it as root dep).
 - NOT done: account-level widgets (`m.widget` in account data), toolbar-pin shortcuts, the IssueBoardWidget itself (that's hosted widget content, separate). Capabilities are broad (trusted) — fine since widgets come from room state, but if we ever embed untrusted widgets, gate capabilities per-widget.
 
-### 3. Proper emoji picker (incl. custom emoji)
-- Today: `src/emoji.ts` is a tiny hardcoded shortcode table; `expandShortcodes` swaps `:smile:`→😄 in the composer input. No picker, no custom (mxc) emoji, no `:`-autocomplete dropdown.
-- Wally reference: `src/app/components/emoji-board/EmojiBoard.tsx`, `src/app/plugins/custom-emoji/*` (reads `im.ponies.emote_rooms` / `im.ponies.user_emotes` packs → mxc emoji), `src/app/hooks/useRecentEmoji.ts`, `src/app/plugins/recent-emoji.ts`. Deps: `emojibase@15.3.1` + `emojibase-data@15.3.2` for the full unicode set.
-- Wants:
-  1. A real picker UI (grid + search + groups + recent) reachable from a composer button — include CUSTOM emoji from im.ponies packs (resolve mxc via `matrix.mxcToHttp`). Picking a custom emoji must SEND it as a `formatted_body` `<img data-mx-emoticon src="mxc://…">` (the render path already handles incoming custom emoji — see markdown.tsx mxc-before-sanitize fix).
-  2. `:`-triggered autocomplete popup while typing (like the @-mention menu in RoomPanel) listing matching shortcodes + custom emoji.
-  3. CRITICAL: the `:` trigger must NOT prohibit typing emoticons like `:P`, `:D`, `:)`. So: only show the popup after ≥2 word chars (`:sm…`), never on `:` + punctuation/single-cap; Escape/space dismisses; never swallow literal text the user actually typed. Current `expandShortcodes` regex requires a closing `:` so `:P` already survives — preserve that.
-- Custom-emoji reactions (picker for the react button) is the same pack source — do both together.
+### 3. Proper emoji picker (incl. custom emoji) — DONE (2026-05-29)
+- `src/emojiData.ts`: lazy-loads `emojibase-data` (compact set + emojibase shortcodes), **code-split** (separate `compact`/`emojibase` chunks, only fetched on first picker/autocomplete use — main bundle grew ~27kB). Grouped + searchable list; registers the full shortcode->char map into emoji.ts so typed `:shortcode:` expansion covers the whole set (built-in table is the pre-load fallback). Deps `emojibase ^15.3.1` + `emojibase-data ^15.3.2` (package-lock is gitignored; CI installs from package.json).
+- `MatrixSource.getCustomEmojis(roomId?)`: im.ponies packs — user pack (account data `im.ponies.user_emotes`), current room `im.ponies.room_emotes`, globally-enabled packs via `im.ponies.emote_rooms`. Deduped by shortcode, honours `emoticon` usage. Added `CustomEmoji` type.
+- `src/EmojiPicker.tsx`: search + recent (localStorage) + custom section + grouped unicode grid. Outside-click/Escape close. Reused by composer (insert) and reaction adder ("more" -> full picker).
+- Composer (RoomPanel): `mood` button opens the picker. `:word` autocomplete mirrors the @-mention menu (shared keydown). **Trigger guard** `/(^|\s):([a-z0-9_+]{2,})$/i` — needs ≥2 word chars after a colon at a word boundary, so `:P` `:D` `:)` `:-)` and `10:30` never pop the menu. Inserted custom `:shortcode:` tracked in a ref and converted to `<img data-mx-emoticon>` at send (plain body keeps the shortcode as fallback), exactly like mention pills.
+- Reactions: custom emoji react sends the mxc as the key (renderer + toggleReaction already handle mxc keys).
+
+---
+
+## All three post-compaction ports are DONE (threads, widgets, emoji). Plus an interrupt fix: sync notice no longer covers the cached inbox on reload (App.tsx — keep cache during initial sync, bottom `.sync-banner` instead of full-screen cover).
+
+### Not yet done / possible follow-ups
+- Threads: a threads *drawer* (list every thread in a room) — current UX is per-message entry only.
+- Widgets: account-level widgets (`m.widget` account data), toolbar-pin shortcuts, the hosted IssueBoardWidget itself.
+- Emoji: sticker packs (im.ponies usage `sticker`), per-emoji skin-tone variants (component group is filtered out).
+- None of threads/widgets/emoji could be tested live this session (no peers/widgets/packs to hand) — flag for the user to smoke-test on mail.wukkie.uk.
