@@ -284,6 +284,7 @@ function Inbox({
   const [composerOpen, setComposerOpen] = useState(false);
   // Bundle-level bulk-action sheet (keyed by bundle key).
   const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
+  const [bundleSnoozeFor, setBundleSnoozeFor] = useState<string | null>(null);
   // Optional JMAP mail source, multiplexed into the inbox alongside Matrix.
   const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
@@ -869,7 +870,8 @@ function Inbox({
         )}
       </div>
       <div className="subj">
-        <strong>{it.from}</strong> — {it.snippet}
+        <strong className="who">{it.from}</strong>
+        <span className="snip">{it.snippet}</span>
       </div>
       <div className="ts">
         {it.snoozedUntil ? `↻ ${formatTs(it.snoozedUntil)}` : formatTs(it.ts)}
@@ -1038,35 +1040,53 @@ function Inbox({
     });
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
-        <button type="button" className="bundle-head" onClick={toggle}>
-          <span className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
-          {(() => {
-            const ic = g.key === 'pinned' ? 'push_pin'
-              : g.key === 'snoozed' ? 'schedule'
-              : g.key === 'other' ? 'inbox'
-              : g.manual ? 'bookmark'
-              : g.children.length > 0 ? 'folder' : null;
-            return ic
-              ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
-              : <span className={`src ${g.flavor}`} />;
-          })()}
-          <span className="bundle-label">{g.label}</span>
-          {g.pinned && (
-            <span className="material-symbols-outlined" title="Pinned bundle"
-              style={{ color: 'var(--accent)', fontSize: 16 }}>push_pin</span>
+        <div className="bundle-headline">
+          <button type="button" className="bundle-head" onClick={toggle}>
+            <span className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
+            {(() => {
+              const ic = g.key === 'pinned' ? 'push_pin'
+                : g.key === 'snoozed' ? 'schedule'
+                : g.key === 'other' ? 'inbox'
+                : g.manual ? 'bookmark'
+                : g.children.length > 0 ? 'folder' : null;
+              return ic
+                ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
+                : <span className={`src ${g.flavor}`} />;
+            })()}
+            <span className="bundle-label">{g.label}</span>
+            {g.pinned && (
+              <span className="material-symbols-outlined" title="Pinned bundle"
+                style={{ color: 'var(--accent)', fontSize: 16 }}>push_pin</span>
+            )}
+            <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
+          </button>
+          {matrixSrc && (
+            <BundleActions
+              node={g}
+              snoozeOpen={bundleSnoozeFor === g.key}
+              onTogglePin={async () => { await matrixSrc.setPinnedBundle(g.key, !g.pinned); }}
+              onOpenSnooze={() => setBundleSnoozeFor(bundleSnoozeFor === g.key ? null : g.key)}
+              onSnooze={async (untilMs) => { setBundleSnoozeFor(null); await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), untilMs); }}
+              onMarkDone={async () => {
+                const msgs = g.items.filter((i) => i.flavor !== 'issue');
+                for (const it of msgs) { const r = it.id.match(/^matrix:([^:]+)$/)?.[1]; if (r) await matrixSrc.markRoomRead(r); }
+                await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), false);
+                for (const it of g.items.filter((i) => i.flavor === 'issue')) {
+                  const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+                  if (m) await matrixSrc.markIssueDone(m[1], m[2]);
+                }
+              }}
+              onMarkUnread={async () => { await matrixSrc.setManuallyUnreadBatch(g.items.filter((i) => i.flavor !== 'issue').map((i) => i.id), true); }}
+              onMore={() => setBundleActionFor(g.key)}
+            />
           )}
-          <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
-          {g.manual && (
-            <span className="section-sweep" role="button" aria-label="Edit bundle" title="Edit bundle"
-              onClick={(e) => { e.stopPropagation(); setBundleSheet({ editing: g.manual }); }}>
-              <span className="material-symbols-outlined">edit</span>
-            </span>
+          {matrixSrc && (
+            <button type="button" className="item-kebab" aria-label="Bundle actions"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBundleActionFor(g.key); }}>
+              <span className="material-symbols-outlined">more_vert</span>
+            </button>
           )}
-          <span className="section-sweep" role="button" aria-label="Bundle actions" title="Bundle actions"
-            onClick={(e) => { e.stopPropagation(); setBundleActionFor(g.key); }}>
-            <span className="material-symbols-outlined">more_vert</span>
-          </span>
-        </button>
+        </div>
         {open && (
           <div className="bundle-body">
             {g.key === 'other' && hiddenBundles.length > 0 && (
@@ -1632,6 +1652,58 @@ function ItemActions({
           <span className="material-symbols-outlined">mark_email_unread</span>
         </button>
       )}
+    </div>
+  );
+}
+
+// Inline hover actions for a bundle row — the bundle-level mirror of
+// ItemActions. Same look and reveal-on-hover; the operations are batched
+// (pin the bundle as a unit, snooze/mark-done all members at once).
+function BundleActions({
+  node, snoozeOpen, onTogglePin, onOpenSnooze, onSnooze, onMarkDone, onMarkUnread, onMore,
+}: {
+  node: BundleNode;
+  snoozeOpen: boolean;
+  onTogglePin: () => void;
+  onOpenSnooze: () => void;
+  onSnooze: (untilMs: number | null) => void;
+  onMarkDone: () => void;
+  onMarkUnread: () => void;
+  onMore: () => void;
+}) {
+  const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const canPin = !['pinned', 'snoozed', 'other'].includes(node.key);
+  return (
+    <div className="item-actions bundle-actions" onClick={stop}>
+      {canPin && (
+        <button type="button" title={node.pinned ? 'Unpin bundle' : 'Pin bundle to top'} onClick={(e) => { stop(e); onTogglePin(); }}>
+          <span className="material-symbols-outlined">{node.pinned ? 'push_pin' : 'keep'}</span>
+        </button>
+      )}
+      <div style={{ position: 'relative' }}>
+        <button type="button" title="Snooze all" onClick={(e) => { stop(e); onOpenSnooze(); }}>
+          <span className="material-symbols-outlined">schedule</span>
+        </button>
+        {snoozeOpen && (
+          <div className="snooze-popover" onClick={stop}>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextHourOfDay(20)); }}>This evening</button>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9)); }}>Tomorrow 9am</button>
+            <button type="button" onClick={(e) => { stop(e); onSnooze(nextDayAt(9, 7)); }}>Next week</button>
+          </div>
+        )}
+      </div>
+      {node.unread > 0 ? (
+        <button type="button" title="Mark all done" onClick={(e) => { stop(e); onMarkDone(); }}>
+          <span className="material-symbols-outlined">done_all</span>
+        </button>
+      ) : (
+        <button type="button" title="Mark all unread" onClick={(e) => { stop(e); onMarkUnread(); }}>
+          <span className="material-symbols-outlined">mark_email_unread</span>
+        </button>
+      )}
+      <button type="button" title="More actions" onClick={(e) => { stop(e); onMore(); }}>
+        <span className="material-symbols-outlined">more_horiz</span>
+      </button>
     </div>
   );
 }
