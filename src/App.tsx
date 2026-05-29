@@ -7,6 +7,7 @@ import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
 import { NewTaskSheet } from './NewTaskSheet';
+import { PersonPicker } from './PersonPicker';
 import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet } from './EncryptionSetupSheet';
 import { VerificationSheet } from './VerificationSheet';
@@ -1774,11 +1775,14 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
         </header>
         <div className="sheet-body">
           <label className="sheet-label">
-            <span>Matrix ID</span>
-            <input type="text" autoFocus value={mxid}
-              onChange={(e) => setMxid(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && mxid) void submit(); }}
-              placeholder="@friend:server" />
+            <span>Person</span>
+            <PersonPicker
+              matrix={matrix}
+              value={mxid ? [mxid] : []}
+              onChange={(ids) => setMxid(ids[0] ?? '')}
+              autoFocus
+              placeholder="Search people or type @friend:server"
+            />
           </label>
           {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
           <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!mxid || busy} style={{ justifySelf: 'end' }}>
@@ -1792,13 +1796,12 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
 
 function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/matrix').MatrixSource; onClose: () => void; onCreated: (roomId: string) => void }) {
   const [name, setName] = useState('');
-  const [invitesText, setInvitesText] = useState('');
+  const [invites, setInvites] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     if (!name.trim()) return;
     setBusy(true); setError(null);
-    const invites = invitesText.split(/[,\s\n]+/).map((s) => s.trim()).filter(Boolean);
     try { onCreated(await matrix.createGroup(name.trim(), invites)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -1819,12 +1822,12 @@ function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sourc
           </label>
           <label className="sheet-label">
             <span>Invite (optional)</span>
-            <textarea
-              rows={3}
-              value={invitesText}
-              onChange={(e) => setInvitesText(e.target.value)}
-              placeholder="@user1:server, @user2:server"
-              style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', color: 'var(--fg)', font: 'inherit', fontSize: 14 }}
+            <PersonPicker
+              matrix={matrix}
+              multi
+              value={invites}
+              onChange={setInvites}
+              placeholder="Search people or type @user:server"
             />
           </label>
           {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}

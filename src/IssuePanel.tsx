@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import type { MatrixSource, SchemaField } from './sources/matrix';
+import { PersonPicker } from './PersonPicker';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 import { expandShortcodes } from './emoji';
 
@@ -96,6 +97,8 @@ export function IssuePanel({
                 field={f}
                 value={content[f.key]}
                 onSave={(v) => void save(f.key, v)}
+                matrix={matrix}
+                roomId={roomId}
               />
             ))}
         </dl>
@@ -159,14 +162,36 @@ export function IssuePanel({
 }
 
 function EditableFieldRow({
-  field, value, onSave,
+  field, value, onSave, matrix, roomId,
 }: {
   field: SchemaField;
   value: unknown;
   onSave: (v: unknown) => void;
+  matrix: MatrixSource;
+  roomId: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => valueToString(value, field.type));
+
+  // User-type fields (e.g. assignee) get the shared person picker, scoped to
+  // this room's members. Edits in place — no separate "save" step.
+  if (field.type === 'user') {
+    const current = typeof value === 'string' && value ? [value] : [];
+    return (
+      <div className="field-row">
+        <dt>{field.label}</dt>
+        <dd>
+          <PersonPicker
+            matrix={matrix}
+            roomId={roomId}
+            value={current}
+            onChange={(ids) => onSave(ids[0] ?? '')}
+            placeholder="Assign someone…"
+          />
+        </dd>
+      </div>
+    );
+  }
 
   if (!editing) {
     const display = value !== undefined && value !== '' && value !== null
@@ -246,7 +271,6 @@ function EditableFieldRow({
               if (e.key === 'Enter') { e.preventDefault(); commit(); }
               if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
             }}
-            placeholder={field.type === 'user' ? '@user:server' : ''}
             style={{
               width: '100%', padding: '6px 10px',
               border: '1px solid var(--border)', borderRadius: 8,
