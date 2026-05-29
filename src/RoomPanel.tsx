@@ -195,6 +195,9 @@ export function RoomPanel({
   };
 
   useEffect(() => {
+    // Under sliding sync the room may be outside the window — subscribe so its
+    // full timeline loads (no-op on classic sync).
+    matrix.subscribeRoom(roomId);
     const unsub = matrix.subscribe(() => {
       setSnap(matrix.getRoomTimeline(roomId, 200, threadRootId));
     });
