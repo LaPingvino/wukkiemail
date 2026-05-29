@@ -198,12 +198,14 @@ export function RoomPanel({
   sendRef.current = send;
 
   if (!snap) {
+    // Full-screen even while loading — on a hash refresh the timeline isn't
+    // hydrated yet, and a bare .issue-panel here is the old narrow side
+    // overlay flashing before the room-panel takes over.
     return (
-      <div className="issue-panel">
-        <Header title="Room not loaded yet" onClose={onClose} />
+      <div className="issue-panel room-panel">
+        <Header title="Loading…" onClose={onClose} onNext={onNext} nextLabel={nextLabel} />
         <div className="empty">
-          Matrix sync hasn't reached this room yet. It'll appear once the
-          next /sync response lands.
+          <p>Loading conversation…</p>
         </div>
       </div>
     );
