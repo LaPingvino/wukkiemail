@@ -178,12 +178,14 @@ function EditableFieldRow({
         <dd
           className="editable"
           style={isMultiline(field) ? { whiteSpace: 'pre-wrap' } : undefined}
+          title="Click to edit"
           onClick={() => { setDraft(valueToString(value, field.type)); setEditing(true); }}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if (e.key === 'Enter') { setDraft(valueToString(value, field.type)); setEditing(true); } }}
         >
-          {display}
+          <span className="editable-value">{display}</span>
+          <span className="material-symbols-outlined edit-affordance" aria-hidden="true">edit</span>
         </dd>
       </div>
     );

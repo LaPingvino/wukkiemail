@@ -1052,17 +1052,38 @@ body {
 
 .issue-fields { display: grid; gap: 8px; margin: 0; }
 .issue-fields .field-row {
-  display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline;
+  display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: start;
 }
-.issue-fields dt { color: var(--muted); font-size: 13px; }
+.issue-fields dt { color: var(--muted); font-size: 13px; padding-top: 6px; }
 .issue-fields dd { margin: 0; font-size: 14px; min-width: 0; }
 .issue-fields dd.editable {
   padding: 4px 8px;
-  margin: -4px -8px;
   border-radius: 6px;
   cursor: text;
+  /* A subtle field frame so values read as editable at a glance. */
+  border: 1px solid var(--md-sys-color-outline-variant, var(--border));
+  background: var(--bg);
+  display: flex; align-items: center; gap: 8px;
 }
-.issue-fields dd.editable:hover { background: var(--md-sys-color-surface-container); }
+.issue-fields dd.editable .editable-value { flex: 1; min-width: 0; }
+.issue-fields dd.editable:hover,
+.issue-fields dd.editable:focus-visible {
+  background: var(--md-sys-color-surface-container);
+  border-color: var(--md-sys-color-primary);
+}
+.issue-fields dd.editable .edit-affordance {
+  flex: 0 0 auto;
+  font-size: 16px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.issue-fields dd.editable:hover .edit-affordance,
+.issue-fields dd.editable:focus-visible .edit-affordance { opacity: 0.7; }
+/* Touch devices have no hover — keep the pencil faintly visible there. */
+@media (hover: none) {
+  .issue-fields dd.editable .edit-affordance { opacity: 0.4; }
+}
 .comment-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 12px; }
 .comment-list li {
   padding: 12px 14px; background: var(--md-sys-color-surface-container);
