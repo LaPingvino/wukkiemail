@@ -116,4 +116,22 @@ The big direction, captured so it survives. Build it ON the filter system — do
 - CF Pages 3.x wrangler needs `run_worker_first: true` (not array form)
 - Material `<md-icon-button>` click events don't always bubble to React onClick — use plain `<button>` for those
 - vite build: `dist/sw.js` lives in `public/` so it ships verbatim
-- Sandbox blocks `/home/joop/.npm/_cacache` — npm install needs `--cache /tmp/claude/npm-cache`
+- Sandbox blocks `/home/joop/.npm/_cacache` — npm install needs `--cache /tmp/claude/npm-cache` (or run with sandbox disabled)
+- `src/sources/matrix.ts` has a NUL byte (reactionKey) → grep with `-a`; tsc/vite via `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/vite build`
+
+## NEXT (planned ports from Wally — cinny-wally is the reference, our own code)
+
+Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so SDK-level logic ports cleanly; only the cinny UI (jotai/Box/folds) needs rewriting in wukkiemail's plain-React style. We already ported calls this way (CallView/useLiveKitRoom/sfu/MatrixKeyProvider from PersistentCallContainer).
+
+### 1. Threads port
+- Wally files: `src/app/features/room/ThreadView.tsx` (170L), `ThreadsDrawer.tsx` (337L).
+- Wally uses the SDK `Thread` object when present, falling back to a main-timeline scan of `m.thread`/`rel_type` events when not.
+- WukkieMail today: `getInitialTimeline(room, threadId)` already scans the live timeline for `m.thread`/`io.element.thread` and builds a synthetic timeline (see MEMORY "Thread view architecture"). RoomPanel renders flat. Plan: add a threads drawer/affordance + a ThreadView (RootEventHeader + threaded RoomTimeline + composer with `rel_type: m.thread`). Sending: `sendMessage` needs an `m.relates_to: { rel_type: 'm.thread', event_id, is_falling_back, m.in_reply_to }`. `threadSupport: true` MUST be set in createClient (currently? verify — if not, SDK thread methods no-op).
+- Reuse our RoomPanel message renderer; thread is just a filtered timeline + thread-aware send.
+
+### 2. Widgets port
+- Wally files: `src/app/hooks/useRoomWidgets.ts` (46L), `src/app/features/room/WidgetsDrawer.tsx` (443L), `src/app/features/call/SmallWidget.ts` (464L) + `SmallWidgetDriver.ts` (639L) + `CinnyWidget.ts`, `src/app/widget/IssueBoardWidget.tsx`.
+- Dep needed: `matrix-widget-api@1.13.0` (npm install). Wally's `SmallWidgetDriver` is a trimmed WidgetDriver (capabilities, to-device, state events, OpenID) — that's the load-bearing piece to port.
+- Widgets live in `im.vector.modular.widgets` / `m.widget` state events (account or room). useRoomWidgets reads them; WidgetsDrawer renders an iframe + drives it via ClientWidgetApi + the driver.
+- Scope: read room widgets → list → open in an iframe panel (like CallView) with the widget driver wired to our MatrixClient. Issue-board widget is the concrete use case.
+- Gotcha: widget iframe needs `allow`/sandbox attrs; capabilities negotiation is where bugs hide — port SmallWidgetDriver faithfully.
