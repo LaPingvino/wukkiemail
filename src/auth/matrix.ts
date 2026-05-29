@@ -185,16 +185,38 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     },
   });
 
-  // Now that the store has been linked to a client, hydrate it.
-  // If IndexedDB is unavailable, swap to MemoryStore transparently.
+  // Now that the store has been linked to a client, hydrate it. A corrupt
+  // IndexedDB throws "Query failed: UnknownError" on startup; rather than
+  // permanently falling back to MemoryStore (which forces a full re-sync on
+  // EVERY reload), delete the broken DB and rebuild it once — that restores
+  // persistence so subsequent loads hydrate from cache instantly. Only if the
+  // rebuild also fails do we use MemoryStore.
   if (store instanceof IndexedDBStore) {
     try {
       await store.startup();
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.warn('[wukkiemail] IndexedDB startup failed, swapping to MemoryStore', e);
-      const mem = new MemoryStore({ localStorage: window.localStorage });
-      (client as unknown as { store: MemoryStore }).store = mem;
+      console.warn('[wukkiemail] IndexedDB startup failed — rebuilding the local store', e);
+      try {
+        await new Promise<void>((resolve) => {
+          const req = window.indexedDB.deleteDatabase(dbName);
+          req.onsuccess = req.onerror = req.onblocked = () => resolve();
+        });
+        const fresh = new IndexedDBStore({
+          indexedDB: window.indexedDB,
+          localStorage: window.localStorage,
+          dbName,
+        });
+        (client as unknown as { store: IndexedDBStore }).store = fresh;
+        await fresh.startup();
+        // eslint-disable-next-line no-console
+        console.info('[wukkiemail] local store rebuilt; persistence restored');
+      } catch (e2) {
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail] store rebuild failed, using MemoryStore (no persistence)', e2);
+        const mem = new MemoryStore({ localStorage: window.localStorage });
+        (client as unknown as { store: MemoryStore }).store = mem;
+      }
     }
   }
 

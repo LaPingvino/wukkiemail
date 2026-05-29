@@ -1113,10 +1113,11 @@ function Inbox({
           <div className="empty">Loading…</div>
         ) : visible.length === 0 && msgHits.length === 0 ? (
           <div className="empty">
-            {/* Distinguish "still hydrating from the local store / initial sync"
-                from a genuinely empty inbox, so a reload doesn't flash
-                "No items yet" before the cached rooms load. */}
-            {matrixSrc && matrixSrc.describe().rooms === 0
+            {/* Show "Syncing" only while the SDK genuinely hasn't finished its
+                initial sync AND has no rooms cached yet — so a reload doesn't
+                flash "No items yet", but a fully-synced empty inbox still reads
+                as empty (not stuck on "Syncing"). */}
+            {matrixSrc && !matrixSrc.isInitialSyncComplete() && matrixSrc.describe().rooms === 0
               ? <p>Syncing your conversations…</p>
               : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, spaceBundles)}.`}</p>}
           </div>
