@@ -235,13 +235,14 @@ function collectBundleItems(node: BundleNode): InboxItem[] {
   return out;
 }
 
-// Extract the Matrix room id from an inbox item id. Item ids are
-// `matrix:<roomId>`, and a Matrix room id ALWAYS contains a colon
-// (!localpart:homeserver), so the old `/^matrix:([^:]+)$/` matched nothing —
-// markRoomRead was never actually called from the bundle/item handlers, which
-// is why "mark all read" did nothing for rooms with genuine unread (e.g. the
-// IRC bundle). Issue items are `matrix:<roomId>:issue:<issueId>`; we strip the
-// suffix so this returns the room id for those too.
+// Extract the Matrix room id from an inbox item id (`matrix:<roomId>`, with
+// issue items as `matrix:<roomId>:issue:<issueId>`). Room ids may or may not
+// contain a colon: pre-v12 ids are !localpart:homeserver, but room v12+ ids
+// drop the server part (!hash, no colon). The old `/^matrix:([^:]+)$/` was
+// $-anchored, so it matched ONLY the colon-less v12 ids and failed for every
+// colon-containing id — markRoomRead was never called for older rooms (e.g.
+// the libera.chat IRC bundle), so "mark all read" did nothing there. Stripping
+// the prefix and any :issue: suffix handles both id shapes.
 function itemRoomId(id: string): string | null {
   if (!id.startsWith('matrix:')) return null;
   const rest = id.slice('matrix:'.length);
@@ -635,12 +636,14 @@ function Inbox({
     const q = deferredQuery.trim();
     return items.filter((it) => {
       const isSnoozed = it.bundles.includes('snoozed');
-      // Read filter applies to messages in ALL modes (including search, so the
-      // Unread/Read/All chips always take effect); never to snoozed items —
-      // those live in the Snoozed bundle regardless of read state (issues have
-      // no read receipts, so skip them too).
+      // Read filter for messages; never for snoozed items (they live in the
+      // Snoozed bundle regardless) or issues (no read receipts).
+      // IMPORTANT: while searching, the default Unread filter must NOT hide
+      // read matches — otherwise you can't find a read/quiet room (e.g. a VC
+      // room) by name. So Unread only restricts when NOT searching; an explicit
+      // Read filter still narrows to read in either mode.
       if (!isSnoozed && it.flavor !== 'issue') {
-        if (readFilter === 'unread' && !it.unread) return false;
+        if (readFilter === 'unread' && !it.unread && !q) return false;
         if (readFilter === 'read' && it.unread) return false;
       }
       // NOTE: task status + "Mine" are *display* filters applied per-bundle at
