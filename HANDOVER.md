@@ -109,7 +109,7 @@ The big direction, captured so it survives. Build it ON the filter system — do
 ## Gotchas already hit
 
 - `IndexedDBStore.startup()` must be called AFTER createClient (was the smoking gun for `sync=null`)
-- IndexedDBStore.startup can throw "Query failed: UnknownError" on a corrupt DB. buildClient now deletes+rebuilds the DB once on failure (NOT permanent MemoryStore fallback) — otherwise every reload does a full re-sync. If reloads are slow/"Syncing" forever, check the console for this.
+- IndexedDBStore.startup can throw "Query failed: UnknownError". buildClient closes+deletes+rebuilds the DB once on failure. On Joop's faulty Chromebook IDB is broken at the DEVICE level (even a fresh DB fails; Wally hits it too) → MemoryStore + full re-sync every reload, unavoidable from code. Mitigation: App caches the inbox item list in localStorage (`wukkiemail.items.cache.v1.<slot>`, capped 300) and hydrates instantly on reload (items state seeds from it, loading starts false). NOTE: only the inbox list is cached, not room timelines — opening a chat still waits for that room to re-sync on such devices. matrix-js-sdk has no small persistent store (localStorage too small for sync data), so there's no SDK-level alternative to IndexedDB.
 - Full-screen panels: RoomPanel/EmailView use `.issue-panel.room-panel`. The RoomPanel !snap loading branch ALSO needs `room-panel` or it flashes the old 560px side overlay on hash-refresh. IssuePanel stays a side panel by design.
 - Hash routing (#/m/room, #/m/room/issue/id, #/mail/id) drives the content panels; they're NOT in the sheet pushState cascade. applyHash on mount + hashchange; a state→hash effect mirrors them.
 - Encryption banner needs `getSecretStorageKey` cryptoCallback wired in createClient (fixed)
