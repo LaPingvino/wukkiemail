@@ -69,6 +69,7 @@ export function IssuePanel({
         subtitle={roomName}
         onClose={onClose}
         onOpenChat={onOpenChat}
+        onSaveTitle={schema.fields.some((f) => f.key === 'title') ? (v) => void save('title', v) : undefined}
       />
       <div className="issue-body">
         {statusField && statusField.values && (
@@ -87,7 +88,8 @@ export function IssuePanel({
         )}
         <dl className="issue-fields">
           {schema.fields
-            .filter((f) => !statusField || f.key !== statusField.key)
+            // Title is edited in the header; status has its own chip bar above.
+            .filter((f) => f.key !== 'title' && (!statusField || f.key !== statusField.key))
             .map((f) => (
               <EditableFieldRow
                 key={f.key}
@@ -175,6 +177,7 @@ function EditableFieldRow({
         <dt>{field.label}</dt>
         <dd
           className="editable"
+          style={isMultiline(field) ? { whiteSpace: 'pre-wrap' } : undefined}
           onClick={() => { setDraft(valueToString(value, field.type)); setEditing(true); }}
           role="button"
           tabIndex={0}
@@ -211,6 +214,25 @@ function EditableFieldRow({
             ))}
             <button type="button" className="chip" onClick={() => { setDraft(''); onSave(''); setEditing(false); }}>—</button>
           </div>
+        ) : isMultiline(field) ? (
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              // Enter inserts a newline here; Cmd/Ctrl+Enter or Escape commits.
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+            }}
+            rows={4}
+            style={{
+              width: '100%', padding: '6px 10px',
+              border: '1px solid var(--border)', borderRadius: 8,
+              background: 'var(--bg)', color: 'var(--fg)', font: 'inherit',
+              resize: 'vertical', minHeight: 80,
+            }}
+          />
         ) : (
           <input
             autoFocus
@@ -235,14 +257,44 @@ function EditableFieldRow({
   );
 }
 
-function Header({ title, subtitle, onClose, onOpenChat }: { title: string; subtitle?: string; onClose: () => void; onOpenChat?: () => void }) {
+function Header({ title, subtitle, onClose, onOpenChat, onSaveTitle }: { title: string; subtitle?: string; onClose: () => void; onOpenChat?: () => void; onSaveTitle?: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const commit = () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== title) onSaveTitle?.(next);
+  };
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
         <md-icon>close</md-icon>
       </md-icon-button>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="issue-title">{title}</div>
+        {editing ? (
+          <input
+            className="issue-title-edit"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+            }}
+          />
+        ) : (
+          <div
+            className={`issue-title ${onSaveTitle ? 'editable' : ''}`}
+            title={onSaveTitle ? 'Click to edit title' : undefined}
+            role={onSaveTitle ? 'button' : undefined}
+            tabIndex={onSaveTitle ? 0 : undefined}
+            onClick={onSaveTitle ? () => { setDraft(title); setEditing(true); } : undefined}
+            onKeyDown={onSaveTitle ? (e) => { if (e.key === 'Enter') { setDraft(title); setEditing(true); } } : undefined}
+          >
+            {title}
+          </div>
+        )}
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
       {onOpenChat && (
@@ -252,6 +304,14 @@ function Header({ title, subtitle, onClose, onOpenChat }: { title: string; subti
       )}
     </header>
   );
+}
+
+// Free-text fields that deserve a multi-line textarea rather than a single
+// line: the conventional long-text keys, or any text field the schema marks.
+function isMultiline(field: SchemaField): boolean {
+  if (field.type !== 'text') return false;
+  if ((field as { multiline?: boolean }).multiline) return true;
+  return /^(description|body|notes?|details?|summary)$/i.test(field.key);
 }
 
 function valueToString(value: unknown, type: string): string {
