@@ -15,6 +15,7 @@
 // self-contained and type-checked so the contract is proven to fit.
 
 import type { BundleSpec, InboxItem, ItemFlavor, Source } from './types';
+import { SearchIndex, type MessageDoc } from '../search';
 
 export interface JmapCreds {
   sessionUrl: string; // e.g. https://api.fastmail.com/jmap/session
@@ -84,6 +85,11 @@ export class JmapSource implements Source {
   private session: JmapSession | null = null;
   private mailboxes: JmapMailbox[] = [];
   private listeners = new Set<() => void>();
+  // Email bodies feed the SAME 'wukkiemail-search' index the Matrix side uses
+  // (SearchIndex points at one shared IndexedDB), so a single search covers
+  // chat and mail with no merge step — the Matrix-owned cursor scan already
+  // walks our docs. We only harvest; querying stays on MatrixSource.
+  private search = new SearchIndex();
 
   constructor(creds: JmapCreds) {
     this.creds = creds;
@@ -211,7 +217,7 @@ export class JmapSource implements Source {
     const bodyValues = e.bodyValues ?? {};
     const htmlPart = e.htmlBody?.find((p) => p.partId && bodyValues[p.partId]);
     const textPart = e.textBody?.find((p) => p.partId && bodyValues[p.partId]);
-    return {
+    const full: JmapEmailFull = {
       id: e.id,
       subject: e.subject ?? '(no subject)',
       from: e.from ?? [],
@@ -220,6 +226,18 @@ export class JmapSource implements Source {
       html: htmlPart?.partId ? bodyValues[htmlPart.partId]?.value : undefined,
       text: textPart?.partId ? bodyValues[textPart.partId]?.value : undefined,
     };
+    // Upsert the now-known full body into the search index (same id as the
+    // list-time doc), so opened mail becomes searchable on its whole text.
+    const plain = full.text ?? (full.html ? full.html.replace(/<[^>]+>/g, ' ') : '');
+    void this.search.addMessages([{
+      id: `jmap:${full.id}`,
+      roomId: `jmap:${full.id}`,
+      roomName: full.subject,
+      sender: full.from[0]?.name || full.from[0]?.email || '?',
+      body: `${full.subject}\n${plain}`.slice(0, 100_000),
+      ts: full.receivedAt ? Date.parse(full.receivedAt) : 0,
+    } satisfies MessageDoc]);
+    return full;
   }
 
   // Mark an email read ($seen) via Email/set.
@@ -263,7 +281,20 @@ export class JmapSource implements Source {
     ]);
     const getArgs = resp.methodResponses.find((r) => r[0] === 'Email/get')?.[1] as { list?: JmapEmail[] } | undefined;
     const emails = getArgs?.list ?? [];
-    return emails.map((e) => this.emailToItem(e));
+    const items = emails.map((e) => this.emailToItem(e));
+    // Index subject + preview so mail is searchable alongside chat. The id is
+    // the item id (jmap:<emailId>) so App can route a hit to the mail viewer,
+    // and roomName carries the subject so text terms match it too. getEmail()
+    // later upserts the same id with the full body when the message is opened.
+    void this.search.addMessages(items.map((it) => ({
+      id: it.id,
+      roomId: it.id,
+      roomName: it.subject,
+      sender: it.from,
+      body: `${it.subject}\n${it.snippet}`,
+      ts: it.ts,
+    } satisfies MessageDoc)));
+    return items;
   }
 
   private emailToItem(e: JmapEmail): InboxItem {

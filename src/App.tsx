@@ -532,7 +532,9 @@ function Inbox({
           const constrained = isEmptyFilter(roomFilter)
             ? hits
             : hits.filter((h) => {
-              const it = itemByRoom.get(`matrix:${h.roomId}`);
+              // jmap hits carry their item id (jmap:<emailId>) as roomId;
+              // matrix hits carry a bare room id we prefix to the item id.
+              const it = itemByRoom.get(h.roomId.startsWith('jmap:') ? h.roomId : `matrix:${h.roomId}`);
               return it ? matchItem(roomFilter, it, { selfMxid }) : false;
             });
           setMsgHits(constrained.slice(0, 50));
@@ -1659,20 +1661,23 @@ function Inbox({
                 <div className="section-header">
                   <span className="section-header-label">In messages</span>
                 </div>
-                {msgHits.map((hit) => (
-                  <a
-                    key={hit.id}
-                    className="item msg-hit"
-                    href={`/m/${encodeURIComponent(hit.roomId)}`}
-                    onClick={(e) => { e.preventDefault(); setSelectedRoom(hit.roomId); }}
-                    style={{ color: 'inherit', textDecoration: 'none' }}
-                  >
-                    <Avatar name={hit.sender} flavor="matrix" />
-                    <div className="from">{hit.roomName}</div>
-                    <div className="subj">{hit.body}</div>
-                    <div className="ts">{formatTs(hit.ts)}</div>
-                  </a>
-                ))}
+                {msgHits.map((hit) => {
+                  const mailId = hit.roomId.startsWith('jmap:') ? hit.roomId.slice('jmap:'.length) : null;
+                  return (
+                    <a
+                      key={hit.id}
+                      className="item msg-hit"
+                      href={mailId ? `/mail/${encodeURIComponent(mailId)}` : `/m/${encodeURIComponent(hit.roomId)}`}
+                      onClick={(e) => { e.preventDefault(); if (mailId) setSelectedEmail(mailId); else setSelectedRoom(hit.roomId); }}
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      <Avatar name={hit.sender} flavor={mailId ? 'gmail' : 'matrix'} />
+                      <div className="from">{hit.roomName}</div>
+                      <div className="subj">{hit.body}</div>
+                      <div className="ts">{formatTs(hit.ts)}</div>
+                    </a>
+                  );
+                })}
               </>
             )}
           </div>
