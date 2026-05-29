@@ -49,6 +49,7 @@ export function RoomPanel({
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200));
   const [composeText, setComposeText] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
   const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
@@ -168,6 +169,10 @@ export function RoomPanel({
   const send = async () => {
     const body = composeText.trim();
     if (!body) return;
+    // The composer stays focusable during send (disabling it dropped focus
+    // after Enter), so guard re-entrancy here against a fast double-Enter.
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setSendError(null);
     try {
@@ -193,7 +198,7 @@ export function RoomPanel({
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
       const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
-      if (field) (field as unknown as { value: string }).value = '';
+      if (field) { (field as unknown as { value: string }).value = ''; field.focus(); }
     } catch (e) {
       setSendError(e instanceof Error ? e.message : String(e));
       // Remove the failed echo (so it doesn't look sent / block the queue).
@@ -201,9 +206,10 @@ export function RoomPanel({
       matrix.cancelFailedEvents(roomId);
       setComposeText(body);
       const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
-      if (field) field.value = body;
+      if (field) { field.value = body; field.focus(); }
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
   // The composer listeners are attached once (guarded), so route send()
@@ -515,7 +521,6 @@ export function RoomPanel({
               }
             });
           }}
-          disabled={sending || undefined}
           style={{ flex: 1, minWidth: 0 }}
         />
         <button

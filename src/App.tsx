@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useDeferredValue } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
@@ -267,6 +267,10 @@ function Inbox({
   // The bundled stream is the only view now; bundle scoping is always 'all'.
   const bundle: BundleKey = 'all';
   const [query, setQuery] = useState('');
+  // Heavy filtering (visible/bundled recompute + list re-render) runs on the
+  // deferred value so typing in the search box stays responsive — the input
+  // updates immediately; results catch up at lower priority.
+  const deferredQuery = useDeferredValue(query);
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
@@ -434,7 +438,7 @@ function Inbox({
   // sender); room-level predicates (is:/flavor:/status:/in:) post-filter the
   // hits against live items. Debounced; cleared when there's nothing to run.
   useEffect(() => {
-    const f = parseQuery(query);
+    const f = parseQuery(deferredQuery);
     if (!matrixSrc || (f.text.length === 0 && f.from.length === 0)) { setMsgHits([]); return; }
     let cancelled = false;
     const t = setTimeout(() => {
@@ -454,7 +458,7 @@ function Inbox({
         .catch(() => { if (!cancelled) setMsgHits([]); });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, matrixSrc, items, selfMxid]);
+  }, [deferredQuery, matrixSrc, items, selfMxid]);
 
   // Android back / browser back closes the topmost modal-ish layer
   // instead of leaving the SPA. Each open pushes a history state; popstate
@@ -547,9 +551,9 @@ function Inbox({
   // Parse the search box through the shared filter system, so the box
   // understands is:unread / flavor:x / from: / status: / is:mine alongside
   // free text — the same predicates bundles will be built from.
-  const parsedQuery = useMemo(() => parseQuery(query), [query]);
+  const parsedQuery = useMemo(() => parseQuery(deferredQuery), [deferredQuery]);
   const visible = useMemo(() => {
-    const q = query.trim();
+    const q = deferredQuery.trim();
     return items.filter((it) => {
       const isSnoozed = it.bundles.includes('snoozed');
       // Read filter applies only to messages, only when not searching, and
@@ -565,7 +569,7 @@ function Inbox({
       if (!q) return true;
       return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, query, parsedQuery, readFilter, selfMxid]);
+  }, [items, deferredQuery, parsedQuery, readFilter, selfMxid]);
 
   // Per-section/per-bundle display filter for tasks (status chips + Mine).
   // Applied at render so the controlling chips never vanish with their items.
@@ -1215,7 +1219,7 @@ function Inbox({
             {(() => {
               const rendered: React.ReactNode[] = [];
               let idx = 0;
-              const isBundled = bundle === 'all' && !query.trim();
+              const isBundled = bundle === 'all' && !deferredQuery.trim();
 
               if (isBundled) {
                 // Config bundle at the very top — folds open to settings +
