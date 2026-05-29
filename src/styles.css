@@ -599,6 +599,62 @@ body {
   color: var(--muted); text-align: center; padding: 24px;
 }
 
+/* Incoming-call banner — sits at the top of the list, above everything, and
+   pulses to draw the eye (like a phone ringing). */
+.incoming-calls {
+  display: grid; gap: 8px;
+  padding: 10px 12px;
+  position: sticky; top: 0; z-index: 20;
+}
+.incoming-call {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 14px;
+  background: var(--md-sys-color-primary-container, #d7e3ff);
+  color: var(--md-sys-color-on-primary-container, #001b3f);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  animation: incoming-pulse 1.6s ease-in-out infinite;
+}
+@keyframes incoming-pulse {
+  0%, 100% { box-shadow: 0 2px 10px rgba(0,0,0,0.12); }
+  50% { box-shadow: 0 2px 18px var(--md-sys-color-primary, #6750a4); }
+}
+.incoming-call-ring { animation: incoming-shake 1s ease-in-out infinite; }
+@keyframes incoming-shake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(12deg); }
+  60% { transform: rotate(-8deg); }
+  80% { transform: rotate(8deg); }
+}
+.incoming-call-text { flex: 1; min-width: 0; }
+.incoming-call-title { font-size: 12px; opacity: 0.8; }
+.incoming-call-room { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.incoming-call-accept {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: 999px; cursor: pointer;
+  padding: 8px 16px; font: inherit; font-weight: 600;
+  background: var(--md-sys-color-primary, #6750a4); color: #fff;
+}
+.incoming-call-accept .material-symbols-outlined { font-size: 18px; }
+.incoming-call-decline {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; cursor: pointer;
+  width: 38px; height: 38px;
+  background: var(--md-sys-color-error, #ba1a1a); color: #fff;
+}
+
+/* "Pick up" button in a chat header while a call rings elsewhere. */
+.pickup-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: 999px; cursor: pointer;
+  padding: 6px 12px; font: inherit; font-weight: 600; font-size: 13px;
+  background: var(--md-sys-color-primary, #6750a4); color: #fff;
+  max-width: 220px; overflow: hidden;
+  animation: incoming-pulse 1.6s ease-in-out infinite;
+}
+.pickup-btn .material-symbols-outlined { font-size: 18px; }
+.pickup-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Non-blocking "still syncing" notice. Sits at the bottom of the list so the
    cached items stay visible and usable immediately on reload; it just signals
    that fresher data is on the way, then disappears when the sync completes. */

@@ -44,6 +44,8 @@ export function RoomPanel({
   nextLabel,
   onStartCall,
   onOpenWidgets,
+  incomingCall,
+  onPickUp,
   threadRootId,
   onOpenThread,
 }: {
@@ -55,6 +57,10 @@ export function RoomPanel({
   onStartCall?: (roomName: string) => void;
   // Open the room's widgets panel. Undefined hides the button.
   onOpenWidgets?: (roomName: string) => void;
+  // An incoming call ringing somewhere — shows a "pick up" button in the header
+  // while you're reading a chat (like the Next button). Undefined = no call.
+  incomingCall?: { roomId: string; roomName: string };
+  onPickUp?: (roomId: string, roomName: string) => void;
   // When set, this panel is a thread view: the timeline is filtered to the
   // thread, the composer threads new messages, and there is no "N replies"
   // affordance (we're already inside the thread).
@@ -337,6 +343,8 @@ export function RoomPanel({
         nextLabel={nextLabel}
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
         onOpenWidgets={!threadRootId && onOpenWidgets ? () => onOpenWidgets(snap.roomName) : undefined}
+        incomingCall={!threadRootId ? incomingCall : undefined}
+        onPickUp={onPickUp}
       />
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
@@ -837,7 +845,7 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void }) {
+function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -847,6 +855,17 @@ function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOp
         <div className="issue-title">{title}</div>
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
+      {incomingCall && onPickUp && (
+        <button
+          type="button"
+          className="pickup-btn"
+          title={incomingCall.roomId === '' ? 'Join call' : `Pick up call in ${incomingCall.roomName}`}
+          onClick={() => onPickUp(incomingCall.roomId, incomingCall.roomName)}
+        >
+          <span className="material-symbols-outlined">call</span>
+          <span className="pickup-btn-text">Pick up · {incomingCall.roomName}</span>
+        </button>
+      )}
       {onOpenWidgets && (
         <button type="button" className="hamburger" aria-label="Widgets" title="Widgets" onClick={onOpenWidgets}>
           <span className="material-symbols-outlined">widgets</span>

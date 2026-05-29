@@ -27,6 +27,12 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
 
   const fociRef = useRef<Awaited<ReturnType<typeof discoverOwnFoci>>>([]);
 
+  // Suppress the incoming-call prompt for the room we're actively in.
+  useEffect(() => {
+    matrix.setActiveCallRoom(roomId);
+    return () => matrix.setActiveCallRoom(null);
+  }, [matrix, roomId]);
+
   // 1) Discover the SFU (well-known rtc_foci, else the manual fallback URL),
   // then fetch the LiveKit token for this room.
   useEffect(() => {

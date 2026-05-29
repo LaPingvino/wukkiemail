@@ -41,6 +41,15 @@ export function setSfuServiceUrl(v: string): void {
   } catch { /* ignore */ }
 }
 
+// Ring on incoming calls? On by default; toggle in settings.
+const RING_KEY = 'wukkiemail.ringtoneEnabled';
+export function getRingtoneEnabled(): boolean {
+  try { return localStorage.getItem(RING_KEY) !== '0'; } catch { return true; }
+}
+export function setRingtoneEnabled(on: boolean): void {
+  try { localStorage.setItem(RING_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
 export function buildCallUrl(roomId: string, roomName = ''): string {
   return getCallTemplate()
     .replace('{roomId}', encodeURIComponent(roomId))

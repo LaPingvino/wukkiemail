@@ -13,7 +13,8 @@ import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
 import { CallView } from './CallView';
 import { WidgetPanel } from './WidgetPanel';
-import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE, getSfuServiceUrl, setSfuServiceUrl } from './call';
+import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE, getSfuServiceUrl, setSfuServiceUrl, getRingtoneEnabled, setRingtoneEnabled } from './call';
+import { startRinging, stopRinging } from './ring';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
@@ -22,7 +23,7 @@ import { JmapLoginSheet } from './JmapLoginSheet';
 import { EmailView } from './EmailView';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
-import type { ManualBundle, SpaceNode } from './sources/matrix';
+import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -355,6 +356,8 @@ function Inbox({
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [callRoom, setCallRoom] = useState<{ roomId: string; name: string } | null>(null);
   const [widgetRoom, setWidgetRoom] = useState<{ roomId: string; name: string } | null>(null);
+  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>([]);
+  const [ringtoneOn, setRingtoneOn] = useState(getRingtoneEnabled());
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -391,6 +394,21 @@ function Inbox({
     const unsub = matrixSrc.subscribe(() => void refresh());
     return () => { cancelled = true; unsub(); };
   }, [matrixSrc]);
+
+  // Track incoming calls (active call in a joined room we haven't joined).
+  useEffect(() => {
+    if (!matrixSrc) { setIncomingCalls([]); return; }
+    setIncomingCalls(matrixSrc.getIncomingCalls());
+    const unsub = matrixSrc.subscribe(() => setIncomingCalls(matrixSrc.getIncomingCalls()));
+    return unsub;
+  }, [matrixSrc]);
+
+  // Ring while there's an incoming call (if the ringtone is enabled).
+  useEffect(() => {
+    if (incomingCalls.length > 0 && ringtoneOn) startRinging();
+    else stopRinging();
+    return () => stopRinging();
+  }, [incomingCalls.length, ringtoneOn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1272,6 +1290,34 @@ function Inbox({
             </div>
           )}
         </div>
+        {matrixSrc && incomingCalls.length > 0 && (
+          <div className="incoming-calls" role="region" aria-label="Incoming calls">
+            {incomingCalls.map((c) => (
+              <div key={c.roomId} className="incoming-call">
+                <span className="incoming-call-ring material-symbols-outlined" aria-hidden="true">call</span>
+                <div className="incoming-call-text">
+                  <div className="incoming-call-title">Incoming call</div>
+                  <div className="incoming-call-room">{c.roomName}</div>
+                </div>
+                <button
+                  type="button"
+                  className="incoming-call-accept"
+                  onClick={() => { matrixSrc.setActiveCallRoom(c.roomId); setCallRoom({ roomId: c.roomId, name: c.roomName }); }}
+                >
+                  <span className="material-symbols-outlined">call</span> Accept
+                </button>
+                <button
+                  type="button"
+                  className="incoming-call-decline"
+                  aria-label="Decline call"
+                  onClick={() => matrixSrc.dismissIncomingCall(c.roomId)}
+                >
+                  <span className="material-symbols-outlined">call_end</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {loading ? (
           <div className="empty">Loading…</div>
         ) : visible.length === 0 && msgHits.length === 0 ? (
@@ -1353,6 +1399,9 @@ function Inbox({
                           const v = window.prompt('Call SFU — lk-jwt-service URL for in-app calls (only needed if your homeserver doesn’t advertise rtc_foci in .well-known). e.g. https://livekit-jwt.example.com', getSfuServiceUrl());
                           if (v !== null) { setSfuServiceUrl(v); }
                         }}>Call SFU: {getSfuServiceUrl() ? 'set' : 'auto-discover'}</button>
+                        <button type="button" className="config-btn" onClick={() => { const v = !ringtoneOn; setRingtoneEnabled(v); setRingtoneOn(v); }}>
+                          Incoming-call ringtone: {ringtoneOn ? 'on' : 'off'}
+                        </button>
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
                         {jmapSrc
@@ -1540,6 +1589,8 @@ function Inbox({
             onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
             onOpenWidgets={(matrixSrc.getRoomWidgets(selectedRoom).length > 0 || matrixSrc.canManageWidgets(selectedRoom)) ? (name) => setWidgetRoom({ roomId: selectedRoom, name }) : undefined}
             onOpenThread={(rootId) => setOpenThread({ roomId: selectedRoom, rootId })}
+            incomingCall={incomingCalls[0]}
+            onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
           />
         );
       })()}
