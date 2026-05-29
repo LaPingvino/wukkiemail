@@ -321,13 +321,13 @@ function Inbox({
   const [issueStatusFilter, setIssueStatusFilter] = useState<Set<string>>(new Set());
   // When on, hide tasks not assigned to me (matched on any schema user field).
   const [mineOnly, setMineOnly] = useState(false);
-  // Per-bundle status/mine overrides, keyed by bundle node key. The global
-  // issueStatusFilter/mineOnly above stay scoped to the All-view section
-  // headers; an opened bundle's chips tune only its own entry here, so
-  // filtering tasks in one space no longer affects another (or the top view).
-  // Read filter stays global for now — it's tied to `visible`/counts, unlike
-  // these pure render-time display filters.
-  const [bundleFilters, setBundleFilters] = useState<Record<string, { status?: Set<string>; mine?: boolean }>>({});
+  // Per-bundle status/mine/read overrides, keyed by bundle node key. The global
+  // issueStatusFilter/mineOnly/readFilter above stay scoped to the All-view
+  // section headers; an opened bundle's chips tune only its own entry here, so
+  // filtering one space no longer affects another (or the top view). Each field
+  // defaults to the global value when a bundle has no override, so unset bundles
+  // behave exactly as before.
+  const [bundleFilters, setBundleFilters] = useState<Record<string, { status?: Set<string>; mine?: boolean; read?: 'unread' | 'read' | 'all' }>>({});
   // Bundled-stream view: which bundles are folded open (accordion).
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   // The config bundle (settings + accounts) at the top of the stream.
@@ -666,6 +666,19 @@ function Inbox({
     });
   }, [items, deferredQuery, parsedQuery, readFilter, selfMxid]);
 
+  // Read-INCLUSIVE counterpart, used only by the bundled accordion so each
+  // bundle can apply its own read filter (the memo narrows per node, defaulting
+  // to the global readFilter). `visible` above stays global-read-filtered for
+  // keyboard nav, the flat search view and the empty check, so their behavior
+  // is unchanged. Search filtering is identical; only the read step differs.
+  const visibleStream = useMemo(() => {
+    const q = deferredQuery.trim();
+    return items.filter((it) => {
+      if (!q) return true;
+      return matchItem(parsedQuery, it, { selfMxid });
+    });
+  }, [items, deferredQuery, parsedQuery, selfMxid]);
+
   // Per-section/per-bundle display filter for tasks (status chips + Mine).
   // Applied at render so the controlling chips never vanish with their items.
   const displayFilter = (it: InboxItem, scopeKey?: string): boolean => {
@@ -825,7 +838,7 @@ function Inbox({
     const loose: InboxItem[] = [];
     const groups = new Map<string, InboxItem[]>();
     const pushTo = (k: string, it: InboxItem) => { const a = groups.get(k); if (a) a.push(it); else groups.set(k, [it]); };
-    for (const it of visible) {
+    for (const it of visibleStream) {
       // Snoozed items wait in their own bottom bundle until they wake;
       // pinned items collect in a Pinned bundle at the top.
       if (it.bundles.includes('snoozed')) { pushTo('snoozed', it); continue; }
@@ -837,13 +850,20 @@ function Inbox({
       if (it.priority >= topLevel) { loose.push(it); continue; }
       pushTo(assignAuto(it), it);
     }
-    loose.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+    // Loose items are top-level (global) scope, so they use the global read
+    // filter. Per-bundle read overrides are applied per node below via readF.
+    const looseRead = loose.filter((it) => passesRead(it, readFilter, false));
+    looseRead.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
     const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
     const unreadOf = (xs: InboxItem[]) => xs.filter((g) => g.unread).length;
+    // Narrow a group's items by that bundle's effective read filter (its own
+    // override, or the global readFilter when unset). By defaulting to the
+    // global value this reproduces the old visible-time filtering exactly.
+    const readF = (key: string, xs: InboxItem[]) => xs.filter((it) => passesRead(it, scopedRead(key), false));
 
     // Manual bundles first, in user order, always present.
     const manualList: BundleNode[] = manualBundles.map((b) => {
-      const gItems = sortItems(groups.get(`manual:${b.id}`) ?? []);
+      const gItems = sortItems(readF(`manual:${b.id}`, groups.get(`manual:${b.id}`) ?? []));
       groups.delete(`manual:${b.id}`);
       return { key: `manual:${b.id}`, label: b.label, flavor: 'matrix', manual: b, items: gItems, unread: unreadOf(gItems), count: gItems.length, children: [] };
     });
@@ -870,7 +890,7 @@ function Inbox({
       else { roots.push(s.id); }
     }
     const buildSpace = (id: string): BundleNode => {
-      const direct = sortItems(groups.get(`space:${id}`) ?? []);
+      const direct = sortItems(readF(`space:${id}`, groups.get(`space:${id}`) ?? []));
       groups.delete(`space:${id}`);
       const children = (childrenOf.get(id) ?? []).map(buildSpace).filter((n) => n.count > 0);
       children.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
@@ -881,12 +901,12 @@ function Inbox({
     const spaceNodes = roots.map(buildSpace).filter((n) => n.count > 0);
 
     // Synthetic Pinned (top) and Snoozed (bottom) bundles.
-    const pinnedItems = sortItems(groups.get('pinned') ?? []);
+    const pinnedItems = sortItems(readF('pinned', groups.get('pinned') ?? []));
     groups.delete('pinned');
-    const snoozedItems = sortItems(groups.get('snoozed') ?? []);
+    const snoozedItems = sortItems(readF('snoozed', groups.get('snoozed') ?? []));
     groups.delete('snoozed');
     // The "Other" bundle: items whose auto-bundle the user hid.
-    const otherItems = sortItems(groups.get('other') ?? []);
+    const otherItems = sortItems(readF('other', groups.get('other') ?? []));
     groups.delete('other');
 
     // Mail mailboxes nest under a synthetic "Mail" parent, mirroring how rooms
@@ -897,29 +917,34 @@ function Inbox({
     for (const [key, gItems] of [...groups.entries()]) {
       if (!key.startsWith('mailbox:')) continue;
       groups.delete(key);
-      const xs = sortItems(gItems);
+      const xs = sortItems(readF(key, gItems));
+      if (xs.length === 0) continue; // read filter emptied this mailbox
       mailboxNodes.push({ key, label: mailLabelOf.get(key) ?? 'Mailbox', flavor: 'gmail', items: xs, unread: unreadOf(xs), count: xs.length, children: [] });
     }
     mailboxNodes.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
     let mailNode: BundleNode | null = null;
     if (mailboxNodes.length > 0) {
-      const looseMail = sortItems(groups.get('flavor:gmail') ?? []);
+      const looseMail = sortItems(readF('flavor:gmail', groups.get('flavor:gmail') ?? []));
       groups.delete('flavor:gmail');
       const unread = unreadOf(looseMail) + mailboxNodes.reduce((s, c) => s + c.unread, 0);
       const count = looseMail.length + mailboxNodes.reduce((s, c) => s + c.count, 0);
       mailNode = { key: 'flavor:gmail', label: 'Mail', flavor: 'gmail', items: looseMail, unread, count, children: mailboxNodes };
     }
 
-    // Remaining groups (dm, flavor:X, orphan spaces) render flat.
-    const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => ({
-      key,
-      label: bundleLabel(key as BundleKey, [...spaceBundles, ...mailBundles]),
-      flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
-      items: sortItems(gItems),
-      unread: unreadOf(gItems),
-      count: gItems.length,
-      children: [],
-    }));
+    // Remaining groups (dm, flavor:X, orphan spaces) render flat. Apply the
+    // per-bundle read filter and drop any the filter emptied.
+    const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => {
+      const xs = sortItems(readF(key, gItems));
+      return {
+        key,
+        label: bundleLabel(key as BundleKey, [...spaceBundles, ...mailBundles]),
+        flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
+        items: xs,
+        unread: unreadOf(xs),
+        count: xs.length,
+        children: [],
+      };
+    }).filter((n) => n.count > 0);
 
     const autoTop = [...spaceNodes, ...(mailNode ? [mailNode] : []), ...flatAuto];
     autoTop.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
@@ -941,7 +966,7 @@ function Inbox({
     const pinnedMiddle = middle.filter((n) => n.pinned);
     const restMiddle = middle.filter((n) => !n.pinned);
     return {
-      loose,
+      loose: looseRead,
       groups: [
         ...(pinnedNode ? [pinnedNode] : []),
         ...pinnedMiddle,
@@ -951,7 +976,7 @@ function Inbox({
       ] as BundleNode[],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, spaceBundles, mailBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
+  }, [visibleStream, readFilter, bundleFilters, spaceBundles, mailBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
 
   // Message rooms in the exact order they appear in the stream (loose, then
   // each bundle's items, recursing into nested spaces; Snoozed excluded).
@@ -1146,6 +1171,21 @@ function Inbox({
     if (!key) { setMineOnly(val); return; }
     setBundleFilters((m) => ({ ...m, [key]: { ...m[key], mine: val } }));
   };
+  const scopedRead = (key?: string): 'unread' | 'read' | 'all' =>
+    (key ? bundleFilters[key]?.read : undefined) ?? readFilter;
+  const setScopedRead = (key: string | undefined, mode: 'unread' | 'read' | 'all') => {
+    if (!key) { setReadFilter(mode); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], read: mode } }));
+  };
+  // Mirror of the old visible-time read rule, now applied per scope. Snoozed
+  // items and issues are never read-filtered; while searching, the default
+  // Unread mode must not hide read matches (so a read room is still findable).
+  const passesRead = (it: InboxItem, mode: 'unread' | 'read' | 'all', searching: boolean): boolean => {
+    if (it.bundles.includes('snoozed') || it.flavor === 'issue') return true;
+    if (mode === 'unread' && !it.unread && !searching) return false;
+    if (mode === 'read' && it.unread) return false;
+    return true;
+  };
 
   // The per-section / per-bundle filter controls. `scope` provides the sweep
   // targets and the available task statuses (with counts). `scopeKey` selects
@@ -1196,8 +1236,8 @@ function Inbox({
         <button
           key={mode}
           type="button"
-          className={`mini-chip ${readFilter === mode ? 'active' : ''}`}
-          onClick={() => setReadFilter(mode)}
+          className={`mini-chip ${scopedRead(scopeKey) === mode ? 'active' : ''}`}
+          onClick={() => setScopedRead(scopeKey, mode)}
         >{mode === 'unread' ? 'Unread' : mode === 'read' ? 'Read' : 'All'}</button>
       ))}
       {hasIssues && scope.some((t) => t.flavor === 'issue' && t.priority > -1) && (
