@@ -167,6 +167,13 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     // eslint-disable-next-line no-console
     console.warn('[wukkiemail] ?reset — deleting IndexedDB', dbName);
     try { window.indexedDB.deleteDatabase(dbName); } catch (e) { console.warn(e); }
+    // One-shot: strip the flag so a later manual refresh doesn't wipe + full-
+    // resync every time.
+    try {
+      params.delete('reset');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+    } catch { /* ignore */ }
   }
 
   let store: IndexedDBStore | MemoryStore;

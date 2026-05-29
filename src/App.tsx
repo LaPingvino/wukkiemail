@@ -1222,11 +1222,20 @@ function Inbox({
   // the running keyboard-cursor index across loose items + all open bundles.
   const renderBundleNode = (g: BundleNode, depth: number, counter: { n: number }): React.ReactNode => {
     const open = expandedBundles.has(g.key);
-    const toggle = () => setExpandedBundles((prev) => {
-      const next = new Set(prev);
-      if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
-      return next;
-    });
+    const toggle = () => {
+      const opening = !expandedBundles.has(g.key);
+      setExpandedBundles((prev) => {
+        const next = new Set(prev);
+        if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
+        return next;
+      });
+      // Opening a space? Pull in any of its rooms the local store is missing
+      // (joined-but-unsynced get materialized; the rest become joinable) —
+      // targeted, instead of a full resync.
+      if (opening && matrixSrc && g.key.startsWith('space:')) {
+        void matrixSrc.syncSpaceRooms(g.key.slice('space:'.length));
+      }
+    };
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
@@ -1499,6 +1508,19 @@ function Inbox({
                           {matrixSrc && (cryptoStatus !== 'none')
                             ? ` · keys ${cryptoPersistent ? 'persist ✓' : 'in-memory ✗'}`
                             : ''}
+                        </button>
+                        <button
+                          type="button"
+                          className="config-btn"
+                          title="Clear the local cache and re-download all rooms from the server. Use this if rooms are missing from the inbox."
+                          onClick={() => {
+                            if (!confirm('Force a full resync? This clears the local cache and re-downloads all your rooms from the server. Use this if rooms are missing.')) return;
+                            const p = new URLSearchParams(window.location.search);
+                            p.set('reset', '1');
+                            window.location.search = p.toString();
+                          }}
+                        >
+                          Force full resync (fix missing rooms)
                         </button>
                         <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
                       </div>
