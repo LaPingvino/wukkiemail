@@ -26,6 +26,21 @@ export function setCallTemplate(v: string): void {
   } catch { /* ignore */ }
 }
 
+// Manual lk-jwt-service URL for the native call, used when the homeserver
+// doesn't advertise org.matrix.msc4143.rtc_foci in .well-known (so we can't
+// auto-discover the SFU). e.g. https://livekit-jwt.chat.kiefte.eu
+const SFU_KEY = 'wukkiemail.sfuServiceUrl';
+export function getSfuServiceUrl(): string {
+  try { return localStorage.getItem(SFU_KEY) ?? ''; } catch { return ''; }
+}
+export function setSfuServiceUrl(v: string): void {
+  try {
+    const t = v.trim().replace(/\/$/, '');
+    if (t) localStorage.setItem(SFU_KEY, t);
+    else localStorage.removeItem(SFU_KEY);
+  } catch { /* ignore */ }
+}
+
 export function buildCallUrl(roomId: string, roomName = ''): string {
   return getCallTemplate()
     .replace('{roomId}', encodeURIComponent(roomId))

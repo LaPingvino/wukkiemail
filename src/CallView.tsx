@@ -10,8 +10,8 @@ import { MatrixRTCSessionEvent } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSess
 import type { MatrixSource } from './sources/matrix';
 import { useLiveKitRoom } from './useLiveKitRoom';
 import { MatrixKeyProvider } from './MatrixKeyProvider';
-import { fetchSfuToken, resolveCallServiceUrl, fociPreferredFor } from './sfu';
-import { buildCallUrl } from './call';
+import { fetchSfuToken, discoverOwnFoci, resolveServiceUrl, fociPreferredFor } from './sfu';
+import { buildCallUrl, getSfuServiceUrl } from './call';
 
 export function CallView({ matrix, roomId, roomName, onClose }: {
   matrix: MatrixSource;
@@ -25,15 +25,29 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
   const [keyProvider] = useState(() => new MatrixKeyProvider());
   const isEncrypted = !!mx?.getRoom(roomId)?.hasEncryptionStateEvent?.();
 
-  // 1) Fetch the SFU token for this room.
+  const fociRef = useRef<Awaited<ReturnType<typeof discoverOwnFoci>>>([]);
+
+  // 1) Discover the SFU (well-known rtc_foci, else the manual fallback URL),
+  // then fetch the LiveKit token for this room.
   useEffect(() => {
     if (!mx) { setTokenError('Not signed in'); return; }
-    const serviceUrl = resolveCallServiceUrl(mx, roomId);
-    if (!serviceUrl) { setTokenError('No LiveKit SFU is configured for this homeserver (.well-known rtc_foci).'); return; }
     let cancelled = false;
-    fetchSfuToken(mx, serviceUrl, roomId)
-      .then((r) => { if (!cancelled) setCreds(r); })
-      .catch((e) => { if (!cancelled) setTokenError(e instanceof Error ? e.message : String(e)); });
+    (async () => {
+      const ownFoci = await discoverOwnFoci(mx);
+      if (cancelled) return;
+      fociRef.current = ownFoci;
+      const serviceUrl = resolveServiceUrl(mx, roomId, ownFoci, getSfuServiceUrl());
+      if (!serviceUrl) {
+        setTokenError('No LiveKit SFU found. Your homeserver doesn’t advertise one (.well-known rtc_foci) — set the lk-jwt-service URL in Settings → Call SFU.');
+        return;
+      }
+      try {
+        const r = await fetchSfuToken(mx, serviceUrl, roomId);
+        if (!cancelled) setCreds(r);
+      } catch (e) {
+        if (!cancelled) setTokenError(e instanceof Error ? e.message : String(e));
+      }
+    })();
     return () => { cancelled = true; };
   }, [mx, roomId]);
 
@@ -48,7 +62,7 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
     };
     if (isEncrypted) rtc.on(MatrixRTCSessionEvent.EncryptionKeyChanged, onKey);
     rtc.joinRoomSession(
-      fociPreferredFor(mx, roomId),
+      fociPreferredFor(roomId, fociRef.current, getSfuServiceUrl()),
       { type: 'livekit', focus_selection: 'oldest_membership' } as never,
       { manageMediaKeys: isEncrypted, useExperimentalToDeviceTransport: true } as never,
     );

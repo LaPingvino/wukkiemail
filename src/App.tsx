@@ -12,7 +12,8 @@ import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
 import { CallView } from './CallView';
-import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE } from './call';
+import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE, getSfuServiceUrl, setSfuServiceUrl } from './call';
+import { discoverOwnFoci } from './sfu';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
 import { BundleSheet } from './BundleSheet';
@@ -225,6 +226,14 @@ interface BundleNode {
   pinned?: boolean;     // bundle pinned as a unit → floats to the top intact
 }
 
+// All items in a bundle, including nested spaces — bundle-level actions
+// (mark all, snooze all) must reach descendants, not just direct items.
+function collectBundleItems(node: BundleNode): InboxItem[] {
+  const out = [...node.items];
+  for (const c of node.children) out.push(...collectBundleItems(c));
+  return out;
+}
+
 // Does a task's user-field set reference me? User fields may hold a full
 // mxid, a bare localpart, or a display name, so match loosely: equal to
 // the mxid, equal to the localpart, or either containing the other.
@@ -313,6 +322,7 @@ function Inbox({
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [callRoom, setCallRoom] = useState<{ roomId: string; name: string } | null>(null);
+  const [callSupported, setCallSupported] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -332,6 +342,21 @@ function Inbox({
 
   const matrixSrc = matrix.kind === 'syncing' || matrix.kind === 'ready' ? matrix.source : null;
   const selfMxid = matrixSrc?.id ?? null;
+
+  // Calls only work if an SFU is reachable — a manual lk-jwt-service URL, or one
+  // the homeserver advertises (.well-known rtc_foci). Like the issue tracker,
+  // hide the call affordance entirely when it isn't supported.
+  useEffect(() => {
+    if (!matrixSrc) { setCallSupported(false); return; }
+    if (getSfuServiceUrl()) { setCallSupported(true); return; }
+    const mx = matrixSrc.getClient();
+    if (!mx) return;
+    let cancelled = false;
+    discoverOwnFoci(mx)
+      .then((foci) => { if (!cancelled) setCallSupported(foci.some((f) => f.type === 'livekit' && f.livekit_service_url)); })
+      .catch(() => { /* unsupported */ });
+    return () => { cancelled = true; };
+  }, [matrixSrc]);
 
   useEffect(() => {
     if (!matrixSrc) return;
@@ -1111,17 +1136,21 @@ function Inbox({
               snoozeOpen={bundleSnoozeFor === g.key}
               onTogglePin={async () => { await matrixSrc.setPinnedBundle(g.key, !g.pinned); }}
               onOpenSnooze={() => setBundleSnoozeFor(bundleSnoozeFor === g.key ? null : g.key)}
-              onSnooze={async (untilMs) => { setBundleSnoozeFor(null); await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), untilMs); }}
+              onSnooze={async (untilMs) => { setBundleSnoozeFor(null); await matrixSrc.setSnoozedBatch(collectBundleItems(g).map((i) => i.id), untilMs); }}
               onMarkDone={async () => {
-                const msgs = g.items.filter((i) => i.flavor !== 'issue');
+                // Operate on ALL items in the bundle, including nested spaces —
+                // g.items is only the direct children, so a space bundle's rooms
+                // (which live in g.children) were being missed entirely.
+                const all = collectBundleItems(g);
+                const msgs = all.filter((i) => i.flavor !== 'issue');
                 for (const it of msgs) { const r = it.id.match(/^matrix:([^:]+)$/)?.[1]; if (r) await matrixSrc.markRoomRead(r); }
                 await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), false);
-                for (const it of g.items.filter((i) => i.flavor === 'issue')) {
+                for (const it of all.filter((i) => i.flavor === 'issue')) {
                   const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
                   if (m) await matrixSrc.markIssueDone(m[1], m[2]);
                 }
               }}
-              onMarkUnread={async () => { await matrixSrc.setManuallyUnreadBatch(g.items.filter((i) => i.flavor !== 'issue').map((i) => i.id), true); }}
+              onMarkUnread={async () => { await matrixSrc.setManuallyUnreadBatch(collectBundleItems(g).filter((i) => i.flavor !== 'issue').map((i) => i.id), true); }}
               onMore={() => setBundleActionFor(g.key)}
             />
           )}
@@ -1290,6 +1319,10 @@ function Inbox({
                           const v = window.prompt('Call URL template. {roomId} and {roomName} are substituted. Default is the Wally Conference guest page (standalone LiveKit, no login).', getCallTemplate());
                           if (v !== null) { setCallTemplate(v); }
                         }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Wally Conference (default)' : 'custom'}</button>
+                        <button type="button" className="config-btn" onClick={() => {
+                          const v = window.prompt('Call SFU — lk-jwt-service URL for in-app calls (only needed if your homeserver doesn’t advertise rtc_foci in .well-known). e.g. https://livekit-jwt.example.com', getSfuServiceUrl());
+                          if (v !== null) { setSfuServiceUrl(v); }
+                        }}>Call SFU: {getSfuServiceUrl() ? 'set' : 'auto-discover'}</button>
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
                         {jmapSrc
@@ -1453,7 +1486,7 @@ function Inbox({
             onClose={() => setSelectedRoom(null)}
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
-            onStartCall={(name) => setCallRoom({ roomId: selectedRoom, name })}
+            onStartCall={callSupported ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
           />
         );
       })()}
@@ -1475,15 +1508,16 @@ function Inbox({
       {matrixSrc && bundleActionFor && (() => {
         const g = bundled.groups.find((x) => x.key === bundleActionFor);
         if (!g) return null;
-        const msgs = g.items.filter((i) => i.flavor !== 'issue');
-        const tasks = g.items.filter((i) => i.flavor === 'issue');
+        const allItems = collectBundleItems(g);
+        const msgs = allItems.filter((i) => i.flavor !== 'issue');
+        const tasks = allItems.filter((i) => i.flavor === 'issue');
         const roomId = (id: string) => id.match(/^matrix:([^:]+)$/)?.[1];
         const close = () => setBundleActionFor(null);
         const canPinBundle = !['pinned', 'snoozed', 'other'].includes(g.key);
         return (
           <div className="sheet-scrim" onClick={close}>
             <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
-              <div className="action-sheet-title">{g.label} — {g.items.length} item{g.items.length === 1 ? '' : 's'}</div>
+              <div className="action-sheet-title">{g.label} — {allItems.length} item{allItems.length === 1 ? '' : 's'}</div>
               {msgs.length > 0 && (
                 <button onClick={async () => {
                   // Read receipts are per-room API calls (safe to loop); the
@@ -1515,17 +1549,17 @@ function Inbox({
                 </button>
               )}
               {g.key === 'snoozed' ? (
-                <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), null); close(); }}>
+                <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), null); close(); }}>
                   <span className="material-symbols-outlined">alarm_off</span>
                   Unsnooze all
                 </button>
               ) : (
                 <>
-                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextHourOfDay(20)); close(); }}>
+                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), nextHourOfDay(20)); close(); }}>
                     <span className="material-symbols-outlined">schedule</span>
                     Snooze all until this evening
                   </button>
-                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(g.items.map((i) => i.id), nextDayAt(9)); close(); }}>
+                  <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), nextDayAt(9)); close(); }}>
                     <span className="material-symbols-outlined">schedule</span>
                     Snooze all until tomorrow
                   </button>
