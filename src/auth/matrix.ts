@@ -71,6 +71,23 @@ export function saveCreds(c: MatrixCreds): void {
   if (!localStorage.getItem(ACTIVE_SLOT_KEY)) setActiveSlot(slot);
 }
 
+// Lite storage: keep the large matrix sync accumulator in memory instead of
+// IndexedDB. The visible inbox is served from the localStorage item cache and
+// room timelines sync on demand, so the big data never has to be persisted —
+// which keeps IndexedDB tiny (only the small crypto store uses it) and avoids
+// the size/quota failures some devices hit. Auto-enabled after a persistent
+// IndexedDB failure so we stop retrying a broken store every load.
+const LITE_STORAGE_KEY = 'wukkiemail.liteStorage';
+export function isLiteStorage(): boolean {
+  try { return localStorage.getItem(LITE_STORAGE_KEY) === '1'; } catch { return false; }
+}
+export function setLiteStorage(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(LITE_STORAGE_KEY, '1');
+    else localStorage.removeItem(LITE_STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
 export function clearCreds(slot?: string): void {
   const target = slot ?? getActiveSlot();
   if (!target) return;
@@ -152,9 +169,9 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
   }
 
   let store: IndexedDBStore | MemoryStore;
-  if (params.has('nostore')) {
+  if (params.has('nostore') || isLiteStorage()) {
     // eslint-disable-next-line no-console
-    console.warn('[wukkiemail] ?nostore — using MemoryStore');
+    console.info(`[wukkiemail] lite storage — sync store in memory (${params.has('nostore') ? '?nostore' : 'enabled'})`);
     store = new MemoryStore({ localStorage: window.localStorage });
   } else {
     store = new IndexedDBStore({
@@ -216,7 +233,11 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
         console.info('[wukkiemail] local store rebuilt; persistence restored');
       } catch (e2) {
         // eslint-disable-next-line no-console
-        console.warn('[wukkiemail] store rebuild failed, using MemoryStore (no persistence)', e2);
+        console.warn('[wukkiemail] store rebuild failed, switching to lite storage (sync in memory)', e2);
+        // Persisting the sync store is failing on this device — remember it so
+        // future loads skip IndexedDB for sync entirely (straight to memory),
+        // instead of paying the failed-startup cost every time.
+        setLiteStorage(true);
         const mem = new MemoryStore({ localStorage: window.localStorage });
         (client as unknown as { store: MemoryStore }).store = mem;
       }

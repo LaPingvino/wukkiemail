@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
-import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot } from './auth/matrix';
+import { loginWithPassword, saveCreds, clearCreds, listSlots, setActiveSlot, getActiveSlot, isLiteStorage, setLiteStorage } from './auth/matrix';
 import { MatrixSource } from './sources/matrix';
 import { IssuePanel } from './IssuePanel';
 import { RoomPanel } from './RoomPanel';
@@ -1269,6 +1269,14 @@ function Inbox({
                             {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="config-btn"
+                          title="Keep the large sync data in memory instead of the local database. Helps on devices where the local database is broken or fills up; tradeoff is a fuller resync on each load."
+                          onClick={() => { setLiteStorage(!isLiteStorage()); window.location.reload(); }}
+                        >
+                          Lite storage: {isLiteStorage() ? 'on' : 'off'}
+                        </button>
                         <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
                       </div>
                     )}
@@ -1731,14 +1739,22 @@ function BundleActions({
           <span className="material-symbols-outlined">{node.pinned ? 'push_pin' : 'keep'}</span>
         </button>
       )}
-      <div style={{ position: 'relative' }}>
-        <button type="button" title={node.key === 'snoozed' ? 'Reschedule / unsnooze all' : 'Snooze all'} onClick={(e) => { stop(e); onOpenSnooze(); }}>
-          <span className="material-symbols-outlined">schedule</span>
+      {node.key === 'snoozed' ? (
+        // Everything here is already snoozed — the only useful action is to
+        // wake it, so skip the full snooze menu and unsnooze directly.
+        <button type="button" title="Unsnooze all" onClick={(e) => { stop(e); onSnooze(null); }}>
+          <span className="material-symbols-outlined">alarm_off</span>
         </button>
-        {snoozeOpen && (
-          <SnoozeMenu snoozed={node.key === 'snoozed'} allLabel onSnooze={onSnooze} />
-        )}
-      </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          <button type="button" title="Snooze all" onClick={(e) => { stop(e); onOpenSnooze(); }}>
+            <span className="material-symbols-outlined">schedule</span>
+          </button>
+          {snoozeOpen && (
+            <SnoozeMenu snoozed={false} allLabel onSnooze={onSnooze} />
+          )}
+        </div>
+      )}
       {node.unread > 0 ? (
         <button type="button" title="Mark all done" onClick={(e) => { stop(e); onMarkDone(); }}>
           <span className="material-symbols-outlined">done_all</span>
