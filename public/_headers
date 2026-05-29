@@ -1,0 +1,22 @@
+# Cloudflare Pages cache headers. The whole stale-app-on-mobile problem comes
+# down to: the HTML (and the service worker) MUST always be revalidated, while
+# the content-hashed assets they point at can be cached forever.
+#
+# index.html / sw.js / manifest are tiny and change every deploy — never let a
+# mobile browser serve a stale copy (which would reference old asset hashes and
+# pin the old app). Hashed /assets/* are immutable: a new build = a new URL.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/sw.js
+  Cache-Control: no-cache
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache

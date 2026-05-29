@@ -8,7 +8,7 @@
 //   - Matrix /sync, /api calls, anything dynamic
 //   - Anything from a different origin
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const SHELL_CACHE = `wukkiemail-shell-${CACHE_VERSION}`;
 const ASSETS_CACHE = `wukkiemail-assets-${CACHE_VERSION}`;
 
@@ -45,11 +45,20 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // SPA navigation: try network, fall back to cached '/' (= index.html).
+  // SPA navigation: ALWAYS fetch index.html fresh, bypassing the browser's
+  // HTTP cache (cache: 'no-store'). This is the key fix for stale apps on
+  // mobile — a cached HTML would point at old, content-hashed asset URLs, and
+  // since assets are cache-first that would pin the whole old app. The HTML is
+  // tiny, so revalidating it every navigation is cheap. We refresh the offline
+  // shell copy on success and fall back to it only when truly offline.
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(req);
+        const fresh = await fetch(req, { cache: 'no-store' });
+        if (fresh.ok) {
+          const cache = await caches.open(SHELL_CACHE);
+          cache.put('/', fresh.clone());
+        }
         return fresh;
       } catch {
         const shell = await caches.match('/');

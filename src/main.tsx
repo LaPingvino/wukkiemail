@@ -49,8 +49,23 @@ createRoot(root).render(
 // Register the service worker on idle so it doesn't fight first paint.
 // Production-only: dev server uses its own HMR which conflicts with SW.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  // If a controller already governs this load, a later controllerchange means a
+  // NEW version just activated — reload once to pick it up. This is the fix for
+  // "I had to hard-refresh on mobile to get the update". On the very first
+  // install there's no prior controller, so we don't reload under the user.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch((e) => {
+    void navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Nudge mobile browsers that otherwise sit on a cached worker to check
+      // for an updated sw.js on each load.
+      reg.update().catch(() => {});
+    }).catch((e) => {
       // eslint-disable-next-line no-console
       console.warn('[wukkiemail] sw register failed', e);
     });
