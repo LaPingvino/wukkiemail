@@ -4,6 +4,7 @@
 
 import { createClient, MemoryStore, type MatrixClient } from 'matrix-js-sdk';
 import { IndexedDBStore } from 'matrix-js-sdk/lib/store/indexeddb.js';
+import { cryptoCallbacks } from './secretStorageKeys';
 
 export interface MatrixCreds {
   homeserverUrl: string;
@@ -187,19 +188,10 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     userId: creds.userId,
     deviceId: creds.deviceId,
     store,
-    cryptoCallbacks: {
-      // SDK calls this when it needs to decrypt SSSS secrets (cross-signing
-      // private keys, key backup). bootstrapEncryption / verifyWithRecoveryKey
-      // stash a Uint8Array on window._wukkieKey; we return it keyed by the
-      // server's SSSS default key id.
-      getSecretStorageKey: async ({ keys }: { keys: Record<string, unknown> }) => {
-        const stash = (window as unknown as { _wukkieKey?: Uint8Array })._wukkieKey;
-        if (!stash) return null;
-        const keyId = Object.keys(keys)[0];
-        if (!keyId) return null;
-        return [keyId, stash] as [string, Uint8Array];
-      },
-    },
+    // Both getSecretStorageKey AND cacheSecretStorageKey, keyed by 4S key id —
+    // mirrors Wally. Without cacheSecretStorageKey the SDK can't stash the key
+    // it needs to import cross-signing private keys from 4S.
+    cryptoCallbacks,
   });
 
   // Now that the store has been linked to a client, hydrate it. A corrupt
