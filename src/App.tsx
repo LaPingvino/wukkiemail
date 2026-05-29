@@ -1266,6 +1266,7 @@ function Inbox({
                           ))}
                           <button type="button" className="config-btn" onClick={() => setAddAccountOpen(true)}>+ Add account</button>
                         </div>
+                        {matrixSrc && <button type="button" className="config-btn" onClick={() => setEncryptionOpen(true)}>Encryption &amp; key backup…</button>}
                         {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
                         <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
                         <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
