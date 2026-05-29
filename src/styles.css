@@ -348,7 +348,7 @@ body {
   .toolbar { padding: 8px 12px; gap: 8px; }
   .toolbar md-outlined-text-field { flex: 1; min-width: 0; }
   .item {
-    grid-template-columns: 36px 1fr auto;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
     grid-template-areas:
       "ava from   ts"
       "ava subj subj";
@@ -666,8 +666,9 @@ body {
 .bundle-body {
   border-top: 1px solid var(--border);
   padding: 6px 8px 10px;
-  display: grid; gap: 4px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px;
 }
+.bundle-body > * { min-width: 0; }
 .bundle-body .section-filters { padding: 4px 6px 8px; }
 .restore-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
@@ -768,17 +769,23 @@ body {
 }
 .item-list {
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 16px 96px;
   max-width: 820px;
   width: 100%;
   margin: 0 auto;
   display: grid;
+  /* Pin the single column to minmax(0,1fr): an implicit `auto` track grows to
+     its widest child's min-content, so one long unbreakable name (space/room)
+     would push the whole list wider than the viewport. minmax(0,…) caps it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
+.item-list > * { min-width: 0; }
 
 /* Inbox-style cards: rounded, drop shadow on hover. */
 .item {
-  display: grid; grid-template-columns: 40px 180px 1fr auto;
+  display: grid; grid-template-columns: 40px minmax(0, 180px) minmax(0, 1fr) auto;
   gap: 16px; padding: 14px 20px; align-items: center;
   background: var(--card);
   border-radius: 12px;
