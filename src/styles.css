@@ -1421,6 +1421,38 @@ body {
 }
 .call-title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-status { font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+
+/* Widgets panel — reuses .call-panel/.call-head/.call-empty. The iframe is the
+   widget content; tabs switch between a room's widgets. */
+.widget-panel { background: var(--bg); color: var(--fg); }
+.widget-iframe { flex: 1 1 auto; min-height: 0; width: 100%; border: none; background: var(--bg); }
+.widget-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--card); flex: 0 0 auto;
+}
+.widget-tab-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.widget-tab {
+  border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--fg);
+  padding: 4px 12px; font-size: 13px; cursor: pointer;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.widget-tab.active { background: var(--md-sys-color-primary, #6750a4); color: #fff; border-color: transparent; }
+.widget-tab-x {
+  border: none; background: transparent; color: var(--muted);
+  cursor: pointer; display: inline-flex; padding: 2px; border-radius: 50%;
+}
+.widget-tab-x:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
+.widget-add {
+  display: grid; gap: 8px; padding: 12px;
+  border-bottom: 1px solid var(--border); background: var(--card); flex: 0 0 auto;
+}
+.widget-add input {
+  width: 100%; box-sizing: border-box; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit;
+}
+.widget-add-actions { display: flex; gap: 8px; align-items: center; }
 .call-grid {
   flex: 1; min-height: 0; display: grid; gap: 8px; padding: 12px;
   grid-template-columns: 1fr;

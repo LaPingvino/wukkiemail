@@ -12,6 +12,7 @@ import { SettingsSheet } from './SettingsSheet';
 import { EncryptionSetupSheet, EncryptionSetup } from './EncryptionSetupSheet';
 import { DevicesSheet } from './DevicesSheet';
 import { CallView } from './CallView';
+import { WidgetPanel } from './WidgetPanel';
 import { getCallTemplate, setCallTemplate, DEFAULT_CALL_TEMPLATE, getSfuServiceUrl, setSfuServiceUrl } from './call';
 import { VerificationSheet } from './VerificationSheet';
 import { DoneValuesSheet } from './DoneValuesSheet';
@@ -339,6 +340,7 @@ function Inbox({
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [callRoom, setCallRoom] = useState<{ roomId: string; name: string } | null>(null);
+  const [widgetRoom, setWidgetRoom] = useState<{ roomId: string; name: string } | null>(null);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [slots] = useState<string[]>(() => listSlots());
   const activeSlot = getActiveSlot();
@@ -1522,6 +1524,7 @@ function Inbox({
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
             onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
+            onOpenWidgets={(matrixSrc.getRoomWidgets(selectedRoom).length > 0 || matrixSrc.canManageWidgets(selectedRoom)) ? (name) => setWidgetRoom({ roomId: selectedRoom, name }) : undefined}
             onOpenThread={(rootId) => setOpenThread({ roomId: selectedRoom, rootId })}
           />
         );
@@ -1536,6 +1539,9 @@ function Inbox({
       )}
       {callRoom && matrixSrc && (
         <CallView matrix={matrixSrc} roomId={callRoom.roomId} roomName={callRoom.name} onClose={() => setCallRoom(null)} />
+      )}
+      {widgetRoom && matrixSrc && (
+        <WidgetPanel matrix={matrixSrc} roomId={widgetRoom.roomId} roomName={widgetRoom.name} onClose={() => setWidgetRoom(null)} />
       )}
       {settingsOpen && matrixSrc && (
         <SettingsSheet matrix={matrixSrc} onClose={() => setSettingsOpen(false)} />

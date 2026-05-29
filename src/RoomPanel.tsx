@@ -40,6 +40,7 @@ export function RoomPanel({
   onNext,
   nextLabel,
   onStartCall,
+  onOpenWidgets,
   threadRootId,
   onOpenThread,
 }: {
@@ -49,6 +50,8 @@ export function RoomPanel({
   onNext?: () => void;
   nextLabel?: string;
   onStartCall?: (roomName: string) => void;
+  // Open the room's widgets panel. Undefined hides the button.
+  onOpenWidgets?: (roomName: string) => void;
   // When set, this panel is a thread view: the timeline is filtered to the
   // thread, the composer threads new messages, and there is no "N replies"
   // affordance (we're already inside the thread).
@@ -261,6 +264,7 @@ export function RoomPanel({
         onNext={threadRootId ? undefined : onNext}
         nextLabel={nextLabel}
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
+        onOpenWidgets={!threadRootId && onOpenWidgets ? () => onOpenWidgets(snap.roomName) : undefined}
       />
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
@@ -660,7 +664,7 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void }) {
+function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -670,6 +674,11 @@ function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall }: { 
         <div className="issue-title">{title}</div>
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
+      {onOpenWidgets && (
+        <button type="button" className="hamburger" aria-label="Widgets" title="Widgets" onClick={onOpenWidgets}>
+          <span className="material-symbols-outlined">widgets</span>
+        </button>
+      )}
       {onStartCall && (
         <button type="button" className="hamburger" aria-label="Start voice or video call" title="Start call" onClick={onStartCall}>
           <span className="material-symbols-outlined">videocam</span>
