@@ -154,3 +154,17 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - Widgets: account-level widgets (`m.widget` account data), toolbar-pin shortcuts, the hosted IssueBoardWidget itself.
 - Emoji: sticker packs (im.ponies usage `sticker`), per-emoji skin-tone variants (component group is filtered out).
 - None of threads/widgets/emoji could be tested live this session (no peers/widgets/packs to hand) — flag for the user to smoke-test on mail.wukkie.uk.
+
+## SDK fix (2026-05-29): missing joined rooms
+
+Root cause of "joined rooms missing from the inbox/spaces" was in the
+matrix-js-sdk fork (LaPingvino/matrix-js-sdk#wally-dist), not the app:
+`processSyncResponse` processes each room batch with `promiseMapSeries`
+(sequential for/await). One room throwing (e.g. an unsupported/too-new room
+version) aborted the whole loop, so every room AFTER it was never
+`storeRoom()`'d and stayed permanently absent from `getRooms()`. Fixed by
+wrapping per-room processing in try/catch in all four loops (join, invite,
+leave, knock) — fork commits 47114d3d6 / d5df99ae3 on wally-dist. Affects Wally
+too. Consumers pick it up on a fresh install (lockfile is gitignored, dep
+tracks the wally-dist branch). App-side mitigations remain: syncSpaceRooms on
+space-open + the Force-full-resync settings button.
