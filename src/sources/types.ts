@@ -25,6 +25,7 @@ export interface InboxItem {
   snippet: string;
   ts: number;            // ms epoch of most recent activity
   unread: boolean;
+  unreadCount?: number;  // number of unread notifications (for "most unread" ordering); 0/absent when read
   threadCount: number;
   priority: number;      // higher = more important; sorted desc with ts as tie-break
   snoozedUntil?: number; // ms epoch when this item wakes from snooze

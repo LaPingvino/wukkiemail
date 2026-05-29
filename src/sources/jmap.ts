@@ -283,6 +283,7 @@ export class JmapSource implements Source {
       snippet: e.preview ?? '',
       ts,
       unread,
+      unreadCount: unread ? 1 : 0,
       threadCount: 0,
       // Unread floats; flagged floats higher. Mirrors the Matrix weighting
       // spirit so email and chat interleave sanely in the All view.

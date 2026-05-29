@@ -1355,15 +1355,26 @@ function Inbox({
         />
       )}
       {selectedRoom && matrixSrc && (() => {
+        // "Next" walks the inbox most-unread first (natural triage order):
+        // jump to whichever other room has the most unread. Once nothing is
+        // unread, fall back to plain stream order so you can still page on.
+        const unreadOf = (rid: string) => items.find((x) => x.id === `matrix:${rid}`)?.unreadCount ?? 0;
+        const byUnread = roomNavOrder
+          .filter((rid) => rid !== selectedRoom && unreadOf(rid) > 0)
+          .sort((a, b) => unreadOf(b) - unreadOf(a)); // stable: ties keep stream order
         const i = roomNavOrder.indexOf(selectedRoom);
-        const nextRoom = i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0];
+        const nextRoom = byUnread[0] ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
         const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
+        const nextCount = nextRoom ? unreadOf(nextRoom) : 0;
+        const nextLabel = nextItem
+          ? (nextCount > 0 ? `${nextItem.subject} · ${nextCount} unread` : nextItem.subject)
+          : undefined;
         return (
           <RoomPanel
             matrix={matrixSrc}
             roomId={selectedRoom}
             onClose={() => setSelectedRoom(null)}
-            nextLabel={nextItem?.subject}
+            nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
           />
         );
