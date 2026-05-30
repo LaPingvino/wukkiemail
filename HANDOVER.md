@@ -190,6 +190,15 @@ window auto-grows to cover all rooms. required_state is EXPLICIT (Continuwuity
 doesn't honour the ["*","*"] wildcard, which had left spaces with no
 m.space.child). Rooms opened in RoomPanel get a per-room subscription.
 
+SPACES-MISSING fix (SDK, wally-dist d19580eb0): the create() factory grew only
+the all list, leaving the spaces list pinned at [[0,199]]. On a server that
+doesn't honour the room_types filter the spaces list degrades to a recency list,
+so low-sorting space rooms sat beyond the window and never arrived (user: "missing
+a lot of spaces"). The Lifecycle growth handler now grows BOTH lists until each
+covers every room the server reports. Helps under both hypotheses (filter honoured
+or not). If spaces are still missing after this, get wmSpaces() output to tell
+heldSpaces vs serverSpacesCount apart.
+
 SDK fork carries the load-bearing pieces (wally-dist): SlidingSync.create
 factory, per-room sync resilience (join/invite/leave/knock + onRoomData),
 storeRoom listener-leak guard (don't re-store on window growth), push-rules
