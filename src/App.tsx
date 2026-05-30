@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useDeferredValue } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, useDeferredValue } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
@@ -306,6 +306,34 @@ function Inbox({
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  // Chat navigation history (browser-style). `navHistory` is the back-stack of
+  // previously-opened chats; `forwardRoom` is the chat you most recently backed
+  // away from, which the Next button then prioritises so Back/Next round-trip.
+  const [navHistory, setNavHistory] = useState<string[]>([]);
+  const [forwardRoom, setForwardRoom] = useState<string | null>(null);
+  const prevSelectedRoomRef = useRef<string | null>(null);
+  const backNavRef = useRef(false);
+  // Track chat opens into the back-stack. Skip the push when we got here via the
+  // Back button (it's a pop, not a new open); opening any OTHER chat clears the
+  // forward target (a new branch).
+  useEffect(() => {
+    const prev = prevSelectedRoomRef.current;
+    prevSelectedRoomRef.current = selectedRoom;
+    if (backNavRef.current) { backNavRef.current = false; return; }
+    if (selectedRoom && prev && prev !== selectedRoom) {
+      setNavHistory((h) => (h[h.length - 1] === prev ? h : [...h, prev]));
+      setForwardRoom((f) => (f === selectedRoom ? null : f));
+    }
+    if (!selectedRoom) { setNavHistory([]); setForwardRoom(null); }
+  }, [selectedRoom]);
+  const goBackChat = useCallback(() => {
+    if (navHistory.length === 0) return;
+    const prev = navHistory[navHistory.length - 1];
+    backNavRef.current = true;
+    setForwardRoom(selectedRoom);
+    setNavHistory((h) => h.slice(0, -1));
+    setSelectedRoom(prev);
+  }, [navHistory, selectedRoom]);
   // Bumped when a room opens/closes so the inbox re-derives which rooms have an
   // unsent composer draft (drafts are written to localStorage by RoomPanel; the
   // same tab gets no storage event, so we recompute on this signal).
@@ -1842,17 +1870,24 @@ function Inbox({
         const remainingUnread = uIdx >= 0 ? nextUnreadOrder.slice(uIdx + 1) : nextUnreadOrder;
         const nextUnread = remainingUnread.find((rid) => rid !== selectedRoom);
         const i = roomNavOrder.indexOf(selectedRoom);
-        const nextRoom = nextUnread ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
+        // Prefer the chat you backed away from (so Back→Next round-trips), then
+        // the next unread, then plain stream order.
+        const nextRoom = (forwardRoom && forwardRoom !== selectedRoom ? forwardRoom : undefined)
+          ?? nextUnread ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
         const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
         const nextCount = nextRoom ? unreadOf(nextRoom) : 0;
         const nextLabel = nextItem
           ? (nextCount > 0 ? `${nextItem.subject} · ${nextCount} unread` : nextItem.subject)
           : undefined;
+        const backRoom = navHistory[navHistory.length - 1];
+        const backItem = backRoom ? items.find((x) => x.id === `matrix:${backRoom}`) : undefined;
         return (
           <RoomPanel
             matrix={matrixSrc}
             roomId={selectedRoom}
             onClose={() => setSelectedRoom(null)}
+            onBack={backRoom ? goBackChat : undefined}
+            backLabel={backItem?.subject}
             nextLabel={nextLabel}
             onNext={nextRoom ? () => setSelectedRoom(nextRoom) : undefined}
             onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}

@@ -90,6 +90,8 @@ export function RoomPanel({
   matrix,
   roomId,
   onClose,
+  onBack,
+  backLabel,
   onNext,
   nextLabel,
   onStartCall,
@@ -102,6 +104,8 @@ export function RoomPanel({
   matrix: MatrixSource;
   roomId: string;
   onClose: () => void;
+  onBack?: () => void;
+  backLabel?: string;
   onNext?: () => void;
   nextLabel?: string;
   onStartCall?: (roomName: string) => void;
@@ -426,7 +430,7 @@ export function RoomPanel({
     // overlay flashing before the room-panel takes over.
     return (
       <div className="issue-panel room-panel">
-        <Header title="Loading…" onClose={onClose} onNext={onNext} nextLabel={nextLabel} />
+        <Header title="Loading…" onClose={onClose} onBack={onBack} backLabel={backLabel} onNext={onNext} nextLabel={nextLabel} />
         <div className="empty">
           <p>Loading conversation…</p>
         </div>
@@ -440,6 +444,8 @@ export function RoomPanel({
         title={threadRootId ? 'Thread' : snap.roomName}
         subtitle={threadRootId ? snap.roomName : `${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
         onClose={onClose}
+        onBack={threadRootId ? undefined : onBack}
+        backLabel={backLabel}
         onNext={threadRootId ? undefined : onNext}
         nextLabel={nextLabel}
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
@@ -1051,7 +1057,7 @@ function ThreadsDrawer({ messages, onClose, onOpen }: {
   );
 }
 
-function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
+function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -1085,6 +1091,15 @@ function Header({ title, subtitle, onClose, onNext, nextLabel, onStartCall, onOp
       {onStartCall && (
         <button type="button" className="hamburger" aria-label="Start voice or video call" title="Start call" onClick={onStartCall}>
           <span className="material-symbols-outlined">videocam</span>
+        </button>
+      )}
+      {onBack && (
+        <button type="button" className="next-btn next-btn-back" title={backLabel ? `Back: ${backLabel}` : 'Back to previous chat'} onClick={onBack}>
+          <span className="material-symbols-outlined">chevron_left</span>
+          <span className="next-btn-text">
+            <span className="next-btn-label">Back</span>
+            {backLabel && <span className="next-btn-sub">{backLabel}</span>}
+          </span>
         </button>
       )}
       {onNext && (
