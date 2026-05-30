@@ -365,6 +365,7 @@ function Inbox({
   const [newCallOpen, setNewCallOpen] = useState(false);
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [doneValuesOpen, setDoneValuesOpen] = useState(false);
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
@@ -766,6 +767,11 @@ function Inbox({
         break;
       }
 
+      if (e.key === '?') {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+        return;
+      }
       if (e.key === '/') {
         e.preventDefault();
         const field = document.querySelector('.toolbar md-outlined-text-field') as HTMLElement | null;
@@ -773,6 +779,7 @@ function Inbox({
         return;
       }
       if (e.key === 'Escape') {
+        if (shortcutsOpen) { setShortcutsOpen(false); return; }
         if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
@@ -819,7 +826,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);
@@ -1954,6 +1961,7 @@ function Inbox({
           onConnected={() => window.location.reload()}
         />
       )}
+      {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
       {selectedEmail && jmapSrc && (
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
       )}
@@ -2410,6 +2418,44 @@ function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sourc
           <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!name.trim() || busy} style={{ justifySelf: 'end' }}>
             {busy ? 'Creating…' : 'Create group'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Keyboard-shortcut legend, toggled with "?". Read-only reference so the
+// keyboard triage (e/u/s/p, j/k, etc.) is discoverable.
+function ShortcutsSheet({ onClose }: { onClose: () => void }) {
+  const rows: Array<[string, string]> = [
+    ['j / ↓', 'Next item'],
+    ['k / ↑', 'Previous item'],
+    ['Enter', 'Open the selected item'],
+    ['e', 'Archive — mark message read, or task done'],
+    ['u', 'Toggle unread'],
+    ['s', 'Snooze to tomorrow 9am'],
+    ['p', 'Pin / unpin'],
+    ['/', 'Search'],
+    ['?', 'This help'],
+    ['Esc', 'Close / clear search'],
+  ];
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Keyboard shortcuts</div>
+        </header>
+        <div className="sheet-body">
+          <table className="shortcuts-table">
+            <tbody>
+              {rows.map(([k, d]) => (
+                <tr key={k}><td><kbd>{k}</kbd></td><td>{d}</td></tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
