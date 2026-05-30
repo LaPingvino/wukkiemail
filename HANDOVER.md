@@ -209,6 +209,17 @@ we stop hammering the absent endpoint, and its failure is now console.debug not 
 warn. NB: confirmed live via Joop's console (404s on getRoomSummary during
 syncSpaceRooms, only 1 of N Wally Community rooms showing).
 
+CALL-BUTTON fix (app, matrix.ts): the VC button was hidden on a dedicated call
+room (createType org.matrix.msc3417.call) because canStartCall only checked
+maySendStateEvent(m.rtc.member / msc3401.call.member), which needs m.room.power_levels
+loaded — under sliding sync that state can be absent, so it fell back to the
+default state_default (50) and read as not-allowed. canStartCall now short-circuits
+true for a dedicated call room (msc3417.call create type OR eu.kiefte.wally.call_room
+state), since offering the call affordance is that room's whole purpose.
+(Confirmed via Joop's wmRooms table: the space-children SUBSCRIPTION fix worked —
+all 5 Wally Community children show membership 'join' and bundle under the space;
+the VC room had createType org.matrix.msc3417.call + 50 timeline events.)
+
 SPACES-MISSING fix (SDK, wally-dist d19580eb0): the create() factory grew only
 the all list, leaving the spaces list pinned at [[0,199]]. On a server that
 doesn't honour the room_types filter the spaces list degrades to a recency list,
