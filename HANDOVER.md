@@ -184,13 +184,73 @@ pieces (SlidingSync.create window growth, per-room resilience, log demotions) ar
 already in the fork.
 - **DONE #3 (SDK, wally-dist e6082f841):** processRoomData now derives our
   membership from the injected m.room.member state instead of hardcoding Join
-  (falls back to Join when the self member event is absent). Fixes a subscribed/
-  previewed not-joined room being reported as joined.
-- **TODO #1:** auto-enable sliding sync when the server advertises MSC4186 (so
-  Wally flips it on with no config) — touches client.ts startClient.
-- **TODO #2:** make SlidingSync.create the default config path.
+  (falls back to Join when the self member event is absent). Confirmed clean in
+  WukkieMail (inbox loads normally).
+
+### ===> TWO PREPARED ITEMS FOR AFTER COMPACTION (Joop asked to queue these) <===
+
+**ITEM A — SDK #1: auto-enable sliding sync on MSC4186 (transparent for Wally).**
+Where: matrix-js-sdk fork `/home/joop/matrix-stuff/matrix-js-sdk-jj`, `src/client.ts`
+`startClient` / sync init. Today consumers must build + pass `{ slidingSync }`
+(WukkieMail does this in `MatrixSource.maybeBuildSlidingSync`). Goal: if the
+caller did NOT pass a slidingSync AND the server advertises simplified sliding
+sync, auto-build one via `SlidingSync.create` and use it — so Wally just calls
+`startClient()` and gets it.
+  - Feature detect: `client.getVersions()` → `unstable_features` keys
+    `org.matrix.simplified_msc3575` || `org.matrix.msc3575` || `org.matrix.msc4186`
+    (same check WukkieMail already does).
+  - Opt-out: honor an explicit `startClient({ slidingSync: false })` or a flag to
+    force classic /sync (WukkieMail uses `?classicsync`).
+  - Config caveat: `SlidingSync.create` defaults `required_state` to `[["*","*"]]`,
+    which Continuwuity does NOT honour — so the auto path needs a sensible EXPLICIT
+    default lean required_state baked into the SDK (mirror WukkieMail's `leanState`:
+    create/name/avatar/topic/canonical_alias/encryption/member $ME+$LAZY/space.parent/
+    call.member/rtc.member, plus a spaces list with m.space.child). Decide how
+    opinionated to be; expose overrides.
+  - Then: WukkieMail drops `maybeBuildSlidingSync` and relies on auto-enable;
+    verify identical behavior; THEN test Wally's cinny UI (the real "transparent"
+    proof). Wally repo: `/home/joop/matrix-stuff/cinny-wally`.
+  - Also fold in: `SlidingSync.create` default `timeline_limit` is 1 — fine as a
+    base (WukkieMail inflates adaptively, see below), but document it.
+
+**ITEM B — map-merge + memoized Row (seamless partial updates), WukkieMail App.tsx.**
+Problem: `setItems(sorted)` hands React a fresh array of fresh item objects every
+refresh, so EVERY row re-renders and ts changes reshuffle — visible churn as the
+adaptive inflation corrects rooms. Two-part fix (need BOTH; part 1 alone is inert
+without part 2):
+  1. **Map-merge in the refresh** (App.tsx, the `refresh()` in the big effect,
+     ~where `setItems(sorted)`/`saveCachedItems` are): keep a `useRef<Map<string,
+     InboxItem>>` of the last items. Map new items → reuse the PREVIOUS object when
+     deep-equal (write a `sameItem(a,b)` comparing subject, snippet, ts, unread,
+     unreadCount, priority, avatarUrl, invite/joinable, bundles joined, statusValue,
+     etc.). `setItems(merged)`; refresh the ref. Preserves identity for unchanged
+     rooms.
+  2. **Extract `renderItem` (App.tsx ~L1075) into `const Row = React.memo(...)`**
+     so only changed rooms re-render. The row closes over: `it`, `idx`/`cursor`
+     (highlight), `setSelectedRoom/Email/Issue`, `draftRooms` (→ `hasDraft` prop),
+     `showOrigin`, `matrixSrc` (invite accept/decline), `formatTs`. Convert to
+     props. CURSOR IS THE TRAP: passing `cursor` to every Row re-renders all on
+     arrow-key nav — instead drive the highlight via a data attribute + CSS, or
+     only pass a boolean `isCursor` and accept that 2 rows update. Keyboard nav is
+     separate from the data-update seamlessness, which is the actual goal.
+
+- **TODO #2 (minor):** make SlidingSync.create the default config path.
 - **TODO #4 (optional):** SDK-level space-child loader to retire the app's
-  syncSpaceRooms glue.
+  syncSpaceRooms glue (could use MSC2946 /hierarchy — Continuwuity supports it —
+  which also restores not-joined "joinable" discovery dropped in 4e010d2).
+
+### Display-layer model shipped THIS session (the foundation B builds on)
+Event-type hiding is a DISPLAY/COUNTER filter, never visibility (see the
+By-event-type note above). `roomToItem` picks the latest NON-hidden event for the
+row; `unread = notifs > 0` (joins/state never notify, so they don't inflate it).
+Adaptive timeline inflation (`inflateLackingRooms` in matrix.ts): base
+`timeline_limit: 1`, then back-paginate (limit 20) only rooms whose every loaded
+event is hidden — importance-ordered (unread → recent), batch 8, debounced,
+one-shot per room, mark-tried-only-on-success (network failures retry; 5s backoff
+on a dead batch) for self-correction over flaky links. eventCategory now has
+'call' (incl. msc3401.call.member/m.rtc.member) and 'issue' (eu.kiefte.issue).
+getRoomSummary path REMOVED (404-stormed on Continuwuity). NaN ts guarded
+(formatTs renders '' for missing ts, not "Invalid Date").
 - **NEXT:** validate against Wally's cinny UI once #1 lands.
 
 ## SDK fix (2026-05-29): missing joined rooms
