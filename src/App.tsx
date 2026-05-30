@@ -799,11 +799,27 @@ function Inbox({
           const m = it.id.match(/^matrix:(.+)$/);
           if (m) setSelectedRoom(m[1]);
         }
+        return;
       }
+      // Keyboard triage on the cursored row (Google-Inbox style):
+      //   e = archive/done (mark message read, or mark a task done)
+      //   u = toggle unread   s = snooze to tomorrow   p = pin/unpin
+      const cur = visible[cursor];
+      if (!cur || !matrixSrc) return;
+      const issueM = cur.id.match(/^matrix:(.+):issue:(.+)$/);
+      if (e.key === 'e') {
+        e.preventDefault();
+        if (issueM) { void matrixSrc.markIssueDone(issueM[1], issueM[2]); }
+        else { const r = itemRoomId(cur.id); if (r) void matrixSrc.markRoomRead(r); void matrixSrc.setManuallyUnread(cur.id, false); }
+        return;
+      }
+      if (e.key === 'u') { e.preventDefault(); void matrixSrc.setManuallyUnread(cur.id, !cur.unread); return; }
+      if (e.key === 's') { e.preventDefault(); void matrixSrc.setSnoozed(cur.id, nextDayAt(9)); return; }
+      if (e.key === 'p') { e.preventDefault(); void matrixSrc.setPinned(cur.id, !cur.bundles.includes('pinned')); return; }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);
