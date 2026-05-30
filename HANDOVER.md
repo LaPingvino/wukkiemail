@@ -203,9 +203,24 @@ reach the auto-built instance for room subscriptions. WukkieMail
 (`MatrixSource.start`) DROPPED `maybeBuildSlidingSync` and now just passes
 `autoSlidingSync` + grabs `client.getSlidingSync()`; toggles preserved
 (`?classicsync`/settings → `autoSlidingSync:false`; `?slidingsync` → explicit
-forced instance). Builds clean both sides. **NEXT: Joop verifies WukkieMail, then
-port-test in Wally (cinny-wally) — the transparent proof: Wally just calls
-startClient and should get sliding sync with no app glue.**
+forced instance). Builds clean both sides.
+  - **Regression caught + fixed (WukkieMail 9fb3fde):** the auto-enable wiring
+    initially passed `initialSyncLimit:1`/`lazyLoadMembers:true` unconditionally;
+    `lazyLoadMembers` flows into Room creation under sliding sync
+    (`SlidingSyncSdk.createRoom`), which the old sliding-sync branch never did →
+    rooms briefly showed the latest event as the start of the room. Fix:
+    feature-detect (`serverSupportsSimplifiedSlidingSync`) upfront and apply
+    those classic-only opts ONLY when sliding sync will NOT run. Joop confirmed
+    the auto path feels MORE stable than the hand-rolled one (one consistent set
+    of assumptions inside the SDK, no app-side tuning to drift).
+  - **WALLY TRANSPARENT TEST DEPLOYED (2026-05-30):** cinny-wally `sdk-pin:`
+    bump `d466a1c3e → 1c66e2df8` (commit e54d90065), pushed to Codeberg + built +
+    deployed to wukkie.uk via push-to-codeberg.sh. This is the first live cinny
+    test: plain `startClient()`, no app glue, should auto-enable sliding sync.
+    **NEXT: Joop smoke-tests Wally on wukkie.uk** (rooms/spaces populate, no
+    start-of-room glitch, console says sliding sync). If clean, the port is
+    proven and the SDK auto-enable can be considered the default for all
+    consumers.
 
 <details><summary>Original ITEM A spec</summary>
 
