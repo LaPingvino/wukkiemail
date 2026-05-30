@@ -250,6 +250,51 @@ sync, auto-build one via `SlidingSync.create` and use it — so Wally just calls
 
 </details>
 
+### ===> PROGRESSIVE LOADING PRIORITY — "seamless hydration" (Joop's directive, IN PROGRESS) <===
+Goal (Joop): "if we get this right it will look seamless." Under lean sliding sync
+(timeline_limit 1, lean required_state) the inbox first-paints fast but is
+INCOMPLETE — and critically **a DM's name IS its people**, so a DM with no loaded
+members shows no/wrong name. The fix is a single importance-ordered loader that
+inflates the smallest set resolving what the user can currently perceive, then
+widens. Self-correcting (retry on flaky net, mark-tried-only-on-success, backoff)
+and map-merged so corrections fill in without churn.
+
+**TIER ORDER (load/inflate in this sequence; each tier throttled, batched):**
+0. **Structure** — ALL spaces + their `m.space.child` hierarchy. [DONE: SDK
+   `SlidingSync.create` now grows the spaces list to full coverage in one step
+   — commit 97b598375.]
+1. **Identity of what's visible without opening** (the inbox rows the user sees):
+   - **DM names = the other member.** Resolve via heroes if Continuwuity sends
+     hero displaynames; ELSE actively load members for DM rooms (via the
+     `/members` endpoint — works regardless of sync mode). *(Pending: wmRaw
+     diagnostic tells us which — heroes-carry-names vs must-load-members.)*
+   - room name/avatar/preview + unread/highlight for rooms in the current window.
+2. **Currently-open context** (top interactive priority when something is open):
+   - opened space → its child rooms + names/previews.
+   - opened room → fuller timeline (inflate past 1) + its members (sender
+     names/avatars) + receipts.
+3. **Attention** — rooms with unread/highlight (mentions) + invites: load their
+   preview + members so the inbox is accurate.
+4. **Recency** — recently-active rooms by last activity.
+5. **Long tail** — everything else by the existing perceived-priority weights
+   (DM > mention > recent > bridge/bot noise).
+
+**Cross-cutting mechanics:**
+- Variable timeline limit: base 1, inflate (back-paginate) only rooms whose
+  preview is a hidden category / uninformative — importance-ordered. (Have:
+  `inflateLackingRooms`; extend to obey the tier order above.)
+- Member inflation is TARGETED: DMs (names) + opened room (senders), NOT all
+  rooms. `["m.room.member","*"]` in required_state would bloat big rooms; use the
+  `/members` endpoint per room instead.
+- Self-correction + map-merge (see ITEM B) so it heals on flaky links seamlessly.
+- **NEXT STEP: ship wmRaw diagnostic (DONE this session), get Joop's dump for a
+  mis-named DM + a mention room, then build the tiered loader accordingly.** If
+  heroes carry names → Tier 1 names are free (SDK handling bug); if not → Tier 1
+  must load DM members. Mentions: if `srvHl` is blank/0 on a known mention →
+  Continuwuity omits `highlight_count` → SDK must compute highlight badges
+  client-side from push actions (it already computes push actions for the notif
+  timeline at sliding-sync-sdk.ts:966, just doesn't set the room Highlight count).
+
 **ITEM B — map-merge + memoized Row (seamless partial updates), WukkieMail App.tsx.**
 Problem: `setItems(sorted)` hands React a fresh array of fresh item objects every
 refresh, so EVERY row re-renders and ts changes reshuffle — visible churn as the
