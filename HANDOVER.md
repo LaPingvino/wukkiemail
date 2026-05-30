@@ -196,6 +196,19 @@ window auto-grows to cover all rooms. required_state is EXPLICIT (Continuwuity
 doesn't honour the ["*","*"] wildcard, which had left spaces with no
 m.space.child). Rooms opened in RoomPanel get a per-room subscription.
 
+SPACE-CHILDREN-MISSING fix (app, matrix.ts): opening a space showed only the
+already-synced child rooms; the rest were missing. `syncSpaceRooms` backfilled
+missing `m.space.child` rooms ONLY via `getRoomSummary` (MSC3266 / im.nheko.summary),
+which Continuwuity lacks → 404 for every child → all skipped. Now the PRIMARY
+path subscribes to each missing child via sliding-sync room subscriptions
+(`modifyRoomSubscriptions`), so joined children stream into the store without
+MSC3266 (same mechanism as opening a room); they arrive async and render once
+synced. getRoomSummary stays as best-effort joinable discovery, with a
+`roomSummarySupported` flag that flips off after the first 404/M_UNRECOGNIZED so
+we stop hammering the absent endpoint, and its failure is now console.debug not a
+warn. NB: confirmed live via Joop's console (404s on getRoomSummary during
+syncSpaceRooms, only 1 of N Wally Community rooms showing).
+
 SPACES-MISSING fix (SDK, wally-dist d19580eb0): the create() factory grew only
 the all list, leaving the spaces list pinned at [[0,199]]. On a server that
 doesn't honour the room_types filter the spaces list degrades to a recency list,
