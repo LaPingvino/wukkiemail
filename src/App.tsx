@@ -1865,15 +1865,26 @@ function Inbox({
         // doesn't immediately clear its unread). When the current room is no
         // longer unread we resume from the top of the remaining unread; once
         // nothing is unread we fall back to plain stream order.
-        const unreadOf = (rid: string) => items.find((x) => x.id === `matrix:${rid}`)?.unreadCount ?? 0;
+        const itemOf = (rid: string) => items.find((x) => x.id === `matrix:${rid}`);
+        const unreadOf = (rid: string) => itemOf(rid)?.unreadCount ?? 0;
         const uIdx = nextUnreadOrder.indexOf(selectedRoom);
         const remainingUnread = uIdx >= 0 ? nextUnreadOrder.slice(uIdx + 1) : nextUnreadOrder;
         const nextUnread = remainingUnread.find((rid) => rid !== selectedRoom);
+        // Stay within the CURRENT bundle while triaging: prefer the next unread
+        // chat in the same bundle as the open chat before jumping to another
+        // bundle. Keeps you working through one space/DM/flavour at a time.
+        const curBundle = (() => { const cur = itemOf(selectedRoom); return cur ? primaryKey(cur) : undefined; })();
+        const bundleUnread = curBundle
+          ? nextUnreadOrder.filter((rid) => { const it = itemOf(rid); return it && primaryKey(it) === curBundle; })
+          : [];
+        const bIdx = bundleUnread.indexOf(selectedRoom);
+        const nextInBundle = (bIdx >= 0 ? bundleUnread.slice(bIdx + 1) : bundleUnread).find((rid) => rid !== selectedRoom);
         const i = roomNavOrder.indexOf(selectedRoom);
         // Prefer the chat you backed away from (so Back→Next round-trips), then
-        // the next unread, then plain stream order.
+        // the next unread IN THE CURRENT BUNDLE, then any next unread, then plain
+        // stream order.
         const nextRoom = (forwardRoom && forwardRoom !== selectedRoom ? forwardRoom : undefined)
-          ?? nextUnread ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
+          ?? nextInBundle ?? nextUnread ?? (i >= 0 ? roomNavOrder[i + 1] : roomNavOrder[0]);
         const nextItem = nextRoom ? items.find((x) => x.id === `matrix:${nextRoom}`) : undefined;
         const nextCount = nextRoom ? unreadOf(nextRoom) : 0;
         const nextLabel = nextItem
