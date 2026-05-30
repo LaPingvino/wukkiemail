@@ -648,6 +648,45 @@ function Inbox({
     return () => { document.title = 'WukkieMail'; setFaviconDot(false); };
   }, [counts]);
 
+  // Scoped filter access. scopeKey === undefined → the global All-view section
+  // state; a bundle node key → that bundle's own override (default: no filter,
+  // independent of the global one). Defined BEFORE the visible/visibleStream/
+  // bundled memos that call them — those memos run during render, so a later
+  // declaration would be in the temporal dead zone (runtime crash).
+  const EMPTY_STATUS: Set<string> = new Set();
+  const scopedStatus = (key?: string): Set<string> =>
+    key ? (bundleFilters[key]?.status ?? EMPTY_STATUS) : issueStatusFilter;
+  const scopedMine = (key?: string): boolean =>
+    key ? (bundleFilters[key]?.mine ?? false) : mineOnly;
+  const setScopedStatus = (key: string | undefined, next: Set<string>) => {
+    if (!key) { setIssueStatusFilter(next); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], status: next } }));
+  };
+  const toggleScopedStatus = (key: string | undefined, status: string) => {
+    const next = new Set(scopedStatus(key));
+    if (next.has(status)) next.delete(status); else next.add(status);
+    setScopedStatus(key, next);
+  };
+  const setScopedMine = (key: string | undefined, val: boolean) => {
+    if (!key) { setMineOnly(val); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], mine: val } }));
+  };
+  const scopedRead = (key?: string): 'unread' | 'read' | 'all' =>
+    (key ? bundleFilters[key]?.read : undefined) ?? readFilter;
+  const setScopedRead = (key: string | undefined, mode: 'unread' | 'read' | 'all') => {
+    if (!key) { setReadFilter(mode); return; }
+    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], read: mode } }));
+  };
+  // Mirror of the old visible-time read rule, now applied per scope. Snoozed
+  // items and issues are never read-filtered; while searching, the default
+  // Unread mode must not hide read matches (so a read room is still findable).
+  const passesRead = (it: InboxItem, mode: 'unread' | 'read' | 'all', searching: boolean): boolean => {
+    if (it.bundles.includes('snoozed') || it.flavor === 'issue') return true;
+    if (mode === 'unread' && !it.unread && !searching) return false;
+    if (mode === 'read' && it.unread) return false;
+    return true;
+  };
+
   // Parse the search box through the shared filter system, so the box
   // understands is:unread / flavor:x / from: / status: / is:mine alongside
   // free text — the same predicates bundles will be built from.
@@ -1213,43 +1252,6 @@ function Inbox({
       )}
     </a>
   );
-
-  // Scoped filter access. scopeKey === undefined → the global All-view section
-  // state; a bundle node key → that bundle's own override (default: no filter,
-  // independent of the global one).
-  const EMPTY_STATUS: Set<string> = new Set();
-  const scopedStatus = (key?: string): Set<string> =>
-    key ? (bundleFilters[key]?.status ?? EMPTY_STATUS) : issueStatusFilter;
-  const scopedMine = (key?: string): boolean =>
-    key ? (bundleFilters[key]?.mine ?? false) : mineOnly;
-  const setScopedStatus = (key: string | undefined, next: Set<string>) => {
-    if (!key) { setIssueStatusFilter(next); return; }
-    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], status: next } }));
-  };
-  const toggleScopedStatus = (key: string | undefined, status: string) => {
-    const next = new Set(scopedStatus(key));
-    if (next.has(status)) next.delete(status); else next.add(status);
-    setScopedStatus(key, next);
-  };
-  const setScopedMine = (key: string | undefined, val: boolean) => {
-    if (!key) { setMineOnly(val); return; }
-    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], mine: val } }));
-  };
-  const scopedRead = (key?: string): 'unread' | 'read' | 'all' =>
-    (key ? bundleFilters[key]?.read : undefined) ?? readFilter;
-  const setScopedRead = (key: string | undefined, mode: 'unread' | 'read' | 'all') => {
-    if (!key) { setReadFilter(mode); return; }
-    setBundleFilters((m) => ({ ...m, [key]: { ...m[key], read: mode } }));
-  };
-  // Mirror of the old visible-time read rule, now applied per scope. Snoozed
-  // items and issues are never read-filtered; while searching, the default
-  // Unread mode must not hide read matches (so a read room is still findable).
-  const passesRead = (it: InboxItem, mode: 'unread' | 'read' | 'all', searching: boolean): boolean => {
-    if (it.bundles.includes('snoozed') || it.flavor === 'issue') return true;
-    if (mode === 'unread' && !it.unread && !searching) return false;
-    if (mode === 'read' && it.unread) return false;
-    return true;
-  };
 
   // The per-section / per-bundle filter controls. `scope` provides the sweep
   // targets and the available task statuses (with counts). `scopeKey` selects
