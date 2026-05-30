@@ -172,6 +172,27 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - Emoji: sticker packs (im.ponies usage `sticker`), per-emoji skin-tone variants (component group is filtered out).
 - None of threads/widgets/emoji could be tested live this session (no peers/widgets/packs to hand) — flag for the user to smoke-test on mail.wukkie.uk.
 
+## SDK PORT PROJECT (in progress) — transparent sliding sync for Wally
+Goal: fold the load-bearing sliding-sync handling into the matrix-js-sdk fork so
+Wally (and any consumer) gets it without app glue. (bd not installed in this env;
+tracked here.) Key finding from reading the fork's SlidingSyncSdk: rooms are
+stored once and NEVER removed (no store-removal code), and processRoomData set
+membership unconditionally to Join — so the "flicker/disappear" we chased was
+NOT an SDK store bug, it was the app-side event-category VISIBILITY drop (fixed
+0718e7e) + the getRoomSummary joinable mislabel (everJoined guard). The heavy SDK
+pieces (SlidingSync.create window growth, per-room resilience, log demotions) are
+already in the fork.
+- **DONE #3 (SDK, wally-dist e6082f841):** processRoomData now derives our
+  membership from the injected m.room.member state instead of hardcoding Join
+  (falls back to Join when the self member event is absent). Fixes a subscribed/
+  previewed not-joined room being reported as joined.
+- **TODO #1:** auto-enable sliding sync when the server advertises MSC4186 (so
+  Wally flips it on with no config) — touches client.ts startClient.
+- **TODO #2:** make SlidingSync.create the default config path.
+- **TODO #4 (optional):** SDK-level space-child loader to retire the app's
+  syncSpaceRooms glue.
+- **NEXT:** validate against Wally's cinny UI once #1 lands.
+
 ## SDK fix (2026-05-29): missing joined rooms
 
 Root cause of "joined rooms missing from the inbox/spaces" was in the
