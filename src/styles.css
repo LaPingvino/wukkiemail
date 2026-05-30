@@ -618,6 +618,14 @@ body {
   vertical-align: middle;
 }
 .item.invite { background: var(--md-sys-color-primary-container, #eaddff33); }
+/* Unsent-draft badge on an inbox row — quiet, outlined, with a small glyph. */
+.draft-badge {
+  display: inline-flex; align-items: center; gap: 2px; margin-right: 6px;
+  padding: 0 7px 0 4px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: var(--muted); border: 1px solid var(--border, rgba(0,0,0,0.2));
+  vertical-align: middle;
+}
+.draft-badge .material-symbols-outlined { font-size: 14px; }
 /* Joinable (in-space, not joined) badge — outlined, lower-key than invites. */
 .joinable-badge {
   background: transparent !important;

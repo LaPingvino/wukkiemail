@@ -306,6 +306,10 @@ function Inbox({
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  // Bumped when a room opens/closes so the inbox re-derives which rooms have an
+  // unsent composer draft (drafts are written to localStorage by RoomPanel; the
+  // same tab gets no storage event, so we recompute on this signal).
+  const [draftTick, setDraftTick] = useState(0);
   // Thread overlay: a RoomPanel layered on top of the room, filtered to one
   // thread (root event). Closing returns to the room.
   const [openThread, setOpenThread] = useState<{ roomId: string; rootId: string } | null>(null);
@@ -521,6 +525,9 @@ function Inbox({
   }, [items]);
 
   useEffect(() => { setCursor(0); }, [bundle, query]);
+  // Re-derive draft badges whenever a room opens or closes (a draft is most
+  // likely written just before a room is left).
+  useEffect(() => { setDraftTick((t) => t + 1); }, [selectedRoom]);
 
   // Full-text message search via the off-thread index, on the same filter
   // engine as everything else. Free-text + from: go to the worker (body /
@@ -704,6 +711,20 @@ function Inbox({
     () => new Set(items.map((it) => it.accountId).filter(Boolean)).size > 1,
     [items],
   );
+
+  // Rooms with an unsent composer draft, for the inbox draft badge. Recomputed
+  // when items change or a room closes (draftTick). Room-level drafts only
+  // (thread drafts aren't badged). localStorage reads are cheap.
+  const draftRooms = useMemo(() => {
+    const s = new Set<string>();
+    for (const it of items) {
+      const r = itemRoomId(it.id);
+      if (!r) continue;
+      try { if (localStorage.getItem(`wukkiemail:draft:${r}`)) s.add(r); } catch { /* ignore */ }
+    }
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, draftTick]);
 
   // Source flavors actually present in the inbox (detected bridges + Matrix
   // + Tasks, and Mail once JMAP is wired) — drives the composer's source
@@ -1053,6 +1074,11 @@ function Inbox({
         {it.invite && <span className="invite-badge">Invite</span>}
         {it.joinable && <span className="invite-badge joinable-badge">Join</span>}
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
+        {(() => { const r = itemRoomId(it.id); return r && draftRooms.has(r); })() && (
+          <span className="draft-badge" title="You have an unsent draft here">
+            <span className="material-symbols-outlined">edit_note</span>Draft
+          </span>
+        )}
         {it.subject}
         {showOrigin && it.originLabel && (
           <span className="origin-tag" title={it.accountId}>{it.originLabel}</span>
