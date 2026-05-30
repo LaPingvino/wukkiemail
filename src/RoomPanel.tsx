@@ -237,6 +237,7 @@ export function RoomPanel({
     acceptedMentions.current.set(member.name, member.userId);
     fieldEl.value = newV;
     setComposeText(newV);
+    try { if (newV) localStorage.setItem(draftKeyRef.current, newV); } catch { /* ignore */ }
     setMention(null);
     fieldEl.focus();
   };
@@ -269,6 +270,7 @@ export function RoomPanel({
       ? v.replace(EMOJI_TRIGGER, (_f, lead: string) => `${lead}${piece}`)
       : v + piece;
     setComposeText(newV);
+    try { if (newV) localStorage.setItem(draftKeyRef.current, newV); } catch { /* ignore */ }
     if (fieldEl) { fieldEl.value = newV; fieldEl.focus(); }
     setEmojiAc(null);
   };
