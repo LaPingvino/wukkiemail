@@ -134,6 +134,7 @@ The big direction, captured so it survives. Build it ON the filter system — do
 - vite build: `dist/sw.js` lives in `public/` so it ships verbatim
 - Sandbox blocks `/home/joop/.npm/_cacache` — npm install needs `--cache /tmp/claude/npm-cache` (or run with sandbox disabled)
 - `src/sources/matrix.ts` has a NUL byte (reactionKey) → grep with `-a`; tsc/vite via `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/vite build`
+- **`tsc --noEmit` + `vite build` do NOT catch temporal-dead-zone (use-before-init) errors** — those are runtime-only and white-screen the app. A `const` helper (arrow fn) used INSIDE a `useMemo`/render path must be declared ABOVE that memo, since the memo factory runs during render. This bit us: the scoped-filter helpers (scopedRead/passesRead) were declared after the `bundled` memo that calls them via readF → white screen since the per-bundle-read deploy (fixed in 4a28176 by hoisting them above the `visible` memo). When adding helpers used by memos, declare them before the memos, and ideally smoke-test in a browser, not just build.
 
 ## NEXT (planned ports from Wally — cinny-wally is the reference, our own code)
 
