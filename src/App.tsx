@@ -712,6 +712,7 @@ function Inbox({
     () => new Set(items.map((it) => it.accountId).filter(Boolean)).size > 1,
     [items],
   );
+  const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
 
   // Rooms with an unsent composer draft, for the inbox draft badge. Recomputed
   // when items change or a room closes (draftTick). Room-level drafts only
@@ -785,9 +786,20 @@ function Inbox({
         if (selectedRoom) { setSelectedRoom(null); return; }
         if (query) { setQuery(''); return; }
       }
+      // Navigate over the ACTUALLY-RENDERED rows (the bundled view reorders
+      // items and hides collapsed bundles, so the global `visible` order does
+      // not match what's on screen). Cap on the rendered count, and resolve the
+      // cursored item from the highlighted DOM row so the action always targets
+      // exactly what's highlighted.
+      const renderedCount = document.querySelectorAll('.item[data-idx]').length;
+      const cursoredItem = (): InboxItem | undefined => {
+        const el = document.querySelector(`.item[data-idx="${cursor}"]`);
+        const id = el?.getAttribute('data-item-id');
+        return id ? itemById.get(id) : undefined;
+      };
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
-        setCursor((c) => Math.min(c + 1, visible.length - 1));
+        setCursor((c) => Math.min(c + 1, Math.max(renderedCount - 1, 0)));
         return;
       }
       if (e.key === 'k' || e.key === 'ArrowUp') {
@@ -796,12 +808,14 @@ function Inbox({
         return;
       }
       if (e.key === 'Enter') {
-        const it = visible[cursor];
+        const it = cursoredItem();
         if (!it) return;
         e.preventDefault();
         if (it.flavor === 'issue') {
           const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
           if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+        } else if (it.id.startsWith('jmap:')) {
+          setSelectedEmail(it.id.slice('jmap:'.length));
         } else {
           const m = it.id.match(/^matrix:(.+)$/);
           if (m) setSelectedRoom(m[1]);
@@ -811,7 +825,7 @@ function Inbox({
       // Keyboard triage on the cursored row (Google-Inbox style):
       //   e = archive/done (mark message read, or mark a task done)
       //   u = toggle unread   s = snooze to tomorrow   p = pin/unpin
-      const cur = visible[cursor];
+      const cur = cursoredItem();
       if (!cur || !matrixSrc) return;
       const issueM = cur.id.match(/^matrix:(.+):issue:(.+)$/);
       if (e.key === 'e') {
@@ -826,7 +840,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen, itemById]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);
@@ -1076,6 +1090,7 @@ function Inbox({
     <a
       key={it.id}
       data-idx={idx}
+      data-item-id={it.id}
       className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''} ${it.invite ? 'invite' : ''}`}
       href={it.openPath}
       onClick={(e) => {
