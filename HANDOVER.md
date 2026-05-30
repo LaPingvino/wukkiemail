@@ -172,6 +172,80 @@ Wally repo: `/home/joop/matrix-stuff/cinny-wally`. Same matrix-js-sdk fork, so S
 - Emoji: sticker packs (im.ponies usage `sticker`), per-emoji skin-tone variants (component group is filtered out).
 - None of threads/widgets/emoji could be tested live this session (no peers/widgets/packs to hand) — flag for the user to smoke-test on mail.wukkie.uk.
 
+## ===> SESSION 2026-05-30: SDK sliding-sync HARDENING (Wally + WukkieMail, both live) <===
+A long debugging arc that started from "ganza shows 1 unread / floats" and turned
+into a broad resilience pass on the matrix-js-sdk fork (`wally-dist`). **Current
+SDK pin / branch HEAD: `3333bb7a1`.** Both consumers deploy from it.
+
+**Deploy tooling:** `/home/joop/matrix-stuff/deploy-sdk.sh` — ONE command pushes
+the SDK (`wally-dist`) to BOTH consumers: triggers WukkieMail's Cloudflare rebuild
+FIRST (runs in parallel), then re-pins cinny-wally + runs `push-to-codeberg.sh`.
+`push-to-codeberg.sh` now FORCE-refreshes the git-pinned fork (`rm -rf
+node_modules/matrix-js-sdk` before `npm install`) — npm does NOT re-fetch a
+github: dep on a pin bump, and `--package-lock-only` poisons any metadata check,
+so a pin bump silently shipped stale SDK twice before this. ALWAYS grep the built
+`main-*.js` for an SDK string marker after a Wally deploy.
+
+**SDK fixes landed this session (all on `wally-dist`):**
+- **Auto-enable** (40739a711): `startClient()` feature-detects MSC4186/3575 and
+  builds `SlidingSync.create` itself when no instance/opt-out. New opts
+  `autoSlidingSync`(default true)+`slidingSyncOpts`; `getSlidingSync()` accessor;
+  baked-in lean `DEFAULT_SLIDING_SYNC_REQUIRED_STATE` (NOT `[*,*]`; Continuwuity
+  ignores wildcard). WukkieMail dropped `maybeBuildSlidingSync`.
+  - GOTCHA fixed (WukkieMail 9fb3fde): `lazyLoadMembers`/`initialSyncLimit` must
+    NOT be passed on the sliding-sync path (they reach Room creation and broke
+    timelines) — feature-detect upfront, apply classic tuning only when classic.
+- **Window grows to FULL coverage in one step** (97b598375 `growStep`): was
+  +growBy/sync, stalled on flaky links → incomplete spaces. Jump to `[0,joinedCount]`.
+- **DM names from heroes** (32e79784d): `ensureNameEvent` fabricates the name from
+  `heroes` excluding functional (bridge-bot) members (`dmNameFromHeroes`), not the
+  server `name` (which folded in self + WhatsApp bot). Added
+  `io.element.functional_members` to required_state (without it
+  getFunctionalMembers()/getAvatarFallbackMember can't exclude bots). cinny's
+  `getDmName` patch (useRoomMeta.ts) restored as the client-side guaranteed path.
+- **Recency from `bump_stamp`** (ecf5b10ee): `getLastActiveTimestamp()` prefers the
+  MSC4186 `bump_stamp` — the server's last-MEANINGFUL-activity signal that EXCLUDES
+  trailing state events (member/eu.kiefte.issue). This is the float fix: a read
+  room with a trailing issue edit no longer floats. WukkieMail `roomToItem` uses
+  `getLastActiveTimestamp` for the row recency (not the event ts). cinny inherits
+  via `factoryRoomIdByActivity`/`getLastMeaningfulTimestamp`.
+- **Read-receipt clears unread regardless of sender** (3333bb7a1): the
+  mark-read-on-receipt shortcut required us to be the SENDER of the last event;
+  dropped — our receipt landing on the last event is itself proof it's read.
+  Smooths the "count shows high then disappears" flicker.
+- (Earlier this session: membership-from-state e6082f841, spaces-list window
+  growth d19580eb0, per-room sync resilience 47114d3d6/c79bb3b2a, log quieting.)
+
+**App-side:**
+- WukkieMail **Back button + nav history** (793f9f6): browser-style back/forward in
+  the chat panel; Back returns to the previous chat, Next prefers the chat you
+  backed away from. `navHistory`/`forwardRoom` in App.tsx; `onBack`/`backLabel` on
+  RoomPanel.
+- cinny **backfill prioritises the read marker** (b6d88eb92, useBackgroundBackfill):
+  rooms showing unread whose read marker isn't in the lean timeline get a score
+  boost so the scheduler loads back to the marker → `getUnreadInfo` can verify true
+  unread vs a stale count. ("marker-not-loaded in the priority approach.")
+- WukkieMail mark-read receipts the actual LAST event (52fa4b5) + zeros counts
+  first; and **clears the `manuallyUnread` triage flag** (8373948).
+
+**THE ACTUAL ganza "1 unread" bug:** NOT a count/SDK issue at all — ganza was stuck
+in WukkieMail's `manuallyUnread` triage set (account data `eu.kiefte.wukkiemail.triage`,
+forces unreadCount>=1 via App.tsx ~L1031 + matrix.ts ~L994). `markRoomRead` never
+removed it, so opening couldn't unstick it; it looped in next/previous. Fixed:
+markRoomRead clears the flag (8373948). Joop manually cleared the stale entry.
+
+**Diagnostics added to WukkieMail (window globals):** `wmRooms()`, `wmSpaces()`,
+`wmRaw(filter)` (server summary vs SDK: name/heroes/counts), `wmEvents(filter)`
+(last timeline events + ts), and `window.wmClient` (raw MatrixClient for ad-hoc
+console work). Used heavily to root-cause via the API (e.g. `bump_stamp` discovery).
+
+**Remaining OPTIONAL polish (not a bug):** move cinny's verify-from-marker
+(getUnreadInfo: walk timeline back to read receipt, recount notifying events) INTO
+the SDK's `getRoomUnreadNotificationCount` (cache by readUpToId+timelineLen) so
+`getUnreadNotificationCount` self-corrects stale server counts for BOTH apps. Data
+showed stale counts mostly self-heal, so deferred. The "read but still shows" set
+is the 75 `marker-not-loaded` rooms (read elsewhere, outside the sliding window).
+
 ## SDK PORT PROJECT (in progress) — transparent sliding sync for Wally
 Goal: fold the load-bearing sliding-sync handling into the matrix-js-sdk fork so
 Wally (and any consumer) gets it without app glue. (bd not installed in this env;
