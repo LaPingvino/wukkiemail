@@ -158,6 +158,15 @@ export function RoomPanel({
   mentionRef.current = mention;
   const composeTextRef = useRef('');
   composeTextRef.current = composeText;
+  // Per-room (per-thread) composer draft, persisted so navigating away and back
+  // keeps a half-typed message. The key lives in a ref so the once-attached
+  // input listener always saves under the CURRENT room, never a stale closure.
+  const draftKey = `wukkiemail:draft:${roomId}${threadRootId ? ':' + threadRootId : ''}`;
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
+  // This panel's own composer field (set in its ref callback), so the draft
+  // restore targets the right one even when a thread overlay adds a 2nd composer.
+  const composerFieldRef = useRef<(HTMLElement & { value: string }) | null>(null);
   // Display name → userId for mentions the user picked, so send() can build
   // matrix.to pills + m.mentions even though the composer is plain text.
   const acceptedMentions = useRef<Map<string, string>>(new Map());
@@ -199,6 +208,19 @@ export function RoomPanel({
     void matrix.loadRoomMembers(roomId).then((mem) => { if (!cancelled && mem.length) membersRef.current = mem; });
     return () => { cancelled = true; };
   }, [matrix, roomId]);
+
+  // Restore this room/thread's saved draft when it opens. Sets both React state
+  // and the Material field imperatively (its value doesn't track state across
+  // renders). Skips while editing a message (that text is not a draft).
+  useEffect(() => {
+    if (editing) return;
+    let saved = '';
+    try { saved = localStorage.getItem(draftKey) || ''; } catch { /* ignore */ }
+    setComposeText(saved);
+    composeTextRef.current = saved;
+    if (composerFieldRef.current) composerFieldRef.current.value = saved;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
 
   const TRAILING_MENTION = /(^|\s)@([^\s@]{0,30})$/;
   const computeMatches = (query: string) => {
@@ -373,6 +395,7 @@ export function RoomPanel({
       acceptedMentions.current.clear();
       usedCustomEmojis.current.clear();
       setComposeText('');
+      try { localStorage.removeItem(draftKeyRef.current); } catch { /* ignore */ }
       // Imperatively clear the Material field too — its `value` property
       // doesn't track React state directly across renders.
       const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
@@ -713,6 +736,7 @@ export function RoomPanel({
           value={composeText}
           ref={(el: HTMLElement | null) => {
             if (!el) return;
+            composerFieldRef.current = el as HTMLElement & { value: string };
             // Attach listeners ONCE per element; re-running on every render
             // would stack duplicates (and double-fire send). Handlers read
             // live state through refs, so a single attach stays correct.
@@ -728,6 +752,9 @@ export function RoomPanel({
                 target.value = v;
               }
               setComposeText(v);
+              // Persist the draft under the CURRENT room (ref, not a stale
+              // closure) so it survives navigating away. Cleared when empty.
+              try { if (v) localStorage.setItem(draftKeyRef.current, v); else localStorage.removeItem(draftKeyRef.current); } catch { /* ignore */ }
               // Detect a trailing "@query" to drive the mention dropdown.
               const m = v.match(TRAILING_MENTION);
               setMention(m ? { query: m[2], index: 0 } : null);
