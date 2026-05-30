@@ -189,6 +189,26 @@ already in the fork.
 
 ### ===> TWO PREPARED ITEMS FOR AFTER COMPACTION (Joop asked to queue these) <===
 
+**ITEM A — DONE (2026-05-30, SDK wally-dist 40739a711 + 1c66e2df8).** Sliding
+sync now AUTO-ENABLES in the SDK: `startClient()` feature-detects
+MSC4186/MSC3575 (`serverSupportsSimplifiedSlidingSync()`) and, when the caller
+passed no explicit `slidingSync` and not `autoSlidingSync:false`, builds one via
+`SlidingSync.create`. The lean required_state + heavier spaces/subscription set
+are baked into `DEFAULT_SLIDING_SYNC_REQUIRED_STATE` /
+`DEFAULT_SLIDING_SYNC_SPACES_REQUIRED_STATE` (replacing the `[*,*]` default
+Continuwuity ignores); `SlidingSync.create` opts extracted to exported
+`SlidingSyncCreateOpts`. New `IStartClientOpts.autoSlidingSync` (default true) +
+`slidingSyncOpts`. New `MatrixClient.getSlidingSync()` accessor so consumers
+reach the auto-built instance for room subscriptions. WukkieMail
+(`MatrixSource.start`) DROPPED `maybeBuildSlidingSync` and now just passes
+`autoSlidingSync` + grabs `client.getSlidingSync()`; toggles preserved
+(`?classicsync`/settings → `autoSlidingSync:false`; `?slidingsync` → explicit
+forced instance). Builds clean both sides. **NEXT: Joop verifies WukkieMail, then
+port-test in Wally (cinny-wally) — the transparent proof: Wally just calls
+startClient and should get sliding sync with no app glue.**
+
+<details><summary>Original ITEM A spec</summary>
+
 **ITEM A — SDK #1: auto-enable sliding sync on MSC4186 (transparent for Wally).**
 Where: matrix-js-sdk fork `/home/joop/matrix-stuff/matrix-js-sdk-jj`, `src/client.ts`
 `startClient` / sync init. Today consumers must build + pass `{ slidingSync }`
@@ -212,6 +232,8 @@ sync, auto-build one via `SlidingSync.create` and use it — so Wally just calls
     proof). Wally repo: `/home/joop/matrix-stuff/cinny-wally`.
   - Also fold in: `SlidingSync.create` default `timeline_limit` is 1 — fine as a
     base (WukkieMail inflates adaptively, see below), but document it.
+
+</details>
 
 **ITEM B — map-merge + memoized Row (seamless partial updates), WukkieMail App.tsx.**
 Problem: `setItems(sorted)` hands React a fresh array of fresh item objects every
