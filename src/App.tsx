@@ -2623,6 +2623,9 @@ function setFaviconDot(unread: boolean) {
 }
 
 function formatTs(ts: number): string {
+  // No usable timestamp (a room we've only seen via state with no dated event)
+  // → render nothing rather than "Invalid Date" / a 1970 date.
+  if (!Number.isFinite(ts) || ts <= 0) return '';
   const d = new Date(ts);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) {
