@@ -1181,7 +1181,7 @@ function Inbox({
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
         {(() => { const r = itemRoomId(it.id); return r && draftRooms.has(r); })() && (
           <span className="draft-badge" title="You have an unsent draft here">
-            <span className="material-symbols-outlined">edit_note</span>Draft
+            <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>Draft
           </span>
         )}
         {it.subject}
@@ -1212,7 +1212,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] acceptInvite failed', err); }
             }}
           >
-            <span className="material-symbols-outlined">check</span> Accept
+            <span className="material-symbols-outlined" aria-hidden="true">check</span> Accept
           </button>
           <button
             type="button"
@@ -1227,7 +1227,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] rejectInvite failed', err); }
             }}
           >
-            <span className="material-symbols-outlined">close</span>
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
       ) : matrixSrc && it.joinable ? (
@@ -1245,7 +1245,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] join failed', err); }
             }}
           >
-            <span className="material-symbols-outlined">add</span> Join
+            <span className="material-symbols-outlined" aria-hidden="true">add</span> Join
           </button>
         </div>
       ) : matrixSrc && (
@@ -1256,7 +1256,7 @@ function Inbox({
             aria-label="Actions"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActionSheetFor(it.id); }}
           >
-            <span className="material-symbols-outlined">more_vert</span>
+            <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
           </button>
           <ItemActions
             item={it}
@@ -1338,6 +1338,7 @@ function Inbox({
         <button
           type="button"
           className="section-sweep"
+          aria-label="Mark all tasks done"
           title="Mark all tasks done"
           onClick={async () => {
             if (!matrixSrc) return;
@@ -1349,13 +1350,14 @@ function Inbox({
             }
           }}
         >
-          <span className="material-symbols-outlined">done_all</span>
+          <span className="material-symbols-outlined" aria-hidden="true">done_all</span>
         </button>
       )}
       {hasMessages && scope.some((m) => m.flavor !== 'issue' && m.unread) && (
         <button
           type="button"
           className="section-sweep"
+          aria-label="Mark all read"
           title="Mark all read"
           onClick={async () => {
             if (!matrixSrc) return;
@@ -1368,7 +1370,7 @@ function Inbox({
             }
           }}
         >
-          <span className="material-symbols-outlined">mark_chat_read</span>
+          <span className="material-symbols-outlined" aria-hidden="true">mark_chat_read</span>
         </button>
       )}
     </div>
@@ -1430,8 +1432,8 @@ function Inbox({
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
-          <button type="button" className="bundle-head" onClick={toggle}>
-            <span className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
+          <button type="button" className="bundle-head" onClick={toggle} aria-expanded={open}>
+            <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">{open ? 'expand_more' : 'chevron_right'}</span>
             {(() => {
               const ic = g.key === 'pinned' ? 'push_pin'
                 : g.key === 'snoozed' ? 'schedule'
@@ -1439,12 +1441,12 @@ function Inbox({
                 : g.manual ? 'bookmark'
                 : g.children.length > 0 ? 'folder' : null;
               return ic
-                ? <span className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
-                : <span className={`src ${g.flavor}`} />;
+                ? <span className="material-symbols-outlined" aria-hidden="true" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
+                : <span className={`src ${g.flavor}`} aria-hidden="true" />;
             })()}
             <span className="bundle-label">{g.label}</span>
             {g.pinned && (
-              <span className="material-symbols-outlined" title="Pinned bundle"
+              <span className="material-symbols-outlined" aria-hidden="true" title="Pinned bundle"
                 style={{ color: 'var(--accent)', fontSize: 16 }}>push_pin</span>
             )}
             <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
@@ -1477,7 +1479,7 @@ function Inbox({
           {matrixSrc && (
             <button type="button" className="item-kebab" aria-label="Bundle actions"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBundleActionFor(g.key); }}>
-              <span className="material-symbols-outlined">more_vert</span>
+              <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
             </button>
           )}
         </div>
@@ -1488,7 +1490,7 @@ function Inbox({
                 <span className="filter-group-label">Hidden bundles</span>
                 {hiddenBundles.map((k) => (
                   <button key={k} type="button" className="mini-chip" title="Restore this bundle" onClick={() => void restoreBundle(k)}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>undo</span>
+                    <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 14 }}>undo</span>
                     {bundleLabel(k as BundleKey, [...spaceBundles, ...mailBundles])}
                   </button>
                 ))}
@@ -1615,11 +1617,11 @@ function Inbox({
                 // accounts (the sidebar's non-space controls live here now).
                 rendered.push(
                   <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
-                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)}>
-                      <span className="material-symbols-outlined bundle-chevron">
+                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} aria-expanded={configOpen}>
+                      <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">
                         {configOpen ? 'expand_more' : 'chevron_right'}
                       </span>
-                      <span className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>settings</span>
+                      <span className="material-symbols-outlined" aria-hidden="true" style={{ color: 'var(--muted)' }}>settings</span>
                       <span className="bundle-label">Settings &amp; accounts</span>
                       {cryptoStatus !== 'verified' && hasEncRoom && (
                         <span className="bundle-count" style={{ color: 'var(--md-sys-color-primary)' }}>encryption ●</span>
@@ -1630,7 +1632,7 @@ function Inbox({
                         {matrixSrc && cryptoStatus !== 'verified' && (
                           <div className="encryption-block">
                             <div className="encryption-block-head">
-                              <span className="material-symbols-outlined">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
+                              <span className="material-symbols-outlined" aria-hidden="true">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
                               <strong>{cryptoStatus === 'none' ? 'Set up encryption' : 'Verify this device'}</strong>
                             </div>
                             <p className="encryption-block-sub">
