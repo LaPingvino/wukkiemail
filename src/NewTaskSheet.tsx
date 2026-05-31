@@ -47,7 +47,7 @@ export function NewTaskSheet({
             aria-label="Close"
             onClick={onClose}
           >
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New task</div>
           <button

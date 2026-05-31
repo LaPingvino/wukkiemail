@@ -23,11 +23,11 @@ export function CallPanel({ roomId, roomName, onClose }: {
     <div className="call-panel" role="dialog" aria-modal="true" aria-label={`Call in ${roomName}`}>
       <header className="call-head">
         <button ref={closeRef} type="button" className="hamburger" aria-label="Leave call" onClick={onClose}>
-          <span className="material-symbols-outlined">call_end</span>
+          <span aria-hidden="true" className="material-symbols-outlined">call_end</span>
         </button>
         <div className="call-title">Call · {roomName}</div>
         <a className="hamburger" href={url} target="_blank" rel="noopener noreferrer" aria-label="Open call in a new tab" title="Open in a new tab">
-          <span className="material-symbols-outlined">open_in_new</span>
+          <span aria-hidden="true" className="material-symbols-outlined">open_in_new</span>
         </a>
       </header>
       <iframe

@@ -41,7 +41,7 @@ export function DevicesSheet({ matrix, onClose }: { matrix: MatrixSource; onClos
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Devices" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Devices</div>
         </header>
@@ -55,7 +55,7 @@ export function DevicesSheet({ matrix, onClose }: { matrix: MatrixSource; onClos
             <ul className="device-list">
               {devices.map((d) => (
                 <li key={d.deviceId} className="device-row">
-                  <span className={`material-symbols-outlined device-icon ${d.verified ? 'verified' : ''}`}>
+                  <span aria-hidden="true" className={`material-symbols-outlined device-icon ${d.verified ? 'verified' : ''}`}>
                     {d.verified ? 'verified_user' : 'devices'}
                   </span>
                   <div className="device-main">
@@ -102,15 +102,15 @@ export function DevicesSheet({ matrix, onClose }: { matrix: MatrixSource; onClos
                     <div className="device-actions">
                       {!d.isCurrent && !d.verified && (
                         <button type="button" className="device-btn" title="Verify this device" onClick={() => void verify(d.deviceId)}>
-                          <span className="material-symbols-outlined">verified_user</span>
+                          <span aria-hidden="true" className="material-symbols-outlined">verified_user</span>
                         </button>
                       )}
                       <button type="button" className="device-btn" title="Rename" onClick={() => { setRenameVal(d.displayName); setRenaming(d.deviceId); }}>
-                        <span className="material-symbols-outlined">edit</span>
+                        <span aria-hidden="true" className="material-symbols-outlined">edit</span>
                       </button>
                       {!d.isCurrent && (
                         <button type="button" className="device-btn danger" title="Remove device" onClick={() => { setDeleting(d.deviceId); setPassword(''); }}>
-                          <span className="material-symbols-outlined">delete</span>
+                          <span aria-hidden="true" className="material-symbols-outlined">delete</span>
                         </button>
                       )}
                     </div>

@@ -104,7 +104,7 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
     <div className="call-panel" role="dialog" aria-modal="true" aria-label={`Call in ${roomName}`}>
       <header className="call-head">
         <button type="button" className="hamburger" aria-label="Leave call" onClick={hangUp}>
-          <span className="material-symbols-outlined" style={{ color: 'var(--md-sys-color-error)' }}>call_end</span>
+          <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--md-sys-color-error)' }}>call_end</span>
         </button>
         <div className="call-title">Call · {roomName}</div>
         <span className="call-status">
@@ -117,7 +117,7 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
           <p>Couldn’t start the in-app call.</p>
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>{tokenError}</p>
           <a className="call-fallback-link" href={buildCallUrl(roomId, roomName)} target="_blank" rel="noopener noreferrer">
-            <span className="material-symbols-outlined">open_in_new</span>
+            <span aria-hidden="true" className="material-symbols-outlined">open_in_new</span>
             Open the call page in a new tab instead
           </a>
         </div>
@@ -130,16 +130,16 @@ export function CallView({ matrix, roomId, roomName, onClose }: {
 
       <div className="call-controls" role="group" aria-label="Call controls">
         <button type="button" className={`call-btn ${lk.isMicEnabled ? 'on' : ''}`} aria-pressed={lk.isMicEnabled} aria-label={lk.isMicEnabled ? 'Mute microphone' : 'Unmute microphone'} onClick={() => void lk.toggleMicrophone()}>
-          <span className="material-symbols-outlined">{lk.isMicEnabled ? 'mic' : 'mic_off'}</span>
+          <span aria-hidden="true" className="material-symbols-outlined">{lk.isMicEnabled ? 'mic' : 'mic_off'}</span>
         </button>
         <button type="button" className={`call-btn ${lk.isCamEnabled ? 'on' : ''}`} aria-pressed={lk.isCamEnabled} aria-label={lk.isCamEnabled ? 'Turn camera off' : 'Turn camera on'} onClick={() => void lk.toggleCamera()}>
-          <span className="material-symbols-outlined">{lk.isCamEnabled ? 'videocam' : 'videocam_off'}</span>
+          <span aria-hidden="true" className="material-symbols-outlined">{lk.isCamEnabled ? 'videocam' : 'videocam_off'}</span>
         </button>
         <button type="button" className={`call-btn ${lk.isScreenShareEnabled ? 'on' : ''}`} aria-pressed={lk.isScreenShareEnabled} aria-label="Share screen" onClick={() => void lk.toggleScreenShare()}>
-          <span className="material-symbols-outlined">screen_share</span>
+          <span aria-hidden="true" className="material-symbols-outlined">screen_share</span>
         </button>
         <button type="button" className="call-btn end" aria-label="Leave call" onClick={hangUp}>
-          <span className="material-symbols-outlined">call_end</span>
+          <span aria-hidden="true" className="material-symbols-outlined">call_end</span>
         </button>
       </div>
     </div>
@@ -171,7 +171,7 @@ function CallTile({ participant, isLocal }: { participant: Participant; isLocal:
       {!camOn && <div className="call-tile-avatar">{(participant.name || participant.identity || '?').slice(0, 1).toUpperCase()}</div>}
       {!isLocal && <audio ref={audioRef} autoPlay />}
       <div className="call-tile-name">
-        {!participant.isMicrophoneEnabled && <span className="material-symbols-outlined" style={{ fontSize: 14 }}>mic_off</span>}
+        {!participant.isMicrophoneEnabled && <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 14 }}>mic_off</span>}
         {participant.name || participant.identity}{isLocal ? ' (you)' : ''}
       </div>
     </div>

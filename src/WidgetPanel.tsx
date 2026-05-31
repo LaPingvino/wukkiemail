@@ -129,12 +129,12 @@ export function WidgetPanel({ matrix, roomId, roomName, onClose }: {
     <div className="call-panel widget-panel" role="dialog" aria-modal="true" aria-label={`Widgets in ${roomName}`}>
       <header className="call-head">
         <button type="button" className="hamburger" aria-label="Close widgets" onClick={onClose}>
-          <span className="material-symbols-outlined">close</span>
+          <span aria-hidden="true" className="material-symbols-outlined">close</span>
         </button>
         <div className="call-title">Widgets · {roomName}</div>
         {canManage && (
           <button type="button" className="hamburger" aria-label="Add widget" title="Add widget" onClick={() => setAdding((a) => !a)}>
-            <span className="material-symbols-outlined">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined">add</span>
           </button>
         )}
       </header>
@@ -152,7 +152,7 @@ export function WidgetPanel({ matrix, roomId, roomName, onClose }: {
               >{w.name}</button>
               {canManage && (
                 <button type="button" className="widget-tab-x" aria-label={`Remove ${w.name}`} title="Remove" onClick={() => void remove(w.id)}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+                  <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
                 </button>
               )}
             </span>

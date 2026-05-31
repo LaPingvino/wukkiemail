@@ -42,7 +42,7 @@ export function DoneValuesSheet({ matrix, onClose }: { matrix: MatrixSource; onC
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Task done statuses" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Task "done" statuses</div>
         </header>
@@ -85,7 +85,7 @@ export function DoneValuesSheet({ matrix, onClose }: { matrix: MatrixSource; onC
                         onClick={() => void toggle(room, value)}
                         disabled={busy === room.roomId}
                       >
-                        {on && <span className="material-symbols-outlined" style={{ fontSize: 14 }}>check</span>}
+                        {on && <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 14 }}>check</span>}
                         {value}
                       </button>
                     );

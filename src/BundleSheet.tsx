@@ -41,12 +41,12 @@ export function BundleSheet({
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Bundle editor" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>{initial ? 'Edit bundle' : 'New bundle'}</div>
           {initial && onDelete && (
             <button type="button" className="hamburger" aria-label="Delete bundle" title="Delete" onClick={() => onDelete(initial.id)}>
-              <span className="material-symbols-outlined">delete</span>
+              <span aria-hidden="true" className="material-symbols-outlined">delete</span>
             </button>
           )}
         </header>

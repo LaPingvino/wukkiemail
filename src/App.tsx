@@ -1210,7 +1210,7 @@ function Inbox({
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
         {hasDraft && (
           <span className="draft-badge" title="You have an unsent draft here">
-            <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>Draft
+            <span aria-hidden="true" className="material-symbols-outlined">edit_note</span>Draft
           </span>
         )}
         {it.subject}
@@ -1241,7 +1241,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] acceptInvite failed', err); }
             }}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">check</span> Accept
+            <span aria-hidden="true" className="material-symbols-outlined">check</span> Accept
           </button>
           <button
             type="button"
@@ -1256,7 +1256,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] rejectInvite failed', err); }
             }}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
       ) : matrixSrc && it.joinable ? (
@@ -1274,7 +1274,7 @@ function Inbox({
               catch (err) { console.warn('[wukkiemail] join failed', err); }
             }}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">add</span> Join
+            <span aria-hidden="true" className="material-symbols-outlined">add</span> Join
           </button>
         </div>
       ) : matrixSrc && (
@@ -1285,7 +1285,7 @@ function Inbox({
             aria-label="Actions"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActionSheetFor(it.id); }}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
+            <span aria-hidden="true" className="material-symbols-outlined">more_vert</span>
           </button>
           <ItemActions
             item={it}
@@ -1380,7 +1380,7 @@ function Inbox({
             }
           }}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">done_all</span>
+          <span aria-hidden="true" className="material-symbols-outlined">done_all</span>
         </button>
       )}
       {hasMessages && scope.some((m) => m.flavor !== 'issue' && m.unread) && (
@@ -1400,7 +1400,7 @@ function Inbox({
             }
           }}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">mark_chat_read</span>
+          <span aria-hidden="true" className="material-symbols-outlined">mark_chat_read</span>
         </button>
       )}
     </div>
@@ -1466,7 +1466,7 @@ function Inbox({
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
           <button type="button" className="bundle-head" onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open} aria-label={headLabel}>
-            <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">{open ? 'expand_more' : 'chevron_right'}</span>
+            <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
             {(() => {
               const ic = g.key === 'pinned' ? 'push_pin'
                 : g.key === 'snoozed' ? 'schedule'
@@ -1474,12 +1474,12 @@ function Inbox({
                 : g.manual ? 'bookmark'
                 : g.children.length > 0 ? 'folder' : null;
               return ic
-                ? <span className="material-symbols-outlined" aria-hidden="true" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
+                ? <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--muted)', fontSize: 18 }}>{ic}</span>
                 : <span className={`src ${g.flavor}`} aria-hidden="true" />;
             })()}
             <span className="bundle-label">{g.label}</span>
             {g.pinned && (
-              <span className="material-symbols-outlined" aria-hidden="true" title="Pinned bundle"
+              <span aria-hidden="true" className="material-symbols-outlined" title="Pinned bundle"
                 style={{ color: 'var(--accent)', fontSize: 16 }}>push_pin</span>
             )}
             <span className="bundle-count">{g.unread > 0 ? `${g.unread} unread · ` : ''}{g.count}</span>
@@ -1512,7 +1512,7 @@ function Inbox({
           {matrixSrc && (
             <button type="button" className="item-kebab" aria-label="Bundle actions"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBundleActionFor(g.key); }}>
-              <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
+              <span aria-hidden="true" className="material-symbols-outlined">more_vert</span>
             </button>
           )}
         </div>
@@ -1523,7 +1523,7 @@ function Inbox({
                 <span className="filter-group-label">Hidden bundles</span>
                 {hiddenBundles.map((k) => (
                   <button key={k} type="button" className="mini-chip" title="Restore this bundle" onClick={() => void restoreBundle(k)}>
-                    <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 14 }}>undo</span>
+                    <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 14 }}>undo</span>
                     {bundleLabel(k as BundleKey, [...spaceBundles, ...mailBundles])}
                   </button>
                 ))}
@@ -1570,7 +1570,7 @@ function Inbox({
                 aria-label="Clear search"
                 onClick={() => { setQuery(''); const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null; if (f) f.value = ''; }}
               >
-                <span className="material-symbols-outlined">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
             )}
             <button
@@ -1581,7 +1581,7 @@ function Inbox({
               title="Filter helper"
               onClick={() => setComposerOpen((o) => !o)}
             >
-              <span className="material-symbols-outlined">tune</span>
+              <span aria-hidden="true" className="material-symbols-outlined">tune</span>
             </button>
           </div>
           {composerOpen && (
@@ -1612,7 +1612,7 @@ function Inbox({
                   className="incoming-call-accept"
                   onClick={() => { matrixSrc.setActiveCallRoom(c.roomId); setCallRoom({ roomId: c.roomId, name: c.roomName }); }}
                 >
-                  <span className="material-symbols-outlined">call</span> Accept
+                  <span aria-hidden="true" className="material-symbols-outlined">call</span> Accept
                 </button>
                 <button
                   type="button"
@@ -1620,7 +1620,7 @@ function Inbox({
                   aria-label="Decline call"
                   onClick={() => matrixSrc.dismissIncomingCall(c.roomId)}
                 >
-                  <span className="material-symbols-outlined">call_end</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">call_end</span>
                 </button>
               </div>
             ))}
@@ -1652,10 +1652,10 @@ function Inbox({
                   <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
                     <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen}
                       aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
-                      <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">
+                      <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">
                         {configOpen ? 'expand_more' : 'chevron_right'}
                       </span>
-                      <span className="material-symbols-outlined" aria-hidden="true" style={{ color: 'var(--muted)' }}>settings</span>
+                      <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>settings</span>
                       <span className="bundle-label">Settings &amp; accounts</span>
                       {cryptoStatus !== 'verified' && hasEncRoom && (
                         <span className="bundle-count" style={{ color: 'var(--md-sys-color-primary)' }}>encryption ●</span>
@@ -1666,7 +1666,7 @@ function Inbox({
                         {matrixSrc && cryptoStatus !== 'verified' && (
                           <div className="encryption-block">
                             <div className="encryption-block-head">
-                              <span className="material-symbols-outlined" aria-hidden="true">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
+                              <span aria-hidden="true" className="material-symbols-outlined">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
                               <strong>{cryptoStatus === 'none' ? 'Set up encryption' : 'Verify this device'}</strong>
                             </div>
                             <p className="encryption-block-sub">
@@ -1992,60 +1992,60 @@ function Inbox({
                   await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), false);
                   close();
                 }}>
-                  <span className="material-symbols-outlined">mark_chat_read</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">mark_chat_read</span>
                   Mark all read
                 </button>
               )}
               {msgs.length > 0 && (
                 <button onClick={async () => { await matrixSrc.setManuallyUnreadBatch(msgs.map((i) => i.id), true); close(); }}>
-                  <span className="material-symbols-outlined">mark_email_unread</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">mark_email_unread</span>
                   Mark all unread
                 </button>
               )}
               {tasks.length > 0 && (
                 <button onClick={async () => { for (const it of tasks) { const m = it.id.match(/^matrix:(.+):issue:(.+)$/); if (m) await matrixSrc.markIssueDone(m[1], m[2]); } close(); }}>
-                  <span className="material-symbols-outlined">done_all</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">done_all</span>
                   Mark all tasks done
                 </button>
               )}
               {canPinBundle && (
                 <button onClick={async () => { await matrixSrc.setPinnedBundle(g.key, !g.pinned); close(); }}>
-                  <span className="material-symbols-outlined">{g.pinned ? 'push_pin' : 'keep'}</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">{g.pinned ? 'push_pin' : 'keep'}</span>
                   {g.pinned ? 'Unpin bundle' : 'Pin bundle to top'}
                 </button>
               )}
               {g.key === 'snoozed' ? (
                 <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), null); close(); }}>
-                  <span className="material-symbols-outlined">alarm_off</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">alarm_off</span>
                   Unsnooze all
                 </button>
               ) : (
                 <>
                   <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), nextHourOfDay(20)); close(); }}>
-                    <span className="material-symbols-outlined">schedule</span>
+                    <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
                     Snooze all until this evening
                   </button>
                   <button onClick={async () => { await matrixSrc.setSnoozedBatch(allItems.map((i) => i.id), nextDayAt(9)); close(); }}>
-                    <span className="material-symbols-outlined">schedule</span>
+                    <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
                     Snooze all until tomorrow
                   </button>
                 </>
               )}
               {g.manual && (
                 <button onClick={() => { setBundleActionFor(null); setBundleSheet({ editing: g.manual }); }}>
-                  <span className="material-symbols-outlined">edit</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">edit</span>
                   Edit bundle
                 </button>
               )}
               {!g.manual && !['other', 'pinned', 'snoozed'].includes(g.key) && (
                 <button onClick={() => void convertToManual(g.key, g.label)}>
-                  <span className="material-symbols-outlined">tune</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">tune</span>
                   Make editable (convert to filter)
                 </button>
               )}
               {!g.manual && !['other', 'pinned', 'snoozed'].includes(g.key) && (
                 <button onClick={() => void hideBundle(g.key)}>
-                  <span className="material-symbols-outlined">visibility_off</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">visibility_off</span>
                   Hide this bundle (move to Other)
                 </button>
               )}
@@ -2139,29 +2139,29 @@ function Inbox({
             <div className="action-sheet" role="dialog" aria-modal="true" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
               <div className="action-sheet-title">{target.from} — {target.subject}</div>
               <button onClick={async () => { await matrixSrc.setPinned(target.id, !isPinned); setActionSheetFor(null); }}>
-                <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
+                <span aria-hidden="true" className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
                 {isPinned ? 'Unpin' : 'Pin'}
               </button>
               <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextHourOfDay(20)); setActionSheetFor(null); }}>
-                <span className="material-symbols-outlined">schedule</span>
+                <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
                 Snooze until this evening
               </button>
               <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextDayAt(9)); setActionSheetFor(null); }}>
-                <span className="material-symbols-outlined">schedule</span>
+                <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
                 Snooze until tomorrow 9am
               </button>
               <button onClick={async () => { await matrixSrc.setSnoozed(target.id, nextDayAt(9, 7)); setActionSheetFor(null); }}>
-                <span className="material-symbols-outlined">schedule</span>
+                <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
                 Snooze for a week
               </button>
               {isSnoozed && (
                 <button onClick={async () => { await matrixSrc.setSnoozed(target.id, null); setActionSheetFor(null); }}>
-                  <span className="material-symbols-outlined">alarm_off</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">alarm_off</span>
                   Unsnooze
                 </button>
               )}
               <button onClick={async () => { await matrixSrc.setManuallyUnread(target.id, !target.unread); setActionSheetFor(null); }}>
-                <span className="material-symbols-outlined">{target.unread ? 'mark_email_read' : 'mark_email_unread'}</span>
+                <span aria-hidden="true" className="material-symbols-outlined">{target.unread ? 'mark_email_read' : 'mark_email_unread'}</span>
                 {target.unread ? 'Mark read' : 'Mark unread'}
               </button>
               <button onClick={async () => {
@@ -2170,7 +2170,7 @@ function Inbox({
                 await matrixSrc.setManuallyUnread(target.id, false);
                 setActionSheetFor(null);
               }}>
-                <span className="material-symbols-outlined">done_all</span>
+                <span aria-hidden="true" className="material-symbols-outlined">done_all</span>
                 Done
               </button>
             </div>
@@ -2182,24 +2182,24 @@ function Inbox({
           {fabMenuOpen && (
             <div className="fab-menu">
               <button type="button" onClick={() => { setFabMenuOpen(false); setNewTaskOpen(true); }}>
-                <span className="material-symbols-outlined">check_box</span>
+                <span aria-hidden="true" className="material-symbols-outlined">check_box</span>
                 New task
               </button>
               <button type="button" onClick={() => { setFabMenuOpen(false); setNewDmOpen(true); }}>
-                <span className="material-symbols-outlined">person_add</span>
+                <span aria-hidden="true" className="material-symbols-outlined">person_add</span>
                 New DM
               </button>
               <button type="button" onClick={() => { setFabMenuOpen(false); setNewGroupOpen(true); }}>
-                <span className="material-symbols-outlined">group_add</span>
+                <span aria-hidden="true" className="material-symbols-outlined">group_add</span>
                 New group
               </button>
               <button type="button" onClick={() => { setFabMenuOpen(false); setNewCallOpen(true); }}>
-                <span className="material-symbols-outlined">video_call</span>
+                <span aria-hidden="true" className="material-symbols-outlined">video_call</span>
                 New call room
               </button>
               {jmapSrc && (
                 <button type="button" onClick={() => { setFabMenuOpen(false); setComposeOpen(true); }}>
-                  <span className="material-symbols-outlined">mail</span>
+                  <span aria-hidden="true" className="material-symbols-outlined">mail</span>
                   New mail
                 </button>
               )}
@@ -2211,7 +2211,7 @@ function Inbox({
             aria-label={fabMenuOpen ? 'Close menu' : 'New…'}
             onClick={() => setFabMenuOpen((o) => !o)}
           >
-            <span className="material-symbols-outlined">{fabMenuOpen ? 'close' : 'add'}</span>
+            <span aria-hidden="true" className="material-symbols-outlined">{fabMenuOpen ? 'close' : 'add'}</span>
           </button>
         </div>
       )}
@@ -2236,18 +2236,18 @@ function ItemActions({
   return (
     <div className="item-actions" onClick={stop}>
       <button type="button" title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => { stop(e); onTogglePin(); }}>
-        <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
+        <span aria-hidden="true" className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
       </button>
       {/* Snoozed items get a one-click unsnooze; the schedule button still
           opens the chooser for re-scheduling. */}
       {isSnoozed && (
         <button type="button" title="Unsnooze" onClick={(e) => { stop(e); onSnooze(null); }}>
-          <span className="material-symbols-outlined">alarm_off</span>
+          <span aria-hidden="true" className="material-symbols-outlined">alarm_off</span>
         </button>
       )}
       <div style={{ position: 'relative' }}>
         <button type="button" title={isSnoozed ? 'Reschedule snooze' : 'Snooze'} onClick={(e) => { stop(e); onOpenSnoozePopover(); }}>
-          <span className="material-symbols-outlined">schedule</span>
+          <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
         </button>
         {snoozePopoverOpen && (
           <SnoozeMenu snoozed={isSnoozed} currentUntil={item.snoozedUntil} onSnooze={onSnooze} />
@@ -2256,17 +2256,17 @@ function ItemActions({
       {item.flavor === 'issue' ? (
         // Issues are "done".
         <button type="button" title="Mark done" onClick={(e) => { stop(e); onDone(); }}>
-          <span className="material-symbols-outlined">done_all</span>
+          <span aria-hidden="true" className="material-symbols-outlined">done_all</span>
         </button>
       ) : item.unread ? (
         // Messages are "read".
         <button type="button" title="Mark read" onClick={(e) => { stop(e); onDone(); }}>
-          <span className="material-symbols-outlined">mark_chat_read</span>
+          <span aria-hidden="true" className="material-symbols-outlined">mark_chat_read</span>
         </button>
       ) : (
         // Already read: the only useful toggle is back to unread.
         <button type="button" title="Mark unread" onClick={(e) => { stop(e); onToggleUnread(); }}>
-          <span className="material-symbols-outlined">mark_chat_unread</span>
+          <span aria-hidden="true" className="material-symbols-outlined">mark_chat_unread</span>
         </button>
       )}
     </div>
@@ -2295,19 +2295,19 @@ function BundleActions({
     <div className="item-actions bundle-actions" onClick={stop}>
       {canPin && (
         <button type="button" title={node.pinned ? 'Unpin bundle' : 'Pin bundle to top'} onClick={(e) => { stop(e); onTogglePin(); }}>
-          <span className="material-symbols-outlined">{node.pinned ? 'push_pin' : 'keep'}</span>
+          <span aria-hidden="true" className="material-symbols-outlined">{node.pinned ? 'push_pin' : 'keep'}</span>
         </button>
       )}
       {node.key === 'snoozed' ? (
         // Everything here is already snoozed — the only useful action is to
         // wake it, so skip the full snooze menu and unsnooze directly.
         <button type="button" title="Unsnooze all" onClick={(e) => { stop(e); onSnooze(null); }}>
-          <span className="material-symbols-outlined">alarm_off</span>
+          <span aria-hidden="true" className="material-symbols-outlined">alarm_off</span>
         </button>
       ) : (
         <div style={{ position: 'relative' }}>
           <button type="button" title="Snooze all" onClick={(e) => { stop(e); onOpenSnooze(); }}>
-            <span className="material-symbols-outlined">schedule</span>
+            <span aria-hidden="true" className="material-symbols-outlined">schedule</span>
           </button>
           {snoozeOpen && (
             <SnoozeMenu snoozed={false} allLabel onSnooze={onSnooze} />
@@ -2317,15 +2317,15 @@ function BundleActions({
       {node.unread > 0 ? (
         // Issues are "done"; messages are "read".
         <button type="button" title={issuesOnly ? 'Mark all done' : 'Mark all read'} onClick={(e) => { stop(e); onMarkDone(); }}>
-          <span className="material-symbols-outlined">{issuesOnly ? 'done_all' : 'mark_chat_read'}</span>
+          <span aria-hidden="true" className="material-symbols-outlined">{issuesOnly ? 'done_all' : 'mark_chat_read'}</span>
         </button>
       ) : (
         <button type="button" title="Mark all unread" onClick={(e) => { stop(e); onMarkUnread(); }}>
-          <span className="material-symbols-outlined">mark_chat_unread</span>
+          <span aria-hidden="true" className="material-symbols-outlined">mark_chat_unread</span>
         </button>
       )}
       <button type="button" title="More actions" onClick={(e) => { stop(e); onMore(); }}>
-        <span className="material-symbols-outlined">more_horiz</span>
+        <span aria-hidden="true" className="material-symbols-outlined">more_horiz</span>
       </button>
     </div>
   );
@@ -2397,7 +2397,7 @@ function SnoozeMenu({ snoozed, onSnooze, currentUntil, allLabel }: {
       </div>
       {snoozed && (
         <button type="button" className="snooze-unsnooze" onClick={(e) => { stop(e); onSnooze(null); }}>
-          <span className="material-symbols-outlined">alarm_off</span>
+          <span aria-hidden="true" className="material-symbols-outlined">alarm_off</span>
           {allLabel ? 'Unsnooze all' : 'Unsnooze'}
         </button>
       )}
@@ -2452,7 +2452,7 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
       <div className="sheet" role="dialog" aria-modal="true" aria-label="New DM" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New DM</div>
         </header>
@@ -2494,7 +2494,7 @@ function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sourc
       <div className="sheet" role="dialog" aria-modal="true" aria-label="New group" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New group</div>
         </header>
@@ -2543,7 +2543,7 @@ function ShortcutsSheet({ onClose }: { onClose: () => void }) {
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Keyboard shortcuts</div>
         </header>
@@ -2579,7 +2579,7 @@ function NewCallRoomSheet({ matrix, onClose, onCreated }: { matrix: import('./so
       <div className="sheet" role="dialog" aria-modal="true" aria-label="New call room" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New call room</div>
         </header>
@@ -2592,10 +2592,10 @@ function NewCallRoomSheet({ matrix, onClose, onCreated }: { matrix: import('./so
             <span>Kind</span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button type="button" className={`chip ${video ? 'active' : ''}`} onClick={() => setVideo(true)}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>videocam</span> Video
+                <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>videocam</span> Video
               </button>
               <button type="button" className={`chip ${!video ? 'active' : ''}`} onClick={() => setVideo(false)}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>call</span> Voice
+                <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>call</span> Voice
               </button>
             </div>
             <span className="hint">A persistent call room anyone in it can join. {video ? 'Camera on by default.' : 'Audio-only by default.'}</span>
@@ -2649,7 +2649,7 @@ function AddAccountSheet({
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Add account" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Add account</div>
         </header>

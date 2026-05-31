@@ -34,7 +34,7 @@ export function JmapLoginSheet({ onClose, onConnected }: { onClose: () => void; 
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Connect mail" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Connect mail (JMAP)</div>
         </header>

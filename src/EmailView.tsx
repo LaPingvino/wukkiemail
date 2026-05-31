@@ -104,7 +104,7 @@ export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailI
         {!email && !error && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
         {email && offerImages && (
           <div className="email-images-bar">
-            <span className="material-symbols-outlined" aria-hidden="true">{loadImages ? 'image' : 'hide_image'}</span>
+            <span aria-hidden="true" className="material-symbols-outlined">{loadImages ? 'image' : 'hide_image'}</span>
             <span style={{ flex: 1 }}>
               {loadImages ? 'Remote images loaded.' : 'Remote images are hidden to protect your privacy.'}
             </span>
@@ -131,7 +131,7 @@ export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailI
             rows={2}
           />
           <button type="button" className="hamburger" aria-label="Send reply" disabled={sending || !reply.trim()} onClick={() => void sendReply()}>
-            <span className="material-symbols-outlined">{sending ? 'hourglass_empty' : 'send'}</span>
+            <span aria-hidden="true" className="material-symbols-outlined">{sending ? 'hourglass_empty' : 'send'}</span>
           </button>
         </div>
       )}

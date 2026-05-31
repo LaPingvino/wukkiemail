@@ -27,8 +27,8 @@ function EncryptedImage({ matrix, file, alt, sticker }: { matrix: MatrixSource; 
     });
     return () => { live = false; if (made) URL.revokeObjectURL(made); };
   }, [matrix, file]);
-  if (failed) return <span className="msg-file"><span className="material-symbols-outlined" aria-hidden="true">image</span> (couldn't decrypt image)</span>;
-  if (!url) return <span className="msg-file"><span className="material-symbols-outlined" aria-hidden="true">lock</span> decrypting image…</span>;
+  if (failed) return <span className="msg-file"><span aria-hidden="true" className="material-symbols-outlined">image</span> (couldn't decrypt image)</span>;
+  if (!url) return <span className="msg-file"><span aria-hidden="true" className="material-symbols-outlined">lock</span> decrypting image…</span>;
   // Stickers render small and inline (no click-to-open lightbox).
   if (sticker) return <img src={url} alt={alt} className="msg-image msg-sticker" loading="lazy" />;
   return (
@@ -71,7 +71,7 @@ function EncryptedFileLink({ matrix, file, name, mimetype, size, fmtBytes }: {
   if (url) {
     return (
       <a href={url} download={name} className="msg-file">
-        <span className="material-symbols-outlined" aria-hidden="true">download</span>
+        <span aria-hidden="true" className="material-symbols-outlined">download</span>
         <span>{name}</span>
         {size != null && <span style={{ color: 'var(--muted)' }}>· {fmtBytes(size)}</span>}
       </a>
@@ -79,7 +79,7 @@ function EncryptedFileLink({ matrix, file, name, mimetype, size, fmtBytes }: {
   }
   return (
     <button type="button" className="msg-file" onClick={() => void decrypt()} disabled={busy} style={{ cursor: 'pointer' }}>
-      <span className="material-symbols-outlined" aria-hidden="true">{failed ? 'error' : 'lock'}</span>
+      <span aria-hidden="true" className="material-symbols-outlined">{failed ? 'error' : 'lock'}</span>
       <span>{failed ? "Couldn't decrypt" : busy ? 'Decrypting…' : name}</span>
       {size != null && <span style={{ color: 'var(--muted)' }}>· {fmtBytes(size)}</span>}
     </button>
@@ -516,7 +516,7 @@ export function RoomPanel({
                   <EncryptedFileLink matrix={matrix} file={m.file.encrypted} name={m.file.name} mimetype={m.file.mimetype} size={m.file.size} fmtBytes={formatBytes} />
                 ) : m.file ? (
                   <a href={m.file.url} target="_blank" rel="noopener noreferrer" className="msg-file">
-                    <span className="material-symbols-outlined" aria-hidden="true">attach_file</span>
+                    <span aria-hidden="true" className="material-symbols-outlined">attach_file</span>
                     <span>{m.file.name}</span>
                     {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
                   </a>
@@ -535,7 +535,7 @@ export function RoomPanel({
                     onClick={() => onOpenThread(m.id)}
                     aria-label={`Open thread, ${m.threadSummary.count} repl${m.threadSummary.count === 1 ? 'y' : 'ies'}`}
                   >
-                    <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 16 }}>forum</span>
+                    <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 16 }}>forum</span>
                     <span>{m.threadSummary.count} repl{m.threadSummary.count === 1 ? 'y' : 'ies'}</span>
                     <span className="thread-summary-ts">{new Date(m.threadSummary.latestTs).toLocaleString()}</span>
                   </button>
@@ -569,7 +569,7 @@ export function RoomPanel({
                     title="Reply"
                     onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
                   >
-                    <span className="material-symbols-outlined" aria-hidden="true">reply</span>
+                    <span aria-hidden="true" className="material-symbols-outlined">reply</span>
                   </button>
                   {!threadRootId && onOpenThread && (
                     <button
@@ -579,7 +579,7 @@ export function RoomPanel({
                       title="Reply in thread"
                       onClick={() => onOpenThread(m.id)}
                     >
-                      <span className="material-symbols-outlined" aria-hidden="true">forum</span>
+                      <span aria-hidden="true" className="material-symbols-outlined">forum</span>
                     </button>
                   )}
                   {m.senderId === selfId && (
@@ -595,7 +595,7 @@ export function RoomPanel({
                           setReplyTo(null);
                         }}
                       >
-                        <span className="material-symbols-outlined" aria-hidden="true">edit</span>
+                        <span aria-hidden="true" className="material-symbols-outlined">edit</span>
                       </button>
                       <button
                         type="button"
@@ -608,7 +608,7 @@ export function RoomPanel({
                           catch (e) { console.warn('[wukkiemail] redact failed', e); }
                         }}
                       >
-                        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+                        <span aria-hidden="true" className="material-symbols-outlined">delete</span>
                       </button>
                     </>
                   )}
@@ -640,7 +640,7 @@ export function RoomPanel({
             <div className="reply-chip-body">{replyTo.body.slice(0, 200)}</div>
           </div>
           <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
-            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
       )}
@@ -655,17 +655,17 @@ export function RoomPanel({
             onClick={() => { setEditing(null); setComposeText(''); }}
             aria-label="Cancel edit"
           >
-            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
       )}
       <div className="composer">
         {sendError && (
           <div className="send-error">
-            <span className="material-symbols-outlined send-error-icon" aria-hidden="true">error</span>
+            <span aria-hidden="true" className="material-symbols-outlined send-error-icon">error</span>
             <span className="send-error-text">Send failed: {sendError}</span>
             <button type="button" className="send-error-x" aria-label="Dismiss error" onClick={() => setSendError(null)}>
-              <span className="material-symbols-outlined" aria-hidden="true">close</span>
+              <span aria-hidden="true" className="material-symbols-outlined">close</span>
             </button>
           </div>
         )}
@@ -862,7 +862,7 @@ export function RoomPanel({
           title="Emoji"
           onClick={() => setEmojiOpen((o) => !o)}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">mood</span>
+          <span aria-hidden="true" className="material-symbols-outlined">mood</span>
         </button>
         {stickers.length > 0 && (
           <button
@@ -872,7 +872,7 @@ export function RoomPanel({
             title="Sticker"
             onClick={() => setStickerOpen((o) => !o)}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">imagesmode</span>
+            <span aria-hidden="true" className="material-symbols-outlined">imagesmode</span>
           </button>
         )}
         <button
@@ -882,7 +882,7 @@ export function RoomPanel({
           onClick={pickFile}
           disabled={uploading}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">attach_file</span>
+          <span aria-hidden="true" className="material-symbols-outlined">attach_file</span>
         </button>
         <input
           ref={fileInputRef}
@@ -925,7 +925,7 @@ function ReactionAdder({ onAdd, customEmojis, mxcToHttp }: {
         onClick={() => setOpen((o) => !o)}
         aria-label="Add reaction"
       >
-        <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 14 }}>add_reaction</span>
+        <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 14 }}>add_reaction</span>
       </button>
       {open && !full && (
         <div className="reaction-popover" onMouseLeave={() => setOpen(false)}>
@@ -933,7 +933,7 @@ function ReactionAdder({ onAdd, customEmojis, mxcToHttp }: {
             <button key={e} type="button" onClick={() => { onAdd(e); setOpen(false); }}>{e}</button>
           ))}
           <button type="button" aria-label="More emoji" title="More emoji" onClick={() => setFull(true)}>
-            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 16 }}>add_reaction</span>
+            <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 16 }}>add_reaction</span>
           </button>
           {/* Free-text reaction key — kept so any string/emoji can be sent, not
               just palette + picker entries (the full picker replaced this once
@@ -1036,14 +1036,14 @@ function ThreadsDrawer({ messages, onClose, onOpen }: {
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Threads · {roots.length}</div>
         </header>
         <div className="sheet-body" style={{ gap: 0 }}>
           {roots.map((m) => (
             <button key={m.id} type="button" className="thread-row" onClick={() => onOpen(m.id)}>
-              <span className="material-symbols-outlined" aria-hidden="true" style={{ color: 'var(--muted)' }}>forum</span>
+              <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>forum</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="thread-row-from">{m.senderName}</span>
                 <span className="thread-row-body">{m.body || '(no text)'}</span>
@@ -1074,28 +1074,28 @@ function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel
           title={incomingCall.roomId === '' ? 'Join call' : `Pick up call in ${incomingCall.roomName}`}
           onClick={() => onPickUp(incomingCall.roomId, incomingCall.roomName)}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">call</span>
+          <span aria-hidden="true" className="material-symbols-outlined">call</span>
           <span className="pickup-btn-text">Pick up · {incomingCall.roomName}</span>
         </button>
       )}
       {onOpenThreads && (
         <button type="button" className="hamburger" aria-label="Threads" title="Threads in this room" onClick={onOpenThreads}>
-          <span className="material-symbols-outlined" aria-hidden="true">forum</span>
+          <span aria-hidden="true" className="material-symbols-outlined">forum</span>
         </button>
       )}
       {onOpenWidgets && (
         <button type="button" className="hamburger" aria-label="Widgets" title="Widgets" onClick={onOpenWidgets}>
-          <span className="material-symbols-outlined" aria-hidden="true">widgets</span>
+          <span aria-hidden="true" className="material-symbols-outlined">widgets</span>
         </button>
       )}
       {onStartCall && (
         <button type="button" className="hamburger" aria-label="Start voice or video call" title="Start call" onClick={onStartCall}>
-          <span className="material-symbols-outlined" aria-hidden="true">videocam</span>
+          <span aria-hidden="true" className="material-symbols-outlined">videocam</span>
         </button>
       )}
       {onBack && (
         <button type="button" className="next-btn next-btn-back" title={backLabel ? `Back: ${backLabel}` : 'Back to previous chat'} onClick={onBack}>
-          <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+          <span aria-hidden="true" className="material-symbols-outlined">chevron_left</span>
           <span className="next-btn-text">
             <span className="next-btn-label">Back</span>
             {backLabel && <span className="next-btn-sub">{backLabel}</span>}
@@ -1108,7 +1108,7 @@ function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel
             <span className="next-btn-label">Next</span>
             {nextLabel && <span className="next-btn-sub">{nextLabel}</span>}
           </span>
-          <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+          <span aria-hidden="true" className="material-symbols-outlined">chevron_right</span>
         </button>
       )}
     </header>

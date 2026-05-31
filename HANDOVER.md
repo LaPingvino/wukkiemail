@@ -30,6 +30,14 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Decorative icons aria-hidden app-wide SHIPPED (2026-05-31):** RoomPanel had hidden all 27 of
+its Material-symbol glyphs but the convention was never extended — so ~100 icon ligatures
+across App.tsx + every sheet were read aloud as their raw name ("push_pin", "mark_email_read",
+"chevron_right" — exactly bgtlover's original complaint). Audit first confirmed NO button is
+named solely by its icon (all have aria-label / title / visible text), so hiding decorative
+glyphs is safe. Applied an idempotent transform giving every `material-symbols-outlined` span
+`aria-hidden="true"` (consumes any pre-existing one → no duplicates). 18 files, 124 spans.
+
 **Escape-closes-sheets SHIPPED (2026-05-31):** keyboard-only users previously could not
 dismiss any sheet — they closed on scrim-CLICK or browser-back only. The global keydown Escape
 branch now does `history.back()` when `anyModalOpen`, which fires the existing tested `onPop`

@@ -84,7 +84,7 @@ export function SettingsSheet({
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Priority tuning" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
           <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Priority tuning</div>
           <button type="button" className="sheet-submit" onClick={() => void save()} disabled={saving}>

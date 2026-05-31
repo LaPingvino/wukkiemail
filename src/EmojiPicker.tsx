@@ -92,7 +92,7 @@ export function EmojiPicker({ onPick, onClose, customEmojis, mxcToHttp, title }:
   return (
     <div className="emoji-picker" ref={rootRef} role="dialog" aria-label={title ?? 'Emoji picker'}>
       <div className="emoji-search">
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--muted)' }}>search</span>
+        <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--muted)' }}>search</span>
         <input
           type="text"
           autoFocus

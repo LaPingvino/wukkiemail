@@ -86,7 +86,7 @@ export function PersonPicker({
               <span className="person-chip-name">{p.name}</span>
               <button type="button" className="person-chip-x" aria-label={`Remove ${p.name}`}
                 onClick={(e) => { e.stopPropagation(); remove(id); }}>
-                <span className="material-symbols-outlined">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
             </span>
           );
@@ -97,7 +97,7 @@ export function PersonPicker({
             <span className="person-chip-name">{single.name}</span>
             <button type="button" className="person-chip-x" aria-label="Clear"
               onClick={(e) => { e.stopPropagation(); onChange([]); }}>
-              <span className="material-symbols-outlined">close</span>
+              <span aria-hidden="true" className="material-symbols-outlined">close</span>
             </button>
           </span>
         ) : (
@@ -145,7 +145,7 @@ export function PersonPicker({
           {hits.length === 0 && MXID_RE.test(query.trim()) && (
             <li role="option" aria-selected="true">
               <button type="button" className="person-option active" onClick={() => pick(query.trim())}>
-                <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--muted)' }}>person_add</span>
+                <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--muted)' }}>person_add</span>
                 <span className="person-option-text">
                   <span className="person-option-name">Use {query.trim()}</span>
                   <span className="person-option-id">Exact Matrix ID</span>

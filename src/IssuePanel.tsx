@@ -210,7 +210,7 @@ function EditableFieldRow({
           onKeyDown={(e) => { if (e.key === 'Enter') { setDraft(valueToString(value, field.type)); setEditing(true); } }}
         >
           <span className="editable-value">{display}</span>
-          <span className="material-symbols-outlined edit-affordance" aria-hidden="true">edit</span>
+          <span aria-hidden="true" className="material-symbols-outlined edit-affordance">edit</span>
         </dd>
       </div>
     );
@@ -325,7 +325,7 @@ function Header({ title, subtitle, onClose, onOpenChat, onSaveTitle }: { title: 
       </div>
       {onOpenChat && (
         <button type="button" className="hamburger" aria-label="Open chat" title="Open the chat for this room" onClick={onOpenChat}>
-          <span className="material-symbols-outlined">forum</span>
+          <span aria-hidden="true" className="material-symbols-outlined">forum</span>
         </button>
       )}
     </header>
