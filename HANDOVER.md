@@ -19,8 +19,23 @@ Joop OK'd being bold + reviewing together on arrival. Verify these and adjust:
   loads complete (messages + names), DM list fills, no perf regression / no double-fetch storms.
 - **B3 backfill simplification** (cinny, this session): current room no longer deep-prefetched to
   200 — relies on subscribe-on-open (50) + top scheduler priority. Check chat opens feel populated.
-- **B4 SDK forceLoadMembers** (pending this session): full member roster for @-mentions in big
-  bridged groups. Verify mention autocomplete shows everyone.
+- **B4 SDK forceLoadMembers** (SDK `5cc33e42a`, cinny `674b50a65`, DEPLOYED — Wally
+  `v4.99.0-48-g8bf2f8210`): `Room.forceLoadMembers()` hits `/members` regardless of
+  `lazyLoadMembers`; cinny's `useRoomMembers` calls it under sliding sync. VERIFY: open a big
+  bridged Signal group — member names resolve (not mxids) and @-mention autocomplete lists
+  everyone, no `/members` hammering. (Did NOT also fire `invalidateLoadedMembers` for unencrypted
+  rooms — left the encrypted-only UTD path alone; on-open forceLoadMembers covers the display case.)
+
+**AUTONOMOUS QUEUE COMPLETE (2026-05-31):** Phase A (keyboard nav: inbox unified cursor + chat-page
+arrow nav) + Phase B (sliding-sync renewal: fullLazyLoading-gating, subscribe-on-open, m.direct DM
+subs, backfill simplification, forceLoadMembers) all shipped + deployed. Everything to verify is in
+the CHECK-LATER list above. Optional/not-done: explicit on-open paginate in cinny RoomTimeline
+(skipped — high-risk virtual-paginator surgery, marginal over subscribe-on-open + scheduler);
+invalidateLoadedMembers for unencrypted rooms.
+**SDK babel gotcha:** `babel -d lib --extensions ".ts,.js" src/models/room.ts` FLATTENS a nested
+file to `lib/room.js` (wrong). For a nested src file compile into the matching dir:
+`babel --extensions ".ts,.js" src/models/room.ts -d lib/models`. Always `grep -c forceLoadMembers
+lib/models/room.js` (or your symbol) after, since a stale lib silently ships old SDK.
 
 ## SESSION 2026-05-31 — sliding-sync + crypto hardening (latest)
 
