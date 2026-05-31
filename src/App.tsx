@@ -864,10 +864,13 @@ function Inbox({
       // not match what's on screen). Cap on the rendered count, and resolve the
       // cursored item from the highlighted DOM row so the action always targets
       // exactly what's highlighted.
-      const renderedCount = document.querySelectorAll('.item[data-idx]').length;
+      // Unified cursor over ALL navigable rows — bundle/config HEADERS and
+      // entries alike (every one carries data-nav + data-idx in render order),
+      // so j/k/↑/↓ walk them the same way. A header resolves to no item.
+      const renderedCount = document.querySelectorAll('[data-nav]').length;
+      const cursorEl = (): Element | null => document.querySelector(`[data-nav][data-idx="${cursor}"]`);
       const cursoredItem = (): InboxItem | undefined => {
-        const el = document.querySelector(`.item[data-idx="${cursor}"]`);
-        const id = el?.getAttribute('data-item-id');
+        const id = cursorEl()?.getAttribute('data-item-id');
         return id ? itemById.get(id) : undefined;
       };
       if (e.key === 'j' || e.key === 'ArrowDown') {
@@ -881,6 +884,14 @@ function Inbox({
         return;
       }
       if (e.key === 'Enter') {
+        // On a bundle/config header, Enter folds it open/closed.
+        const bundleKey = cursorEl()?.getAttribute('data-bundle-key');
+        if (bundleKey) {
+          e.preventDefault();
+          if (bundleKey === '__config__') setConfigOpen((o) => !o);
+          else toggleBundle(bundleKey);
+          return;
+        }
         const it = cursoredItem();
         if (!it) return;
         e.preventDefault();
@@ -913,10 +924,10 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles]);
 
   useEffect(() => {
-    const el = document.querySelector(`.item[data-idx="${cursor}"]`);
+    const el = document.querySelector(`[data-nav][data-idx="${cursor}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
 
@@ -1184,6 +1195,7 @@ function Inbox({
       key={it.id}
       data-idx={idx}
       data-item-id={it.id}
+      data-nav
       role="treeitem"
       aria-level={level}
       aria-selected={idx === cursor}
@@ -1442,31 +1454,36 @@ function Inbox({
     setBundleSheet({ editing: b });
   };
 
+  // Toggle a bundle open/closed (lazy-loading a space's rooms on open).
+  // Shared by the bundle-row click and the keyboard cursor's Enter so both
+  // behave identically.
+  const toggleBundle = (key: string) => {
+    const opening = !expandedBundles.has(key);
+    setExpandedBundles((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+    if (opening && matrixSrc && key.startsWith('space:')) {
+      void matrixSrc.syncSpaceRooms(key.slice('space:'.length));
+    }
+  };
+
   // Render one bundle row (recursively for nested spaces). `counter` carries
-  // the running keyboard-cursor index across loose items + all open bundles.
+  // the running keyboard-cursor index across loose items + all open bundles —
+  // the bundle HEADER takes the next index too, so ↑/↓ walk headers and entries
+  // uniformly.
   const renderBundleNode = (g: BundleNode, depth: number, counter: { n: number }): React.ReactNode => {
     const open = expandedBundles.has(g.key);
+    const headIdx = counter.n++;
     // Clean spoken name for the bundle treeitem (collapsed/expanded comes from
     // aria-expanded, so it's not repeated here).
     const headLabel = `${g.label}, ${g.unread > 0 ? `${g.unread} unread, ` : ''}${g.count} ${g.count === 1 ? 'item' : 'items'}${g.pinned ? ', pinned' : ''}`;
-    const toggle = () => {
-      const opening = !expandedBundles.has(g.key);
-      setExpandedBundles((prev) => {
-        const next = new Set(prev);
-        if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
-        return next;
-      });
-      // Opening a space? Pull in any of its rooms the local store is missing
-      // (joined-but-unsynced get materialized; the rest become joinable) —
-      // targeted, instead of a full resync.
-      if (opening && matrixSrc && g.key.startsWith('space:')) {
-        void matrixSrc.syncSpaceRooms(g.key.slice('space:'.length));
-      }
-    };
+    const toggle = () => toggleBundle(g.key);
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
-          <button type="button" className="bundle-head" onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open} aria-label={headLabel}>
+          <button type="button" data-idx={headIdx} data-nav data-bundle-key={g.key} className={`bundle-head ${headIdx === cursor ? 'cursor' : ''}`} onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open} aria-selected={headIdx === cursor} aria-label={headLabel}>
             <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">{open ? 'expand_more' : 'chevron_right'}</span>
             {(() => {
               const ic = g.key === 'pinned' ? 'push_pin'
@@ -1651,7 +1668,7 @@ function Inbox({
                 // accounts (the sidebar's non-space controls live here now).
                 rendered.push(
                   <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
-                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen}
+                    <button type="button" data-idx={0} data-nav data-bundle-key="__config__" className={`bundle-head ${cursor === 0 ? 'cursor' : ''}`} onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen} aria-selected={cursor === 0}
                       aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
                       <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">
                         {configOpen ? 'expand_more' : 'chevron_right'}
@@ -1764,7 +1781,9 @@ function Inbox({
                     )}
                   </div>,
                 );
-                const counter = { n: idx };
+                // Index 0 is the config-bundle header pushed above; entries +
+                // bundle headers continue from 1 so the cursor walks them all.
+                const counter = { n: 1 };
                 // "Top section" manual bundles: their items render directly at
                 // the top (like Pinned). The bundle row still appears below in
                 // the group list, so they also show as part of the bundle.

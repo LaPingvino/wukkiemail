@@ -30,6 +30,17 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Unified inbox cursor (bundles + entries) SHIPPED (2026-05-31):** j/k/↑/↓ now walk bundle
+headers AND entries uniformly (Joop is a sighted keyboard user — visual cursor matters as much
+as ARIA). Every navigable row carries `data-nav` + a sequential `data-idx` in render order
+(config header = 0, then inline/loose entries, then each bundle header + its items recursively);
+the keyboard handler walks `[data-nav]`, caps on its count, and resolves the cursored element.
+Enter on a header folds it (shared `toggleBundle(key)` helper, `__config__` for the settings
+header); Enter on an entry opens it; e/u/s/p triage no-op on headers (resolve to no item).
+`.bundle-head.cursor` CSS gives headers the same highlight as `.item.cursor`. NOT done yet:
+roving tabindex / setsize-posinset (the full managed-focus tree) — virtual cursor is enough for
+keyboard nav. NEXT: arrow-nav for messages + compose on the chat page (RoomPanel).
+
 **Panel landmarks + EmailView Escape SHIPPED (2026-05-31):** the three full-screen panels now
 declare `role="region"` with a real name — RoomPanel = room name (or "Thread in X"), EmailView
 = "Email: <subject>", IssuePanel = "Task: <title>" — so a screenreader announces the region it
