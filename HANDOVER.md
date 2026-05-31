@@ -30,6 +30,11 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Bundle-head aria-label SHIPPED (2026-05-31):** bundle treeitems get a clean spoken name
+("Spaces, 3 unread, 12 items" + ", pinned"); the config bundle reads "Settings and accounts"
+(+ ", encryption needs attention" when unverified with an encrypted room). collapsed/expanded
+stays on aria-expanded, not duplicated in the label.
+
 **Row aria-label SHIPPED (2026-05-31):** each inbox treeitem now gets a composed `aria-label`
 (unread · invite/join · subject · from · snippet · time · pinned · draft) so a screenreader
 reads one clean sentence instead of fragmented avatar/badge/span pieces. Pure label override —

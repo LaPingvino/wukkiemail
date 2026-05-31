@@ -1440,6 +1440,9 @@ function Inbox({
   // the running keyboard-cursor index across loose items + all open bundles.
   const renderBundleNode = (g: BundleNode, depth: number, counter: { n: number }): React.ReactNode => {
     const open = expandedBundles.has(g.key);
+    // Clean spoken name for the bundle treeitem (collapsed/expanded comes from
+    // aria-expanded, so it's not repeated here).
+    const headLabel = `${g.label}, ${g.unread > 0 ? `${g.unread} unread, ` : ''}${g.count} ${g.count === 1 ? 'item' : 'items'}${g.pinned ? ', pinned' : ''}`;
     const toggle = () => {
       const opening = !expandedBundles.has(g.key);
       setExpandedBundles((prev) => {
@@ -1457,7 +1460,7 @@ function Inbox({
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
-          <button type="button" className="bundle-head" onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open}>
+          <button type="button" className="bundle-head" onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open} aria-label={headLabel}>
             <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">{open ? 'expand_more' : 'chevron_right'}</span>
             {(() => {
               const ic = g.key === 'pinned' ? 'push_pin'
@@ -1642,7 +1645,8 @@ function Inbox({
                 // accounts (the sidebar's non-space controls live here now).
                 rendered.push(
                   <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
-                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen}>
+                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen}
+                      aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
                       <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">
                         {configOpen ? 'expand_more' : 'chevron_right'}
                       </span>
