@@ -30,6 +30,16 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Modal dialog semantics SHIPPED (2026-05-31):** every sheet/action-sheet that overlays a
+scrim now has `role="dialog"` + `aria-modal="true"` + an `aria-label` — without aria-modal a
+screenreader's virtual cursor wanders into the dimmed background behind the dialog. Covered the
+9 standalone *Sheet.tsx (Compose/Bundle/JmapLogin/NewTask/DoneValues/EncryptionSetup/Devices/
+Verification/Settings) + the 5 App.tsx inline sheets (New DM/group/call room, Keyboard
+shortcuts, Add account) + the 2 action sheets. (WidgetPanel/CallView/CallPanel/EmojiPicker
+already had it.) NOT yet done: a focus trap + Escape-to-close on every sheet (heavier; some
+rely on scrim-click only), and role/label on the full-screen panels (EmailView/RoomPanel/
+IssuePanel) which replace rather than overlay the view.
+
 **Unlabeled form controls SHIPPED (2026-05-31):** swept the modal/inline inputs that relied
 on a placeholder (or nothing) for their name — placeholders aren't accessible names. Added
 `aria-label` to: PersonPicker's combobox (was nameless once a chip was picked — a combobox

@@ -1977,7 +1977,7 @@ function Inbox({
         const canPinBundle = !['pinned', 'snoozed', 'other'].includes(g.key);
         return (
           <div className="sheet-scrim" onClick={close}>
-            <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="action-sheet" role="dialog" aria-modal="true" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
               <div className="action-sheet-title">{g.label} — {allItems.length} item{allItems.length === 1 ? '' : 's'}</div>
               {msgs.length > 0 && (
                 <button onClick={async () => {
@@ -2131,7 +2131,7 @@ function Inbox({
         const isSnoozed = target.bundles.includes('snoozed');
         return (
           <div className="sheet-scrim" onClick={() => setActionSheetFor(null)}>
-            <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="action-sheet" role="dialog" aria-modal="true" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
               <div className="action-sheet-title">{target.from} — {target.subject}</div>
               <button onClick={async () => { await matrixSrc.setPinned(target.id, !isPinned); setActionSheetFor(null); }}>
                 <span className="material-symbols-outlined">{isPinned ? 'push_pin' : 'keep'}</span>
@@ -2444,7 +2444,7 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
   };
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="New DM" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -2486,7 +2486,7 @@ function NewGroupSheet({ matrix, onClose, onCreated }: { matrix: import('./sourc
   };
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="New group" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -2535,7 +2535,7 @@ function ShortcutsSheet({ onClose }: { onClose: () => void }) {
   ];
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -2571,7 +2571,7 @@ function NewCallRoomSheet({ matrix, onClose, onCreated }: { matrix: import('./so
   };
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="New call room" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -2641,7 +2641,7 @@ function AddAccountSheet({
   };
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Add account" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>

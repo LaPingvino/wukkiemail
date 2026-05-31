@@ -39,7 +39,7 @@ export function NewTaskSheet({
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="New task" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button
             type="button"

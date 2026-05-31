@@ -27,7 +27,7 @@ export function VerificationSheet({ matrix }: { matrix: MatrixSource }) {
 
   return (
     <div className="sheet-scrim" onClick={close}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Device verification" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={close}>
             <span className="material-symbols-outlined">close</span>

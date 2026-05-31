@@ -39,7 +39,7 @@ export function DoneValuesSheet({ matrix, onClose }: { matrix: MatrixSource; onC
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Task done statuses" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>

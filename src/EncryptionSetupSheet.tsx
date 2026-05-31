@@ -136,7 +136,7 @@ export function EncryptionSetup({ matrix, onDone }: { matrix: MatrixSource; onDo
 export function EncryptionSetupSheet({ matrix, onClose }: { matrix: MatrixSource; onClose: () => void }) {
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Encryption setup" onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
