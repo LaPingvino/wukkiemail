@@ -30,6 +30,14 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Panel landmarks + EmailView Escape SHIPPED (2026-05-31):** the three full-screen panels now
+declare `role="region"` with a real name — RoomPanel = room name (or "Thread in X"), EmailView
+= "Email: <subject>", IssuePanel = "Task: <title>" — so a screenreader announces the region it
+landed in and can jump to it via landmark nav. Also added `selectedEmail` to App's Escape
+cascade (EmailView was the one panel that didn't close on Escape; RoomPanel/IssuePanel already
+did). NOT done (needs a screenreader test): making the dimmed inbox behind a panel inert
+(aria-hidden / aria-modal) so AT can't wander into it.
+
 **Decorative icons aria-hidden app-wide SHIPPED (2026-05-31):** RoomPanel had hidden all 27 of
 its Material-symbol glyphs but the convention was never extended — so ~100 icon ligatures
 across App.tsx + every sheet were read aloud as their raw name ("push_pin", "mark_email_read",

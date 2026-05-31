@@ -89,7 +89,7 @@ export function EmailView({ jmap, emailId, onClose }: { jmap: JmapSource; emailI
   };
 
   return (
-    <div className="issue-panel room-panel">
+    <div className="issue-panel room-panel" role="region" aria-label={email?.subject ? `Email: ${email.subject}` : 'Email'}>
       <header className="issue-head">
         <md-icon-button onClick={onClose} aria-label="Close">
           <md-icon>close</md-icon>

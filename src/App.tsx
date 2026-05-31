@@ -856,6 +856,7 @@ function Inbox({
         if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
+        if (selectedEmail) { setSelectedEmail(null); return; }
         if (query) { setQuery(''); return; }
       }
       // Navigate over the ACTUALLY-RENDERED rows (the bundled view reorders
@@ -912,7 +913,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);

@@ -44,7 +44,7 @@ export function IssuePanel({
 
   if (!detail) {
     return (
-      <div className="issue-panel">
+      <div className="issue-panel" role="region" aria-label="Task">
         <Header title="Issue not found" onClose={onClose} />
         <div className="empty">
           We don't have this issue cached yet. Either Matrix is still syncing
@@ -64,7 +64,7 @@ export function IssuePanel({
   };
 
   return (
-    <div className="issue-panel">
+    <div className="issue-panel" role="region" aria-label={`Task: ${String(content.title ?? '(untitled)')}`}>
       <Header
         title={String(content.title ?? '(untitled)')}
         subtitle={roomName}

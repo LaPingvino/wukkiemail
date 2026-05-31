@@ -429,7 +429,7 @@ export function RoomPanel({
     // hydrated yet, and a bare .issue-panel here is the old narrow side
     // overlay flashing before the room-panel takes over.
     return (
-      <div className="issue-panel room-panel">
+      <div className="issue-panel room-panel" role="region" aria-label="Conversation">
         <Header title="Loading…" onClose={onClose} onBack={onBack} backLabel={backLabel} onNext={onNext} nextLabel={nextLabel} />
         <div className="empty">
           <p>Loading conversation…</p>
@@ -439,7 +439,7 @@ export function RoomPanel({
   }
 
   return (
-    <div className="issue-panel room-panel">
+    <div className="issue-panel room-panel" role="region" aria-label={threadRootId ? `Thread in ${snap.roomName}` : snap.roomName}>
       <Header
         title={threadRootId ? 'Thread' : snap.roomName}
         subtitle={threadRootId ? snap.roomName : `${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
