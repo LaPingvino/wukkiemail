@@ -859,6 +859,10 @@ function Inbox({
         if (selectedEmail) { setSelectedEmail(null); return; }
         if (query) { setQuery(''); return; }
       }
+      // When a chat / task / email panel or any modal is open, IT owns the
+      // keyboard (RoomPanel drives its own arrow nav). Don't also move the
+      // inbox cursor underneath.
+      if (selectedRoom || selectedIssue || selectedEmail || openThread || anyModalOpen) return;
       // Navigate over the ACTUALLY-RENDERED rows (the bundled view reorders
       // items and hides collapsed bundles, so the global `visible` order does
       // not match what's on screen). Cap on the rendered count, and resolve the

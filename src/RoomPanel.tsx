@@ -134,6 +134,11 @@ export function RoomPanel({
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [threadsOpen, setThreadsOpen] = useState(false);
+  // Keyboard message cursor (Up/Down through the timeline; -1 = none). The
+  // panel root ref lets ONLY the topmost room panel (main vs thread overlay)
+  // handle nav, so they don't both move on a single keypress.
+  const [msgCursor, setMsgCursor] = useState(-1);
+  const panelRootRef = useRef<HTMLDivElement>(null);
 
   const pickFile = () => fileInputRef.current?.click();
   const onFileSelected = async (file: File) => {
@@ -424,6 +429,62 @@ export function RoomPanel({
   const sendRef = useRef(send);
   sendRef.current = send;
 
+  // Chat-page keyboard navigation (built for a sighted keyboard user):
+  //   Up/Down    — move a message cursor through the timeline; stepping past
+  //                the bottom focuses the composer so you can type.
+  //   Left/Right — previous/next CONVERSATION (the Back/Next buttons); main
+  //                panel only, since a thread overlay has no prev/next chat.
+  // Never hijacks arrows while a text field is focused (composing or EDITING a
+  // message), and only the topmost panel acts so a thread overlay and the main
+  // panel underneath don't both move on one press.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const panels = document.querySelectorAll('.room-panel');
+      if (!panelRootRef.current || panels[panels.length - 1] !== panelRootRef.current) return;
+      // Don't steal arrows from an input / textarea / Material field / editor.
+      let node: Element | null = (e.target as Element | null) ?? document.activeElement;
+      while (node) {
+        const tag = node.tagName?.toLowerCase() ?? '';
+        if (tag === 'input' || tag === 'textarea' || (node as HTMLElement).isContentEditable) return;
+        if (tag.includes('text-field')) return;
+        const root = (node as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+        if (root?.activeElement) { node = root.activeElement; continue; }
+        break;
+      }
+      const count = panelRootRef.current.querySelectorAll('.comment-list > li').length;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMsgCursor((c) => {
+          const next = c + 1;
+          if (next >= count) { composerFieldRef.current?.focus(); return Math.max(count - 1, -1); }
+          return next;
+        });
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMsgCursor((c) => Math.max((c < 0 ? count : c) - 1, 0));
+        return;
+      }
+      if (e.key === 'ArrowLeft') { if (!threadRootId && onBack) { e.preventDefault(); onBack(); } return; }
+      if (e.key === 'ArrowRight') { if (!threadRootId && onNext) { e.preventDefault(); onNext(); } return; }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [threadRootId, onBack, onNext]);
+
+  // Reset the cursor when the conversation (or thread) changes.
+  useEffect(() => { setMsgCursor(-1); }, [roomId, threadRootId]);
+
+  // Keep the cursored message in view.
+  useEffect(() => {
+    if (msgCursor < 0) return;
+    panelRootRef.current
+      ?.querySelector(`.comment-list > li[data-msg-idx="${msgCursor}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [msgCursor]);
+
   if (!snap) {
     // Full-screen even while loading — on a hash refresh the timeline isn't
     // hydrated yet, and a bare .issue-panel here is the old narrow side
@@ -439,7 +500,7 @@ export function RoomPanel({
   }
 
   return (
-    <div className="issue-panel room-panel" role="region" aria-label={threadRootId ? `Thread in ${snap.roomName}` : snap.roomName}>
+    <div ref={panelRootRef} className="issue-panel room-panel" role="region" aria-label={threadRootId ? `Thread in ${snap.roomName}` : snap.roomName}>
       <Header
         title={threadRootId ? 'Thread' : snap.roomName}
         subtitle={threadRootId ? snap.roomName : `${snap.memberCount} member${snap.memberCount === 1 ? '' : 's'}`}
@@ -493,8 +554,8 @@ export function RoomPanel({
           <p style={{ color: 'var(--muted)' }}>No messages.</p>
         ) : (
           <ul className="comment-list">
-            {snap.messages.map((m) => (
-              <li key={m.id}>
+            {snap.messages.map((m, i) => (
+              <li key={m.id} data-msg-idx={i} className={i === msgCursor ? 'msg-cursor' : undefined}>
                 <div className="comment-head">
                   <strong>{m.senderName}</strong>
                   <span className="ts">{new Date(m.ts).toLocaleString()}</span>

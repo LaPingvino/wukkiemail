@@ -1014,6 +1014,13 @@ body {
   outline-offset: -2px;
   border-radius: 8px;
 }
+/* Keyboard cursor on a chat message (RoomPanel Up/Down nav). */
+.comment-list > li.msg-cursor {
+  background: var(--md-sys-color-primary-container);
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 .item.unread .from { font-weight: 600; }
 .item.unread .subj strong { font-weight: 600; }
 .item.dim { opacity: 0.6; }

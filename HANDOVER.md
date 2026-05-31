@@ -30,6 +30,27 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Chat-page keyboard nav SHIPPED (2026-05-31):** RoomPanel now has its own arrow nav — ↑/↓ move
+a `msgCursor` through the timeline (`.comment-list > li`, highlighted via `.msg-cursor`, scrolled
+into view); stepping past the bottom focuses the composer. ←/→ = prev/next conversation
+(`onBack`/`onNext`), main panel only (not thread overlays). Gated by the same text-field focus
+guard, so arrows edit text normally while composing/editing. Only the TOPMOST `.room-panel`
+acts (main vs thread overlay) via `panelRootRef`. App's inbox keydown now early-returns when a
+panel/modal is open, so the two cursors never fight. NEXT (Phase B): cinny sliding-sync renewal
+(B3 on-open backfill + simplify useBackgroundBackfill; B4 SDK Room.forceLoadMembers).
+
+**Chat-page keyboard nav — DESIGN (was NEXT, now done above):** on the chat page (RoomPanel),
+- **↑/↓** move a visible message cursor through the timeline; past the bottom edge, focus the
+  compose box (so you can ↓ into typing). Highlight the cursored message visibly.
+- **←/→** go to previous/next CONVERSATION — wire to the existing `onBack`/`onNext` (the header
+  Back/Next buttons that already step conversations in inbox order).
+- **Hard rule:** all of this is gated by the existing text-field focus guard, so when a message
+  is being EDITED (or the compose box is focused), the arrows edit text normally — never hijack
+  arrows inside an input/textarea/contenteditable. Only fire nav when focus is NOT in a field.
+Implement in RoomPanel's own keydown (or extend the guard) — do NOT collide with App's inbox
+cursor (that handler should early-return while a chat panel is open, which it already does for
+some keys via the Escape cascade / panel-open checks).
+
 **Unified inbox cursor (bundles + entries) SHIPPED (2026-05-31):** j/k/↑/↓ now walk bundle
 headers AND entries uniformly (Joop is a sighted keyboard user — visual cursor matters as much
 as ARIA). Every navigable row carries `data-nav` + a sequential `data-idx` in render order
