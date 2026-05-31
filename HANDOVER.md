@@ -2,6 +2,38 @@
 
 Quick brief for any agent picking this up mid-stream.
 
+## SESSION 2026-05-31 — sliding-sync + crypto hardening (latest)
+
+Marathon session dogfooding **sliding sync** (default for WukkieMail; opt-in toggle in Wally,
+which defaults to classic). All fixes shipped to BOTH apps via `../deploy-sdk.sh`. SDK fork
+HEAD: **`849bc0c2b`** (`wally-dist`). Full architecture + Continuwuity quirks in memory:
+`reference_sliding_sync_architecture.md`.
+
+Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
+- **Late-joiner UTDs** (SDK): `Room.invalidateLoadedMembers()` re-fetches `/members` when
+  `joined_count` exceeds loaded roster (lean required_state missed silent joiners).
+- **Crypto hang** (WM `matrix.ts`): a re-login mints a new device id; the shared-prefix Rust
+  crypto store mismatched → fell to **in-memory crypto** → keyless device → UTD flood that
+  hangs load. Fix: on "account in the store doesn't match", retry under a **per-device**
+  `cryptoDatabasePrefix`, never silently in-memory.
+- **Backup crash** (SDK): guarded `getBackupDecryptor` against undefined backupInfo.
+- **Recovery-key "no secret storage"** (WM): `ensureAccountData()` fetches `m.secret_storage.*`
+  / `m.cross_signing.*` from the server before `verifyWithRecoveryKey` (sliding sync starves it).
+- **DM mxid labels** (SDK): `Room.getDirectUserId()` reads `m.direct`; `dmNameFromHeroes` uses
+  member-event displaynames + excludes self.
+- **No DMs in list** (SDK): `SlidingSyncSdk.sync()` fire-and-forget-seeds `m.direct` /
+  `m.ignored_user_list` / `m.push_rules` from server (Continuwuity doesn't resend on restored pos).
+- **Slow / out-of-order** (SDK + WM): bump_stamp split (ms recency), pos persistence,
+  exponential backoff, **two-connection sync** (dedicated 3s encryption sync for to_device/e2ee),
+  **timeout=0 initial** (instant priority paint), **3s room poll** (Continuwuity holds full timeout).
+- **A11y** (WM): inbox list + chat view screenreader-clean (icon ligatures `aria-hidden`,
+  bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
+  build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
+
+Open / next: (1) the treeview plan above; (2) Continuwuity should wake long-polls on new data
+(server-side — would let us raise the 3s poll); (3) presence absent under sliding sync.
+Verify after deploy: DMs load, sent messages echo within ~3s, names resolve, verify is snappy.
+
 ## What it is
 
 WukkieMail — Inbox-style triage on top of Matrix. Live at `mail.wukkie.uk` (custom domain) and `wukkiemail.pages.dev` (CF Pages). Repo: `LaPingvino/wukkiemail`. Pushes auto-deploy. User: Joop (`@LaPingvino` on GitHub, mxid varies).
