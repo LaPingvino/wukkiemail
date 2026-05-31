@@ -2,6 +2,26 @@
 
 Quick brief for any agent picking this up mid-stream.
 
+## ⚠️ CHECK-LATER with Joop (~2026-06-01, when he lands) — shipped boldly, needs live verification
+Joop OK'd being bold + reviewing together on arrival. Verify these and adjust:
+- **Inbox unified cursor** (WM `1ad60a1`): ↑/↓ walk bundles+entries, Enter folds a bundle / opens
+  an entry, e/u/s/p skip bundles. Check: cursor starts on the Settings header (idx 0) — is that
+  ok or should it skip to the first entry? Visual highlight on headers clear?
+- **Chat-page arrow nav** (WM `f74690e`): ↑/↓ messages + focus composer past the bottom; ←/→
+  prev/next conversation; arrows NOT hijacked while composing/editing; topmost-panel-only. Check:
+  does ←/→ feel right (vs left/right doing something else), thread-overlay coordination, and that
+  the inbox cursor underneath truly stays put.
+- **a11y sweep** (WM `f124839`..`4b63166`): tree roles, aria-labels, dialog/aria-modal on sheets,
+  Escape-closes-sheets, aria-hidden on ALL Material icons, panel landmark roles. Check with a
+  screenreader; confirm Escape two-step (blur field → close) feels ok.
+- **Wally sliding-sync** (cinny `33aac9897`/`8bfa47df7`, SDK `90a43fc92`): fullLazyLoading-gating,
+  subscribe-on-open, m.direct DM subs, B3 backfill simplification. Check: Signal family GROUP
+  loads complete (messages + names), DM list fills, no perf regression / no double-fetch storms.
+- **B3 backfill simplification** (cinny, this session): current room no longer deep-prefetched to
+  200 — relies on subscribe-on-open (50) + top scheduler priority. Check chat opens feel populated.
+- **B4 SDK forceLoadMembers** (pending this session): full member roster for @-mentions in big
+  bridged groups. Verify mention autocomplete shows everyone.
+
 ## SESSION 2026-05-31 — sliding-sync + crypto hardening (latest)
 
 Marathon session dogfooding **sliding sync** (default for WukkieMail; opt-in toggle in Wally,
