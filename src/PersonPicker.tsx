@@ -107,6 +107,7 @@ export function PersonPicker({
             autoFocus={autoFocus}
             value={query}
             placeholder={multi && value.length ? '' : placeholder}
+            aria-label={placeholder}
             role="combobox"
             aria-expanded={open}
             aria-controls={listId}

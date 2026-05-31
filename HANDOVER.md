@@ -30,6 +30,13 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Unlabeled form controls SHIPPED (2026-05-31):** swept the modal/inline inputs that relied
+on a placeholder (or nothing) for their name — placeholders aren't accessible names. Added
+`aria-label` to: PersonPicker's combobox (was nameless once a chip was picked — a combobox
+MUST have a name), WidgetPanel URL+name, RoomPanel custom-reaction-emoji input, DevicesSheet
+rename + delete-password. (The `<label className="sheet-label"><span>…</span><input></label>`
+sheets were already correctly label-wrapped — left alone.)
+
 **Bundle-head aria-label SHIPPED (2026-05-31):** bundle treeitems get a clean spoken name
 ("Spaces, 3 unread, 12 items" + ", pinned"); the config bundle reads "Settings and accounts"
 (+ ", encryption needs attention" when unverified with an encrypted room). collapsed/expanded

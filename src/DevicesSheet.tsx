@@ -62,6 +62,7 @@ export function DevicesSheet({ matrix, onClose }: { matrix: MatrixSource; onClos
                     {renaming === d.deviceId ? (
                       <input
                         className="device-rename" autoFocus value={renameVal}
+                        aria-label="Rename this device"
                         onChange={(e) => setRenameVal(e.target.value)}
                         onBlur={() => void doRename(d.deviceId)}
                         onKeyDown={(e) => { if (e.key === 'Enter') void doRename(d.deviceId); if (e.key === 'Escape') setRenaming(null); }}
@@ -84,6 +85,7 @@ export function DevicesSheet({ matrix, onClose }: { matrix: MatrixSource; onClos
                       <div className="device-delete-confirm">
                         <input
                           type="password" autoFocus placeholder="Account password to confirm"
+                          aria-label="Account password to confirm device removal"
                           value={password} onChange={(e) => setPassword(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') void doDelete(d.deviceId); }}
                         />

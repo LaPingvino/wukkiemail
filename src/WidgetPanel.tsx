@@ -162,9 +162,9 @@ export function WidgetPanel({ matrix, roomId, roomName, onClose }: {
 
       {adding && (
         <div className="widget-add">
-          <input type="url" placeholder="Widget URL (required)" value={addUrl} autoFocus
+          <input type="url" placeholder="Widget URL (required)" aria-label="Widget URL" value={addUrl} autoFocus
             onChange={(e) => setAddUrl(e.target.value)} />
-          <input type="text" placeholder="Name (defaults to hostname)" value={addName}
+          <input type="text" placeholder="Name (defaults to hostname)" aria-label="Widget name" value={addName}
             onChange={(e) => setAddName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
           <div className="widget-add-actions">

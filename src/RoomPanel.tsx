@@ -946,7 +946,7 @@ function ReactionAdder({ onAdd, customEmojis, mxcToHttp }: {
               if (v) { onAdd(v); setOpen(false); input.value = ''; }
             }}
           >
-            <input name="k" placeholder="…" maxLength={32} style={{ width: 40, padding: 2, font: 'inherit' }} />
+            <input name="k" placeholder="…" aria-label="Custom reaction emoji" maxLength={32} style={{ width: 40, padding: 2, font: 'inherit' }} />
           </form>
         </div>
       )}
