@@ -90,6 +90,17 @@ tabindex added, no CSS change. Filter chips/bundle actions stay as controls with
   alongside the render walk; retarget `onKeyDown` to it (+ →/←/Home/End/activate). Accept: Tab
   lands once; ↑/↓ walk all bundles+rooms announcing "treeitem, level N, X of Y,
   collapsed/expanded"; → expands, Enter opens. Visuals unchanged.
+  - **Step 1a SHIPPED** — additive ARIA only, zero keyboard/focus change (lowest risk, no
+    browser test needed): `.item-list` `role=tree`; item rows + bundle heads + config bundle
+    `role=treeitem` with `aria-level` (loose/top=1, bundle head=depth+1, rows-in-bundle=depth+2)
+    + `aria-selected` (mirrors the existing cursor) + `aria-expanded` (bundles); `.bundle-body`
+    / `.config-body` `role=group`. `renderItem` gained a `level` param. Screenreaders now
+    announce "treeitem, level N, selected/collapsed/expanded".
+  - **Step 1b TODO (needs a browser smoke-test)** — the managed-focus keyboard model:
+    `aria-setsize`/`aria-posinset` (Step 2 here), single tab stop via roving `tabIndex`
+    (0 on cursor, -1 else), put bundle heads into the cursor walk, and `→/←/Home/End` +
+    Enter/Space activate. Defer until Joop can verify with a screenreader (the existing j/k
+    virtual cursor keeps working meanwhile).
 - **Step 2 — correct depth + setsize/posinset + nested spaces.** `aria-level` from true
   nesting (`BundleNode.children`/`depth`); compute setsize/posinset in the walk.
 - **Step 3 — rooms expand to threads + recent messages.** `expandedRooms`,

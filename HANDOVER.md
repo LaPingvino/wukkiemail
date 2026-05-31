@@ -30,6 +30,13 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Treeview Step 1a SHIPPED (2026-05-31):** additive ARIA tree roles on the inbox stream —
+`.item-list` `role=tree`; item rows + bundle heads + config bundle `role=treeitem` with
+`aria-level` + `aria-selected` (mirrors cursor) + `aria-expanded`; bundle/config bodies
+`role=group`. Zero keyboard/focus change (safe, untested-in-browser). Next: Step 1b = the
+managed-focus keyboard model (roving tabindex, setsize/posinset, →/← expand, bundle heads in
+the cursor walk) — needs a screenreader smoke-test. See `ACCESSIBILITY-TREEVIEW-PLAN.md`.
+
 Open / next: (1) the treeview plan above; (2) Continuwuity should wake long-polls on new data
 (server-side — would let us raise the 3s poll); (3) presence absent under sliding sync.
 Verify after deploy: DMs load, sent messages echo within ~3s, names resolve, verify is snappy.

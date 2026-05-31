@@ -1153,11 +1153,17 @@ function Inbox({
 
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
-  const renderItem = (it: InboxItem, idx: number): React.ReactNode => (
+  // `level` is the 1-based ARIA tree depth (loose/top rows are level 1; rows
+  // inside a bundle are level depth+2 — see renderBundleNode). Rows are tree
+  // LEAVES, so no aria-expanded; aria-selected mirrors the keyboard cursor.
+  const renderItem = (it: InboxItem, idx: number, level = 1): React.ReactNode => (
     <a
       key={it.id}
       data-idx={idx}
       data-item-id={it.id}
+      role="treeitem"
+      aria-level={level}
+      aria-selected={idx === cursor}
       className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''} ${it.invite ? 'invite' : ''}`}
       href={it.openPath}
       onClick={(e) => {
@@ -1432,7 +1438,7 @@ function Inbox({
     return (
       <div key={`b-${g.key}`} className={`bundle-row ${open ? 'open' : ''}`} style={depth ? { marginLeft: depth * 14 } : undefined}>
         <div className="bundle-headline">
-          <button type="button" className="bundle-head" onClick={toggle} aria-expanded={open}>
+          <button type="button" className="bundle-head" onClick={toggle} role="treeitem" aria-level={depth + 1} aria-expanded={open}>
             <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">{open ? 'expand_more' : 'chevron_right'}</span>
             {(() => {
               const ic = g.key === 'pinned' ? 'push_pin'
@@ -1484,7 +1490,7 @@ function Inbox({
           )}
         </div>
         {open && (
-          <div className="bundle-body">
+          <div className="bundle-body" role="group">
             {g.key === 'other' && hiddenBundles.length > 0 && (
               <div className="restore-row">
                 <span className="filter-group-label">Hidden bundles</span>
@@ -1502,7 +1508,7 @@ function Inbox({
               g.items,
               g.key,
             )}
-            {g.items.filter((it) => displayFilter(it, g.key)).slice(0, 200).map((it) => renderItem(it, counter.n++))}
+            {g.items.filter((it) => displayFilter(it, g.key)).slice(0, 200).map((it) => renderItem(it, counter.n++, depth + 2))}
             {g.children.map((child) => renderBundleNode(child, depth + 1, counter))}
             {g.items.length === 0 && g.children.length === 0 && g.key !== 'other' && (
               <div className="empty" style={{ height: 'auto', padding: 16, fontSize: 13 }}>
@@ -1606,7 +1612,7 @@ function Inbox({
               : <p>{bundle === 'all' ? 'No items yet.' : `No items in ${bundleLabel(bundle, [...spaceBundles, ...mailBundles])}.`}</p>}
           </div>
         ) : (
-          <div className="item-list">
+          <div className="item-list" role="tree" aria-label="Inbox" aria-multiselectable="false">
             {(() => {
               const rendered: React.ReactNode[] = [];
               let idx = 0;
@@ -1617,7 +1623,7 @@ function Inbox({
                 // accounts (the sidebar's non-space controls live here now).
                 rendered.push(
                   <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
-                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} aria-expanded={configOpen}>
+                    <button type="button" className="bundle-head" onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen}>
                       <span className="material-symbols-outlined bundle-chevron" aria-hidden="true">
                         {configOpen ? 'expand_more' : 'chevron_right'}
                       </span>
@@ -1628,7 +1634,7 @@ function Inbox({
                       )}
                     </button>
                     {configOpen && (
-                      <div className="bundle-body config-body">
+                      <div className="bundle-body config-body" role="group">
                         {matrixSrc && cryptoStatus !== 'verified' && (
                           <div className="encryption-block">
                             <div className="encryption-block-head">
