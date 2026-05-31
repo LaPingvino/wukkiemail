@@ -848,6 +848,11 @@ function Inbox({
       }
       if (e.key === 'Escape') {
         if (shortcutsOpen) { setShortcutsOpen(false); return; }
+        // Any overlay sheet (settings, FAB sheets, action menus, …) closes on
+        // Escape. Each open sheet pushed a history entry (see the modal cascade
+        // effect), so history.back() runs that same tested onPop cascade and
+        // dismisses the topmost one — keyboard parity with scrim-click / back.
+        if (anyModalOpen) { e.preventDefault(); history.back(); return; }
         if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
@@ -907,7 +912,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen, itemById]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen]);
 
   useEffect(() => {
     const el = document.querySelector(`.item[data-idx="${cursor}"]`);

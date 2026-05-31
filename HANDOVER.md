@@ -30,6 +30,14 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Escape-closes-sheets SHIPPED (2026-05-31):** keyboard-only users previously could not
+dismiss any sheet — they closed on scrim-CLICK or browser-back only. The global keydown Escape
+branch now does `history.back()` when `anyModalOpen`, which fires the existing tested `onPop`
+modal cascade (each open sheet pushes a history entry) — exact parity with browser-back, no new
+close path. (Escape still blurs a focused field first via the early-return guard, so it's a
+natural two-step inside a sheet with an autofocused input.) Not covered: EmailView/RoomPanel/
+IssuePanel full-screen panels (they have hash routing + close buttons) and a true focus trap.
+
 **Modal dialog semantics SHIPPED (2026-05-31):** every sheet/action-sheet that overlays a
 scrim now has `role="dialog"` + `aria-modal="true"` + an `aria-label` — without aria-modal a
 screenreader's virtual cursor wanders into the dimmed background behind the dialog. Covered the
