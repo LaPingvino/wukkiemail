@@ -29,9 +29,11 @@ Joop OK'd being bold + reviewing together on arrival. Verify these and adjust:
 **AUTONOMOUS QUEUE COMPLETE (2026-05-31):** Phase A (keyboard nav: inbox unified cursor + chat-page
 arrow nav) + Phase B (sliding-sync renewal: fullLazyLoading-gating, subscribe-on-open, m.direct DM
 subs, backfill simplification, forceLoadMembers) all shipped + deployed. Everything to verify is in
-the CHECK-LATER list above. Optional/not-done: explicit on-open paginate in cinny RoomTimeline
-(skipped — high-risk virtual-paginator surgery, marginal over subscribe-on-open + scheduler);
-invalidateLoadedMembers for unencrypted rooms.
+the CHECK-LATER list above. **On-open backfill SHIPPED (cinny `2bc097504`):** Joop wanted it —
+done via the fork's `backgroundBackfill` primitive in RoomView's open effect (target 80), NOT
+the virtual paginator, so no rendering risk. VERIFY: opening a cold room fills immediately
+instead of flashing the 1-event lean view; scrollback ready. Still not-done (dead weight):
+`invalidateLoadedMembers` for unencrypted rooms — redundant with forceLoadMembers.
 **SDK babel gotcha:** `babel -d lib --extensions ".ts,.js" src/models/room.ts` FLATTENS a nested
 file to `lib/room.js` (wrong). For a nested src file compile into the matching dir:
 `babel --extensions ".ts,.js" src/models/room.ts -d lib/models`. Always `grep -c forceLoadMembers
