@@ -30,6 +30,11 @@ Shipped this session (SDK = matrix-js-sdk-jj, WM = wukkiemail):
   bundle `aria-expanded`, mention loading). Next: **`ACCESSIBILITY-TREEVIEW-PLAN.md`** (full
   build plan for a uniform ARIA tree — spaces/rooms/threads/messages as one navigable tree).
 
+**Row aria-label SHIPPED (2026-05-31):** each inbox treeitem now gets a composed `aria-label`
+(unread · invite/join · subject · from · snippet · time · pinned · draft) so a screenreader
+reads one clean sentence instead of fragmented avatar/badge/span pieces. Pure label override —
+no visual/keyboard change. `renderItem` is now a block body computing `hasDraft`/`ariaLabel`.
+
 **Treeview Step 1a SHIPPED (2026-05-31):** additive ARIA tree roles on the inbox stream —
 `.item-list` `role=tree`; item rows + bundle heads + config bundle `role=treeitem` with
 `aria-level` + `aria-selected` (mirrors cursor) + `aria-expanded`; bundle/config bodies

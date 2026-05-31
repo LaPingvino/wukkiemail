@@ -1156,7 +1156,24 @@ function Inbox({
   // `level` is the 1-based ARIA tree depth (loose/top rows are level 1; rows
   // inside a bundle are level depth+2 — see renderBundleNode). Rows are tree
   // LEAVES, so no aria-expanded; aria-selected mirrors the keyboard cursor.
-  const renderItem = (it: InboxItem, idx: number, level = 1): React.ReactNode => (
+  const renderItem = (it: InboxItem, idx: number, level = 1): React.ReactNode => {
+    // Compose a clean spoken name for the treeitem so a screenreader reads one
+    // sentence ("Unread. Project chat. from Alice. see you tomorrow. 3m")
+    // instead of the fragmented avatar/badge/span pieces in DOM order.
+    const draftRoom = itemRoomId(it.id);
+    const hasDraft = !!draftRoom && draftRooms.has(draftRoom);
+    const tsSpoken = it.snoozedUntil ? `snoozed until ${formatTs(it.snoozedUntil)}` : formatTs(it.ts);
+    const ariaLabel = [
+      it.unread ? 'Unread' : null,
+      it.invite ? 'Invite' : it.joinable ? 'Joinable room' : null,
+      it.subject || null,
+      it.from && it.from !== it.subject ? `from ${it.from}` : null,
+      it.snippet || null,
+      tsSpoken || null,
+      it.bundles.includes('pinned') ? 'pinned' : null,
+      hasDraft ? 'has unsent draft' : null,
+    ].filter(Boolean).join('. ');
+    return (
     <a
       key={it.id}
       data-idx={idx}
@@ -1164,6 +1181,7 @@ function Inbox({
       role="treeitem"
       aria-level={level}
       aria-selected={idx === cursor}
+      aria-label={ariaLabel}
       className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''} ${it.invite ? 'invite' : ''}`}
       href={it.openPath}
       onClick={(e) => {
@@ -1185,7 +1203,7 @@ function Inbox({
         {it.invite && <span className="invite-badge">Invite</span>}
         {it.joinable && <span className="invite-badge joinable-badge">Join</span>}
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
-        {(() => { const r = itemRoomId(it.id); return r && draftRooms.has(r); })() && (
+        {hasDraft && (
           <span className="draft-badge" title="You have an unsent draft here">
             <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>Draft
           </span>
@@ -1285,7 +1303,8 @@ function Inbox({
         </>
       )}
     </a>
-  );
+    );
+  };
 
   // The per-section / per-bundle filter controls. `scope` provides the sweep
   // targets and the available task statuses (with counts). `scopeKey` selects
