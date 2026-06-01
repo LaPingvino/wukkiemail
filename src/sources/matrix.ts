@@ -230,6 +230,7 @@ export interface VerificationState {
   emoji?: EmojiMapping[];        // seven [glyph, name] tuples when phase === 'sas'
   otherDeviceId?: string;
   incoming?: boolean;            // true if the other device initiated
+  accepted?: boolean;           // incoming request has been accepted (waiting for emoji)
   error?: string;
 }
 
@@ -289,7 +290,6 @@ export class MatrixSource implements Source {
   private verifier: Verifier | null = null;
   private sasCallbacks: ShowSasCallbacks | null = null;
   private verifyState: VerificationState = { phase: 'idle' };
-  private verifyAccepted = false;
   private verifyListeners = new Set<(s: VerificationState) => void>();
 
   constructor(creds: MatrixCreds) {
@@ -2139,26 +2139,10 @@ export class MatrixSource implements Source {
       this.notify();
       return;
     }
-    // Receiver: accept the incoming request so it can progress past Requested.
-    // Without this the other side waits forever and this device sits on "waiting
-    // for the emoji". Self-verification of your own devices is implicitly trusted
-    // (you triggered it from the other device), so auto-accept. Guard so the
-    // repeated Change events don't accept twice.
-    if (req.phase === VerificationPhase.Requested && !req.initiatedByMe) {
-      if (!this.verifyAccepted) {
-        this.verifyAccepted = true;
-        try {
-          await req.accept();
-        } catch (e) {
-          this.setVerifyState({ phase: 'cancelled', error: String(e) });
-          this.teardownVerification();
-        }
-      }
-      return;
-    }
     // Initiator: once the other side is ready, kick off SAS. Only the initiator
     // starts — if both started we'd glare and the emoji could land on a verifier
     // we never attached to (the bug where one side shows emoji, the other doesn't).
+    // The receiver waits for Started below and adopts the initiator's verifier.
     if (
       req.phase === VerificationPhase.Ready &&
       req.initiatedByMe &&
@@ -2180,24 +2164,32 @@ export class MatrixSource implements Source {
     }
   }
 
+  // User pressed "Accept" on an incoming request (mirrors Wally's accept step).
+  async acceptVerification(): Promise<void> {
+    if (!this.verifyReq) return;
+    try {
+      await this.verifyReq.accept();
+      this.setVerifyState({ accepted: true });
+    } catch (e) {
+      this.setVerifyState({ phase: 'cancelled', error: String(e) });
+      this.teardownVerification();
+    }
+  }
+
   private attachVerifier(verifier: Verifier): void {
     this.verifier = verifier;
-    const showSas = (sas: ShowSasCallbacks) => {
+    // Attach the ShowSas listener BEFORE verify() drives the handshake, so the
+    // emoji event is never missed (same ordering as Wally's SasVerification).
+    verifier.on(VerifierEvent.ShowSas, (sas: ShowSasCallbacks) => {
       this.sasCallbacks = sas;
       this.setVerifyState({ phase: 'sas', emoji: sas.sas.emoji });
-    };
-    verifier.on(VerifierEvent.ShowSas, showSas);
+    });
     verifier.on(VerifierEvent.Cancel, () => {
       this.setVerifyState({ phase: 'cancelled' });
       this.teardownVerification();
     });
     // verify() resolves when the whole flow completes; errors when cancelled.
     verifier.verify().catch(() => { /* surfaced via Cancel / phase change */ });
-    // Catch-up: when we ADOPT a verifier the other side already drove to show_sas,
-    // ShowSas was emitted before we attached the listener and won't fire again, so
-    // read the callbacks directly. This is the "emoji never show on this side" fix.
-    const pending = verifier.getShowSasCallbacks?.();
-    if (pending) showSas(pending);
   }
 
   // User pressed "They match".
@@ -2231,7 +2223,6 @@ export class MatrixSource implements Source {
     this.verifyReq = null;
     this.verifier = null;
     this.sasCallbacks = null;
-    this.verifyAccepted = false;
   }
 
   // Bootstrap encryption: cross-signing keys + secret storage backed by

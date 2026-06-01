@@ -25,6 +25,12 @@ export function VerificationSheet({ matrix }: { matrix: MatrixSource }) {
     finally { setBusy(false); }
   };
 
+  const accept = async () => {
+    setBusy(true);
+    try { await matrix.acceptVerification(); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div className="sheet-scrim" onClick={close}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Device verification" onClick={(e) => e.stopPropagation()}>
@@ -37,11 +43,37 @@ export function VerificationSheet({ matrix }: { matrix: MatrixSource }) {
           </div>
         </header>
         <div className="sheet-body">
-          {state.phase === 'requested' && (
+          {state.phase === 'requested' && state.incoming && !state.accepted && (
+            <>
+              <p style={{ margin: 0, color: 'var(--muted)' }}>
+                Another device wants to verify this one. Accept to compare emoji.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="sheet-submit"
+                  style={{ background: 'transparent', color: 'var(--md-sys-color-error)', border: '1px solid var(--border)' }}
+                  onClick={() => matrix.cancelVerification()}
+                  disabled={busy}
+                >
+                  Reject
+                </button>
+                <button type="button" className="sheet-submit" onClick={() => void accept()} disabled={busy}>
+                  {busy ? 'Accepting…' : 'Accept'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {state.phase === 'requested' && state.incoming && state.accepted && (
             <p style={{ textAlign: 'center', color: 'var(--muted)' }}>
-              {state.incoming
-                ? 'Another device wants to verify this one. Waiting for the emoji…'
-                : 'Waiting for your other device to accept. Open WukkieMail / Element there and accept the request…'}
+              Waiting for the emoji…
+            </p>
+          )}
+
+          {state.phase === 'requested' && !state.incoming && (
+            <p style={{ textAlign: 'center', color: 'var(--muted)' }}>
+              Waiting for your other device to accept. Open WukkieMail / Element there and accept the request…
             </p>
           )}
 
