@@ -620,6 +620,45 @@ export class MatrixSource implements Source {
     })();
   }
 
+  // Read the AUTHORITATIVE account-data value before a read-modify-write. Under
+  // sliding sync the local copy is unreliable (Continuwuity only re-pushes account
+  // data changed since the persisted pos — none on a restored pos — and a write
+  // reflects locally only once the server echoes it back a poll later). Merging
+  // against the local copy therefore CLOBBERS: the PUT overwrites the server with a
+  // value derived from a stale base. Fetch from the server first so the merge is
+  // always against current truth; fall back to local only if the server is
+  // unreachable. (Same fix as cinny m.direct.)
+  private async readAccountData(type: string): Promise<Record<string, unknown>> {
+    if (!this.client) return {};
+    try {
+      const fromServer = (await this.client.getAccountDataFromServer(
+        type as never
+      )) as Record<string, unknown> | null;
+      if (fromServer && typeof fromServer === 'object') return fromServer;
+    } catch {
+      /* unreachable — fall back to the local copy */
+    }
+    const local = this.client.getAccountData(type as never)?.getContent() as
+      | Record<string, unknown>
+      | undefined;
+    return local ?? {};
+  }
+
+  // Persist account data AND reflect it in the local store immediately, so getters
+  // return the new value at once instead of waiting on a sliding-sync echo that
+  // Continuwuity may delay or never send. Without the local reflect, a second edit
+  // before the echo reads stale state and clobbers the first — the same data-loss
+  // class as the m.direct bug, one type at a time.
+  private async commitAccountData(type: string, content: Record<string, unknown>): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.setAccountData(type as never, content as never);
+    const prev = this.client.getAccountData(type as never);
+    const ev = new MatrixEvent({ type, content });
+    this.client.store.storeAccountDataEvents([ev]);
+    this.client.emit(ClientEvent.AccountData, ev, prev ?? undefined);
+    this.notify();
+  }
+
   // Delete the Rust crypto IndexedDB stores for a given store prefix. Used to
   // recover from a stale/device-mismatched crypto store (a re-login mints a new
   // device id but the old store lingers) without dropping to the hang-prone
@@ -1507,14 +1546,14 @@ export class MatrixSource implements Source {
     });
     const roomId = (res as { room_id?: string }).room_id;
     if (!roomId) throw new Error('createRoom returned no room_id');
-    // Tag in m.direct so the DM bundle picks it up. Account data is a
-    // map of mxid -> roomId[].
-    const dmEvt = this.client.getAccountData('m.direct' as never);
-    const existing = (dmEvt?.getContent() ?? {}) as Record<string, string[]>;
+    // Tag in m.direct so the DM bundle picks it up. Account data is a map of
+    // mxid -> roomId[]. Read the AUTHORITATIVE server copy before merging — a
+    // stale local base here would overwrite every other DM mapping (the cinny
+    // m.direct clobber, same shape).
+    const existing = (await this.readAccountData('m.direct')) as Record<string, string[]>;
     const list = new Set(existing[targetMxid] ?? []);
     list.add(roomId);
-    await this.client.setAccountData('m.direct' as never, { ...existing, [targetMxid]: [...list] } as never);
-    this.notify();
+    await this.commitAccountData('m.direct', { ...existing, [targetMxid]: [...list] });
     return roomId;
   }
 
@@ -1753,8 +1792,7 @@ export class MatrixSource implements Source {
 
   async setSavedViews(views: SavedView[]): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.setAccountData(VIEWS_EVENT_TYPE as never, { views } as never);
-    this.notify();
+    await this.commitAccountData(VIEWS_EVENT_TYPE, { views });
   }
 
   // Manual bundles = user-authored named filters, synced via account data.
@@ -1782,15 +1820,13 @@ export class MatrixSource implements Source {
   async setManualBundles(bundles: ManualBundle[]): Promise<void> {
     if (!this.client) throw new Error('client not started');
     const { hidden, pinned } = this.getBundlesContent();
-    await this.client.setAccountData(BUNDLES_EVENT_TYPE as never, { bundles, hidden, pinned } as never);
-    this.notify();
+    await this.commitAccountData(BUNDLES_EVENT_TYPE, { bundles, hidden, pinned });
   }
 
   async setHiddenBundles(hidden: string[]): Promise<void> {
     if (!this.client) throw new Error('client not started');
     const { bundles, pinned } = this.getBundlesContent();
-    await this.client.setAccountData(BUNDLES_EVENT_TYPE as never, { bundles, hidden, pinned } as never);
-    this.notify();
+    await this.commitAccountData(BUNDLES_EVENT_TYPE, { bundles, hidden, pinned });
   }
 
   async setPinnedBundle(key: string, pinned: boolean): Promise<void> {
@@ -1798,8 +1834,7 @@ export class MatrixSource implements Source {
     const cur = this.getBundlesContent();
     const set = new Set(cur.pinned);
     if (pinned) set.add(key); else set.delete(key);
-    await this.client.setAccountData(BUNDLES_EVENT_TYPE as never, { bundles: cur.bundles, hidden: cur.hidden, pinned: [...set] } as never);
-    this.notify();
+    await this.commitAccountData(BUNDLES_EVENT_TYPE, { bundles: cur.bundles, hidden: cur.hidden, pinned: [...set] });
   }
 
   getWeights(): PriorityWeights {
@@ -1821,8 +1856,7 @@ export class MatrixSource implements Source {
 
   async setWeights(w: PriorityWeights): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.setAccountData(WEIGHTS_EVENT_TYPE as never, w as never);
-    this.notify();
+    await this.commitAccountData(WEIGHTS_EVENT_TYPE, w as unknown as Record<string, unknown>);
   }
 
   async setManuallyUnread(itemId: string, unread: boolean): Promise<void> {
@@ -1852,8 +1886,7 @@ export class MatrixSource implements Source {
 
   private async setTriageState(next: TriageState): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.setAccountData(TRIAGE_EVENT_TYPE as never, next as never);
-    this.notify();
+    await this.commitAccountData(TRIAGE_EVENT_TYPE, next as unknown as Record<string, unknown>);
   }
 
   // Pinning a Matrix room maps to the standard m.favourite room tag, so it's
