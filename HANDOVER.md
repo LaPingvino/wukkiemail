@@ -41,15 +41,20 @@ via `deploy-sdk.sh` (FOREGROUND). cinny commits need a kebab family (`ux-fixes:`
 ### Audit backlog — sliding-sync completeness (A–F), STILL OPEN
 SDK fork is clean (lean lists, window growth, forceLoadMembers, account-data seed). Category B
 (classic-sync-opts feature-detection) is fully clean both apps. Remaining, prioritized:
-- **[C, wukkiemail, HIGH] `src/sources/matrix.ts:2402`** — `loadRoomMembers` uses
-  `loadMembersIfNeeded` (no-op under sliding sync) → @-mention/person-picker rosters stay
-  $LAZY-only. **Slam dunk: branch to `room.forceLoadMembers()` when `getSlidingSync()` present** —
-  exact same fix as cinny `useRoomMembers.ts:26`. (`getRoomMembers` 2374 + `searchUsers` 2429
-  inherit it.)
-- **[D, wukkiemail, HIGH] `matrix.ts:1239/1709/1729/1767`** — the 4 `eu.kiefte.wukkiemail.*` config
-  events (triage/views/bundles/weights) read locally, never seeded → saved views/bundles/weights/
-  triage revert to defaults on restored-pos reload. WM already has `ensureAccountData` (`:573`) —
-  just seed these 4 (+ `im.ponies.*` at `:487/497/531/536`) on startup.
+- **[C, wukkiemail, HIGH] DONE (`85321f7`, pushed → CF rebuild)** — `loadRoomMembers` now branches
+  to `room.forceLoadMembers()` when `this.slidingSync` is set (cast, same idiom as cinny
+  `useRoomMembers.ts`); `getRoomMembers`/`searchUsers` inherit it. NOTE while here: WukkieMail's
+  `package-lock.json` is **git-ignored**, so CF always re-resolves `#wally-dist` to branch HEAD —
+  the npm git-dep pin-trap does NOT bite WukkieMail (it does bite Wally, handled in
+  push-to-codeberg.sh). Also de-binaried matrix.ts: `reactionKey` held a raw NUL byte delimiter
+  (made git/grep/diff treat the file as binary); replaced with the `\u0000` escape, runtime-identical
+  (`c6085db`). VERIFY live: @-mention autocomplete + person picker now list everyone in a bridged
+  Signal group, not just recent senders.
+- **[D, wukkiemail, HIGH] DONE (`03e4ecd`, pushed → CF rebuild)** — added `seedConfigAccountData()`
+  (matrix.ts, gated on `this.slidingSync`, called after startClient): pulls triage/views/bundles/
+  weights + `im.ponies.user_emotes`/`emote_rooms` from the server via `ensureAccountData`, emits
+  `ClientEvent.AccountData`, then `notify()`. VERIFY live: saved views / manual bundles / sort
+  weights / custom emoji all survive a hard reload (were reverting to defaults).
 - **[A, wukkiemail, MED] `matrix.ts:1525-1531`** — `syncSpaceRooms` bulk-subscribes every space
   child via the HEAVY default sub. Use a lean custom subscription (mirror the SDK `lean-materialize`).
 - **[A, both, LOW-MED]** — subscription sets only grow, never shrink: WM `subscribeRoom`
