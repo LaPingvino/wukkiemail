@@ -48,6 +48,20 @@ bundle `main-CNBl2Sfb.js`). Re-run the DM line with `wallyClient` instead of `mx
    (cinny `DeviceVerification.tsx` ShowSas); nothing after `.request` ⇒ to-device dead after the
    initial batch (encryption sync stalled).
 
+### Account-data clobber sweep (2026-06-01) — DONE
+The cinny m.direct clobber (read-local-modify-write overwriting the server with a
+stale base under sliding sync) was a CLASS bug. Swept both apps:
+- **cinny** (`58ab12724`): `addRoomIdToMDirect`/`removeRoomIdFromMDirect` → `readMDirect`
+  (server-authoritative) + `commitMDirect` (local reflect). Plus "Guess & convert DMs"
+  recovery feature (`f58780d2d`, bridge-aware `1bb1bf646` — excludes bot + your puppet).
+- **WukkieMail** (`25dd8b1`): every config write (m.direct create-DM, saved views, manual
+  bundles, weights, triage) routed through new `readAccountData`/`commitAccountData`
+  helpers (server-authoritative read for m.direct; local-reflect for all). With
+  `seedConfigAccountData` (startup seed) this closes the in-session clobber. RESIDUAL
+  (surfaced, acceptable): true cross-device concurrent edits of the same type are
+  last-writer-wins — config setters read a local base (kept fresh by seed + reflect),
+  only m.direct reads server-authoritative per-write.
+
 ### Already fixed today — DON'T redo
 - **cinny `seedAccountData.ts`** (`78bf3d74`/`f14a48a`, DEPLOYED): seeds secret-storage +
   cross-signing + megolm-backup + `in.cinny.spaces` + `eu.kiefte.wally.settings` + `im.ponies.*` +
