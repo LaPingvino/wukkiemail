@@ -4,6 +4,14 @@ Quick brief for any agent picking this up mid-stream.
 
 ## ⚠️ CHECK-LATER with Joop (~2026-06-01, when he lands) — shipped boldly, needs live verification
 Joop OK'd being bold + reviewing together on arrival. Verify these and adjust:
+- **Initial-load weight cut** (SDK `69c390aa8`, DEPLOYED both apps): the spaces LIST + DM
+  materialization were hauling the heavy opened-room required_state (power/widget/emoji) in BULK.
+  Split out a lean `DEFAULT_SLIDING_SYNC_SPACES_LIST_REQUIRED_STATE` for the list, and the DM
+  materialization now uses a lean custom subscription (`lean-materialize`, timeline_limit 1).
+  VERIFY: spaces come in fast + complete (not the slow trickle), overall initial load lighter,
+  DMs still appear with names. Watch: an opened DM is lean-subscribed (timeline 1) — the on-open
+  backfill should fill it; confirm opening a DM still shows full history. CONFIRMED GOOD already:
+  chat history + usernames in Wally (subscribe-on-open + forceLoadMembers) — Joop saw it live.
 - **Inbox unified cursor** (WM `1ad60a1`): ↑/↓ walk bundles+entries, Enter folds a bundle / opens
   an entry, e/u/s/p skip bundles. Check: cursor starts on the Settings header (idx 0) — is that
   ok or should it skip to the first entry? Visual highlight on headers clear?
