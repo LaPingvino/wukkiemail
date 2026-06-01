@@ -14,22 +14,35 @@ is just the VPS the agent runs on. Both apps deploy from the SDK fork (`matrix-j
 via `deploy-sdk.sh` (FOREGROUND). cinny commits need a kebab family (`ux-fixes:`).
 
 ### Live regressions (priority)
+NOTE (2026-06-01): cinny exposes NO `mx` global — Joop's DM console line failed with
+`mx is not defined`. Fixed by exposing **`window.wallyClient`** (deploy `934b34c42`/`01f3359`,
+bundle `main-CNBl2Sfb.js`). Re-run the DM line with `wallyClient` instead of `mx`.
 1. **DM list doesn't populate** (Wally/wukkie.uk). cinny's `m.direct` reactivity is FINE
    (`mDirectList.ts:41` listens to `ClientEvent.AccountData`), so the gap is **materialization** —
    the DM rooms aren't landing in `allRoomsAtom` (`getRooms()`). **Prime suspect: the lean DM
-   materialization** I shipped (`sliding-sync-sdk.ts` ~1004, the `lean-materialize` custom sub) —
-   DMs worked ("0→1→more") on the HEAVY sub before it. BUT by inspection the request builder
-   (`sliding-sync.ts:842-851`) serializes the custom sub correctly, so lean *should* still
-   materialize — not confirmed it's the cause. **NEXT: get this console line from wukkie.uk:**
-   `Object.values(mx.getAccountData('m.direct')?.getContent()||{}).flat().map(r=>[r,!!mx.getRoom(r),mx.getRoom(r)?.getMyMembership()])`
+   materialization** (`sliding-sync-sdk.ts` ~1004, the `lean-materialize` custom sub) — DMs worked
+   ("0→1→more") on the HEAVY sub before it. Request builder (`sliding-sync.ts:842-851`) serializes
+   the custom sub correctly, so lean *should* still materialize — not confirmed it's the cause.
+   **NEXT: run on wukkie.uk:**
+   `Object.values(wallyClient.getAccountData('m.direct')?.getContent()||{}).flat().map(r=>[r,!!wallyClient.getRoom(r),wallyClient.getRoom(r)?.getMyMembership()])`
    → rooms NOT in store ⇒ revert lean-DM to heavy (keep spaces-lean, it's independent); rooms
    present-but-not-listed ⇒ cinny `allRoomsAtom`/membership (Join filter, `room-list/roomList.ts`).
-2. **Emoji SAS verification stalls after connecting** (Wally). **Likely fix SHIPPED:** cinny
-   `seedAccountData` (`78bf3d74`, deployed `f14a48a`) seeds `m.secret_storage.*`/`m.cross_signing.*`
-   so the device can complete the cross-signing/MAC step. **PENDING:** Joop verify + answer *"do the
-   comparison emoji SHOW before it stalls?"* — emoji-shown-then-stuck ⇒ secret-storage (this fix);
-   stuck-BEFORE-emoji ⇒ a to-device `m.key.verification.key` step (encryption sync, DIFFERENT fix —
-   get console of the last `m.key.verification.*` event).
+2. **Emoji SAS verification stalls — emoji NEVER show** (Wally). CONFIRMED by Joop: emoji never
+   appear. Per the routing, that means the stall is BEFORE the SAS key exchange → it's a
+   **to-device `m.key.verification.*` flow** problem, **NOT** the secret-storage seed (`78bf3d74`,
+   already shipped — that was the wrong tree for THIS symptom; it's still correct for the post-emoji
+   cross-signing/MAC step, keep it). Audited the SDK two-connection design end-to-end and it looks
+   correct: to-device isolated on the encryption sync, incoming → OlmMachine via
+   `preprocessToDeviceMessages`, outgoing pumped by `onSyncCompleted` on the e2ee extension, poll
+   loop fast-polls (`boostPolls`) during a handshake + never silently dies. So it needs a LIVE
+   TRACE. Shipped **`installVerificationTracer`** (`verifyTrace.ts`, deploy `934b34c42`): logs every
+   `m.key.verification.*` to-device event RECEIVED + `window.wallyVerify()` dumps the ring.
+   **NEXT: on wukkie.uk start a verification, then run `wallyVerify()` and read the `[Wally][verify]`
+   lines.** Decision tree: see `.request/.ready/.start` but never the peer's `.key` ⇒ incoming
+   to-device not delivered past handshake (Continuwuity/encryption-sync gap — check for an
+   "encryption sliding sync failed" error too); see peer's `.key` but no emoji ⇒ verifier/UI
+   (cinny `DeviceVerification.tsx` ShowSas); nothing after `.request` ⇒ to-device dead after the
+   initial batch (encryption sync stalled).
 
 ### Already fixed today — DON'T redo
 - **cinny `seedAccountData.ts`** (`78bf3d74`/`f14a48a`, DEPLOYED): seeds secret-storage +
