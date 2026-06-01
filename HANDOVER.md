@@ -17,16 +17,20 @@ via `deploy-sdk.sh` (FOREGROUND). cinny commits need a kebab family (`ux-fixes:`
 NOTE (2026-06-01): cinny exposes NO `mx` global — Joop's DM console line failed with
 `mx is not defined`. Fixed by exposing **`window.wallyClient`** (deploy `934b34c42`/`01f3359`,
 bundle `main-CNBl2Sfb.js`). Re-run the DM line with `wallyClient` instead of `mx`.
-1. **DM list doesn't populate** (Wally/wukkie.uk). cinny's `m.direct` reactivity is FINE
-   (`mDirectList.ts:41` listens to `ClientEvent.AccountData`), so the gap is **materialization** —
-   the DM rooms aren't landing in `allRoomsAtom` (`getRooms()`). **Prime suspect: the lean DM
-   materialization** (`sliding-sync-sdk.ts` ~1004, the `lean-materialize` custom sub) — DMs worked
-   ("0→1→more") on the HEAVY sub before it. Request builder (`sliding-sync.ts:842-851`) serializes
-   the custom sub correctly, so lean *should* still materialize — not confirmed it's the cause.
-   **NEXT: run on wukkie.uk:**
-   `Object.values(wallyClient.getAccountData('m.direct')?.getContent()||{}).flat().map(r=>[r,!!wallyClient.getRoom(r),wallyClient.getRoom(r)?.getMyMembership()])`
-   → rooms NOT in store ⇒ revert lean-DM to heavy (keep spaces-lean, it's independent); rooms
-   present-but-not-listed ⇒ cinny `allRoomsAtom`/membership (Join filter, `room-list/roomList.ts`).
+1. **DM list doesn't populate** (Wally/wukkie.uk) — ROOT-CAUSED + FIXED 2026-06-01. NOT the lean-DM
+   materialization (that's exonerated — the one tagged DM materialized + joined fine, keep it). Real
+   cause: **`addRoomIdToMDirect`/`removeRoomIdFromMDirect` (`utils/matrix.ts`) merged against the
+   LOCAL `m.direct`.** Under sliding sync the local copy is stale (Continuwuity only re-pushes
+   account data changed since pos — none on a restored pos; setAccountData reflects locally only on
+   the later echo), so a `/converttodm` read a stale/empty base and **PUT it back, overwriting the
+   server's full m.direct down to that one entry** — active server-side data loss, which is why Joop's
+   many prior tags vanished to 1. FIX (`58ab12724`, deployed `f1fd121`): `readMDirect` fetches the
+   authoritative server value before merging; `commitMDirect` writes back + reflects locally + emits
+   so the list inflates immediately. RECOVERY (`f58780d2d`, same deploy): **"Guess & convert DMs"**
+   menu item on the Direct page (`guessAndConvertDMs`) rebuilds m.direct from joined 2-member
+   non-space rooms (the rooms survived; only the mapping was wiped) in ONE merged write. VERIFY: run
+   it, DM list inflates; bridged 1:1s that show as 3-member (bridge bot present) won't be caught —
+   if Joop's Signal DMs are missed, relax the `getJoinedMemberCount()===2` gate.
 2. **Emoji SAS verification stalls — emoji NEVER show** (Wally). CONFIRMED by Joop: emoji never
    appear. Per the routing, that means the stall is BEFORE the SAS key exchange → it's a
    **to-device `m.key.verification.*` flow** problem, **NOT** the secret-storage seed (`78bf3d74`,
