@@ -585,6 +585,41 @@ export class MatrixSource implements Source {
     return null;
   }
 
+  // App config lives in global account data: triage (pin/snooze), saved views,
+  // manual bundles, sort weights, and custom emoji (im.ponies). Under sliding
+  // sync Continuwuity only resends account data that CHANGED since the persisted
+  // pos — on a restored pos it resends NONE — so on reload these come up empty
+  // and the inbox silently reverts to defaults (saved views vanish, bundles
+  // unfold, weights reset). The SDK fork seeds the standard globals (m.direct
+  // etc.); these app-specific types it can't know about, so seed them here:
+  // pull each from the server into the store, wake any reactive listeners, and
+  // notify so the inbox re-reads. Idempotent — ensureAccountData leaves anything
+  // already present locally untouched. Sliding-sync only; classic /sync rehydrates
+  // account data itself.
+  private seedConfigAccountData(): void {
+    if (!this.slidingSync) return;
+    void (async () => {
+      const types = [
+        TRIAGE_EVENT_TYPE,
+        VIEWS_EVENT_TYPE,
+        BUNDLES_EVENT_TYPE,
+        WEIGHTS_EVENT_TYPE,
+        'im.ponies.user_emotes',
+        'im.ponies.emote_rooms',
+      ];
+      const loaded = await Promise.all(types.map((t) => this.ensureAccountData(t)));
+      if (!loaded.some(Boolean)) return;
+      // Wake reactive consumers (e.g. the emoji picker) in addition to notify().
+      for (const t of types) {
+        const ev = this.client?.getAccountData(t as never);
+        if (ev) {
+          try { this.client?.emit(ClientEvent.AccountData, ev, undefined); } catch { /* ignore */ }
+        }
+      }
+      this.notify();
+    })();
+  }
+
   // Delete the Rust crypto IndexedDB stores for a given store prefix. Used to
   // recover from a stale/device-mismatched crypto store (a re-login mints a new
   // device id but the old store lingers) without dropping to the hang-prone
@@ -978,6 +1013,11 @@ export class MatrixSource implements Source {
     }
     this.startNotificationListener();
     this.startIncomingCallListener();
+    // Re-hydrate app config (triage / views / bundles / weights / emoji) that
+    // Continuwuity doesn't resend on a restored sliding-sync pos. Fire-and-forget
+    // so start() still resolves immediately; notify() refreshes the inbox once
+    // the values land.
+    this.seedConfigAccountData();
     // Console diagnostic: run wmRooms() (or wmRooms("wally")) to dump room state.
     (window as unknown as { wmRooms?: (f?: string) => void }).wmRooms = (f?: string) => this.debugRooms(f);
     (window as unknown as { wmSpaces?: () => void }).wmSpaces = () => this.spaceStats();
