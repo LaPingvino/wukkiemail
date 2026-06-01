@@ -2,6 +2,75 @@
 
 Quick brief for any agent picking this up mid-stream.
 
+> **Working principle for these repos lives in `/home/joop/matrix-stuff/CLAUDE.md`** (bias to
+> daring, derive from principle, presence≠correctness, surface-don't-silently-preserve). Apply it.
+
+## 🔧 OPEN — found, NOT yet fixed (compaction 2026-06-01) — a sliding-sync "completeness/correction" run
+
+Joop's framing: these are all the same theme — **completeness under sliding sync**. Two live
+regressions + the standing audit backlog. Joop tests on **wukkie.uk (= latest)**; cinny.kiefte.eu
+is just the VPS the agent runs on. Both apps deploy from the SDK fork (`matrix-js-sdk-jj`,
+`wally-dist`); cinny via `cinny-web-git/push-to-codeberg.sh` (FOREGROUND — bg deploys die), both
+via `deploy-sdk.sh` (FOREGROUND). cinny commits need a kebab family (`ux-fixes:`).
+
+### Live regressions (priority)
+1. **DM list doesn't populate** (Wally/wukkie.uk). cinny's `m.direct` reactivity is FINE
+   (`mDirectList.ts:41` listens to `ClientEvent.AccountData`), so the gap is **materialization** —
+   the DM rooms aren't landing in `allRoomsAtom` (`getRooms()`). **Prime suspect: the lean DM
+   materialization** I shipped (`sliding-sync-sdk.ts` ~1004, the `lean-materialize` custom sub) —
+   DMs worked ("0→1→more") on the HEAVY sub before it. BUT by inspection the request builder
+   (`sliding-sync.ts:842-851`) serializes the custom sub correctly, so lean *should* still
+   materialize — not confirmed it's the cause. **NEXT: get this console line from wukkie.uk:**
+   `Object.values(mx.getAccountData('m.direct')?.getContent()||{}).flat().map(r=>[r,!!mx.getRoom(r),mx.getRoom(r)?.getMyMembership()])`
+   → rooms NOT in store ⇒ revert lean-DM to heavy (keep spaces-lean, it's independent); rooms
+   present-but-not-listed ⇒ cinny `allRoomsAtom`/membership (Join filter, `room-list/roomList.ts`).
+2. **Emoji SAS verification stalls after connecting** (Wally). **Likely fix SHIPPED:** cinny
+   `seedAccountData` (`78bf3d74`, deployed `f14a48a`) seeds `m.secret_storage.*`/`m.cross_signing.*`
+   so the device can complete the cross-signing/MAC step. **PENDING:** Joop verify + answer *"do the
+   comparison emoji SHOW before it stalls?"* — emoji-shown-then-stuck ⇒ secret-storage (this fix);
+   stuck-BEFORE-emoji ⇒ a to-device `m.key.verification.key` step (encryption sync, DIFFERENT fix —
+   get console of the last `m.key.verification.*` event).
+
+### Already fixed today — DON'T redo
+- **cinny `seedAccountData.ts`** (`78bf3d74`/`f14a48a`, DEPLOYED): seeds secret-storage +
+  cross-signing + megolm-backup + `in.cinny.spaces` + `eu.kiefte.wally.settings` + `im.ponies.*` +
+  `io.element.recent_emoji` on the sliding path. Covers audit D#1/D#3 + cinny settings/emoji.
+- **cinny cross-signing enum** `self_signing`/`user_signing` (`9c8ebe5ed`, committed, rides next
+  cinny deploy — unused at runtime so no urgency).
+
+### Audit backlog — sliding-sync completeness (A–F), STILL OPEN
+SDK fork is clean (lean lists, window growth, forceLoadMembers, account-data seed). Category B
+(classic-sync-opts feature-detection) is fully clean both apps. Remaining, prioritized:
+- **[C, wukkiemail, HIGH] `src/sources/matrix.ts:2402`** — `loadRoomMembers` uses
+  `loadMembersIfNeeded` (no-op under sliding sync) → @-mention/person-picker rosters stay
+  $LAZY-only. **Slam dunk: branch to `room.forceLoadMembers()` when `getSlidingSync()` present** —
+  exact same fix as cinny `useRoomMembers.ts:26`. (`getRoomMembers` 2374 + `searchUsers` 2429
+  inherit it.)
+- **[D, wukkiemail, HIGH] `matrix.ts:1239/1709/1729/1767`** — the 4 `eu.kiefte.wukkiemail.*` config
+  events (triage/views/bundles/weights) read locally, never seeded → saved views/bundles/weights/
+  triage revert to defaults on restored-pos reload. WM already has `ensureAccountData` (`:573`) —
+  just seed these 4 (+ `im.ponies.*` at `:487/497/531/536`) on startup.
+- **[A, wukkiemail, MED] `matrix.ts:1525-1531`** — `syncSpaceRooms` bulk-subscribes every space
+  child via the HEAVY default sub. Use a lean custom subscription (mirror the SDK `lean-materialize`).
+- **[A, both, LOW-MED]** — subscription sets only grow, never shrink: WM `subscribeRoom`
+  (`matrix.ts:306`/`roomSubs`), cinny `slidingSyncRooms.ts:20-29` (`subscribed` Set). Every opened
+  room stays subscribed heavy forever. Evict/downgrade on room close.
+- **[C, cinny, MED]** — `useRoomMeta.ts:25,108` group-DM names via no-op `loadMembersIfNeeded`
+  (2-person DMs survive via heroes; group DMs degrade). `utils/matrix.ts:189` `getDMRoomFor` +
+  `:218` trust `getMembers().length`. `utils/bridges.ts:56,114` bot detection. `CallProvider.tsx:208`
+  DM call-notify. Fix: `forceLoadMembers()` when sliding+DM, or heroes for group DMs.
+- **[E, both, MED] cold thread-open doesn't inflate** — WM `RoomPanel.tsx:328` SKIPS backfill when
+  `threadRootId` set (`getRoomTimeline` `matrix.ts:2700` only scans live timeline); cinny
+  `ThreadView.tsx:143` `findEventById` with no `fetchRoomEvent` fallback. A cold/deep-linked thread
+  comes up empty. Fix: fetch root + thread relations on thread open before scanning.
+- **[F, cinny, LOW-MED] `RoomSummaryLoader.tsx:19`** — `getRoomSummary` (MSC3266) which Continuwuity
+  404s → Explore/Featured (`Featured.tsx:63-99`) empty, no fallback. (`useSpaceHierarchy.ts:277`
+  already uses `getRoomHierarchy` MSC2946 — port that pattern.)
+
+Recommended order: live #1+#2 first (Joop's console answers gate them) → WM C#2 (slam dunk) →
+WM D#4 → the rest by impact. "Reduce to the previously-solved problem": most fixes are ports of
+patterns already proven in the other app.
+
 ## ⚠️ CHECK-LATER with Joop (~2026-06-01, when he lands) — shipped boldly, needs live verification
 Joop OK'd being bold + reviewing together on arrival. Verify these and adjust:
 - **Initial-load weight cut** (SDK `69c390aa8`, DEPLOYED both apps): the spaces LIST + DM
