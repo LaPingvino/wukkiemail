@@ -1984,6 +1984,21 @@ export class MatrixSource implements Source {
     // Keep the legacy stash too — some callbacks/paths still read it.
     (window as unknown as { _wukkieKey?: Uint8Array })._wukkieKey = decoded;
 
+    // The rust OlmMachine can only import our cross-signing PRIVATE keys (from 4S)
+    // if it ALREADY holds our cross-signing PUBLIC keys — otherwise the import
+    // fails SILENTLY and the SDK throws "importCrossSigningKeys failed to import
+    // the keys" (CrossSigningIdentity.ts). Those public keys ride a /keys/query
+    // for our OWN user, which under sliding sync has NOT run for ourselves on a
+    // fresh device/login. Force that query now (downloadUncached=true) so the
+    // public keys are present before bootstrapCrossSigning reads 4S.
+    try {
+      const selfId = this.client.getUserId();
+      if (selfId) await crypto.userHasCrossSigningKeys(selfId, true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] could not pre-download cross-signing public keys', e);
+    }
+
     // Wally's proven order: bootstrapCrossSigning imports the cross-signing
     // private keys from 4S (so this device becomes verified and CAN request
     // verification); bootstrapSecretStorage wires everything up; then load the
