@@ -231,6 +231,7 @@ export interface VerificationState {
   otherDeviceId?: string;
   incoming?: boolean;            // true if the other device initiated
   accepted?: boolean;           // incoming request has been accepted (waiting for emoji)
+  confirmed?: boolean;          // user pressed "They match" — completion in flight, mismatch path is now dead
   error?: string;
 }
 
@@ -302,6 +303,14 @@ export class MatrixSource implements Source {
   private verifyReq: VerificationRequest | null = null;
   private verifier: Verifier | null = null;
   private sasCallbacks: ShowSasCallbacks | null = null;
+  // Set the instant the user presses "They match". Once true, the mismatch path
+  // is permanently dead for this flow: a stray scrim/close click must NEVER turn
+  // an affirmed match into an m.mismatched_sas cancel. (Root cause of the
+  // "They match cancels" bug — see reference_wukkiemail_sas_crosssigning.)
+  private confirmSent = false;
+  // Last SAS emoji names shown — logged on confirm/mismatch so a cross-device
+  // comparison can prove the grids actually matched.
+  private lastSasNames = '';
   private verifyState: VerificationState = { phase: 'idle' };
   private verifyListeners = new Set<(s: VerificationState) => void>();
 
@@ -2195,6 +2204,9 @@ export class MatrixSource implements Source {
     // emoji event is never missed (same ordering as Wally's SasVerification).
     verifier.on(VerifierEvent.ShowSas, (sas: ShowSasCallbacks) => {
       this.sasCallbacks = sas;
+      this.lastSasNames = (sas.sas.emoji ?? []).map(([, name]) => name).join(' ');
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail][verify] SAS emoji:', this.lastSasNames);
       this.setVerifyState({ phase: 'sas', emoji: sas.sas.emoji });
     });
     verifier.on(VerifierEvent.Cancel, (e: unknown) => {
@@ -2212,24 +2224,43 @@ export class MatrixSource implements Source {
     });
   }
 
-  // User pressed "They match".
+  // User pressed "They match". From this instant the mismatch path is dead:
+  // mark confirmSent and DROP sasCallbacks BEFORE awaiting confirm(), so a scrim
+  // or close click landing during the (network-bound) confirm can no longer reach
+  // sasCallbacks.mismatch(). The sheet moves to a "finishing" view (confirmed:true)
+  // with no destructive buttons; completion arrives via onRequestChange → done.
   async confirmVerification(): Promise<void> {
-    if (!this.sasCallbacks) return;
+    const cb = this.sasCallbacks;
+    if (!cb) return;
+    this.confirmSent = true;
+    this.sasCallbacks = null;
+    this.setVerifyState({ confirmed: true });
+    // eslint-disable-next-line no-console
+    console.warn('[wukkiemail][verify] confirm() — matched SAS:', this.lastSasNames);
     try {
-      await this.sasCallbacks.confirm();
+      await cb.confirm();
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[wukkiemail][verify] confirm() threw:', e);
       throw e;
     }
-    this.sasCallbacks = null;
   }
 
-  // User pressed "They don't match" or closed the sheet.
+  // User pressed "They don't match" or closed the sheet. Once the user has
+  // affirmed a match (confirmSent), this is a NO-OP — we never convert a confirmed
+  // match into an m.mismatched_sas cancel; the in-flight completion is left to land.
   cancelVerification(): void {
+    if (this.confirmSent) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail][verify] cancel ignored — already confirmed match');
+      return;
+    }
     try {
-      if (this.sasCallbacks) this.sasCallbacks.mismatch();
-      else if (this.verifier) this.verifier.cancel(new Error('cancelled by user'));
+      if (this.sasCallbacks) {
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail][verify] mismatch() sent by user — SAS was:', this.lastSasNames);
+        this.sasCallbacks.mismatch();
+      } else if (this.verifier) this.verifier.cancel(new Error('cancelled by user'));
       else if (this.verifyReq) void this.verifyReq.cancel();
     } catch { /* best effort */ }
     this.setVerifyState({ phase: 'cancelled' });
@@ -2239,7 +2270,7 @@ export class MatrixSource implements Source {
   // Reset to idle (e.g. after the user dismisses a done/cancelled sheet).
   resetVerification(): void {
     this.teardownVerification();
-    this.setVerifyState({ phase: 'idle', emoji: undefined, error: undefined, otherDeviceId: undefined, incoming: undefined });
+    this.setVerifyState({ phase: 'idle', emoji: undefined, error: undefined, otherDeviceId: undefined, incoming: undefined, accepted: undefined, confirmed: undefined });
   }
 
   private teardownVerification(): void {
@@ -2249,6 +2280,7 @@ export class MatrixSource implements Source {
     this.verifyReq = null;
     this.verifier = null;
     this.sasCallbacks = null;
+    this.confirmSent = false;
   }
 
   // Bootstrap encryption: cross-signing keys + secret storage backed by

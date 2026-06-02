@@ -15,6 +15,9 @@ export function VerificationSheet({ matrix }: { matrix: MatrixSource }) {
   if (state.phase === 'idle') return null;
 
   const close = () => {
+    // Once "They match" is pressed the verification is completing — closing must
+    // NOT cancel it (and must never send a mismatch). Just leave it to finish.
+    if (state.confirmed) return;
     if (state.phase === 'sas' || state.phase === 'requested') matrix.cancelVerification();
     else matrix.resetVerification();
   };
@@ -77,7 +80,13 @@ export function VerificationSheet({ matrix }: { matrix: MatrixSource }) {
             </p>
           )}
 
-          {state.phase === 'sas' && (
+          {state.phase === 'sas' && state.confirmed && (
+            <p style={{ textAlign: 'center', color: 'var(--muted)' }}>
+              You confirmed the emoji match. Finishing verification on the other device…
+            </p>
+          )}
+
+          {state.phase === 'sas' && !state.confirmed && (
             <>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
                 Confirm the same emoji appear in the same order on both devices,
