@@ -234,6 +234,19 @@ export interface VerificationState {
   error?: string;
 }
 
+// Extract a readable reason from a verification Cancel payload — either an Error or
+// an m.key.verification.cancel MatrixEvent carrying { code, reason }. The code (e.g.
+// m.key_mismatch vs m.user_error) says whether a "They match" cancel is a crypto/key
+// problem or a flow/timeout one.
+const describeVerificationCancel = (e: unknown): string => {
+  if (!e) return 'cancelled';
+  if (e instanceof Error) return e.message;
+  const ev = e as { getContent?: () => { code?: string; reason?: string } };
+  const c = ev.getContent?.();
+  if (c) return [c.code, c.reason].filter(Boolean).join(': ') || 'cancelled';
+  return String(e);
+};
+
 export class MatrixSource implements Source {
   readonly kind = 'matrix' as const;
   readonly id: string;
@@ -2184,18 +2197,31 @@ export class MatrixSource implements Source {
       this.sasCallbacks = sas;
       this.setVerifyState({ phase: 'sas', emoji: sas.sas.emoji });
     });
-    verifier.on(VerifierEvent.Cancel, () => {
-      this.setVerifyState({ phase: 'cancelled' });
+    verifier.on(VerifierEvent.Cancel, (e: unknown) => {
+      const reason = describeVerificationCancel(e);
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail][verify] cancelled:', reason, e);
+      this.setVerifyState({ phase: 'cancelled', error: reason });
       this.teardownVerification();
     });
     // verify() resolves when the whole flow completes; errors when cancelled.
-    verifier.verify().catch(() => { /* surfaced via Cancel / phase change */ });
+    verifier.verify().catch((e: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail][verify] verify() rejected:', describeVerificationCancel(e), e);
+      /* phase surfaced via the Cancel handler above */
+    });
   }
 
   // User pressed "They match".
   async confirmVerification(): Promise<void> {
     if (!this.sasCallbacks) return;
-    await this.sasCallbacks.confirm();
+    try {
+      await this.sasCallbacks.confirm();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[wukkiemail][verify] confirm() threw:', e);
+      throw e;
+    }
     this.sasCallbacks = null;
   }
 
