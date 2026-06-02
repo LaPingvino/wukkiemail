@@ -212,6 +212,10 @@ export async function buildClient(creds: MatrixCreds): Promise<MatrixClient> {
     // mirrors Wally. Without cacheSecretStorageKey the SDK can't stash the key
     // it needs to import cross-signing private keys from 4S.
     cryptoCallbacks,
+    // Match Wally: restrict to SAS. Without this the OlmMachine advertises extra
+    // methods (QR reciprocate) — the only inequivalence in the otherwise-identical
+    // verification flow vs the proven Wally setup.
+    verificationMethods: ['m.sas.v1'],
   });
 
   // Now that the store has been linked to a client, hydrate it. A corrupt
