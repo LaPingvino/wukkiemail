@@ -5,6 +5,32 @@ Quick brief for any agent picking this up mid-stream.
 > **Working principle for these repos lives in `/home/joop/matrix-stuff/CLAUDE.md`** (bias to
 > daring, derive from principle, presence≠correctness, surface-don't-silently-preserve). Apply it.
 
+## 🟢 STATUS at compaction 2026-06-02 (the two issues we were deep in)
+Both root-caused; the DM-naming chain is SHIPPED, verification has a captured cancelCode + a
+parked plan (NOT applied — Joop said prepare for compaction).
+
+**DM names (Wally) — SHIPPED, deployed `ef79b2c` (`main` bundle past CWrpx00h).** Chain of fixes:
+m.direct clobber → server-authoritative writes; always force-load DM members (classic sync too);
+group-name guard (`dmRealHumans>1 → room.name`); and the final "too early" fix — `getDmName`
+returns `room.name` until the joined roster is fully loaded (`getJoinedMembers().length >=
+getJoinedMemberCount()`) so a group never flickers to its m.direct partner before enough members
+load to reveal it's a group. Plus shared one-fetch-per-room dedup + direct (non-rAF) refresh on
+load. Reshaper ("Guess & convert DMs") removes the non-DM mistags; Joop confirmed it works.
+Remaining: only an unnamed bridged 1:1 might briefly show a rough name (rare).
+
+**Verification (WukkieMail) — root cause = `m.mismatched_sas`, fix PARKED.** Full analysis in
+memory `reference_wukkiemail_sas_crosssigning.md`. Short version: WukkieMail confirms correctly
+(sends the mac), but the REMOTE (Wally) emits `m.mismatched_sas` in a flow Joop MATCHED. Not a
+key/MAC problem; `verificationMethods:['m.sas.v1']` shipped (`1801657`) didn't fix it. Leading
+fixable suspect: the confirm→mismatch trap — after "They match", WukkieMail's sheet stays on phase
+`'sas'` with buttons live and `cancelVerification` calls `sasCallbacks.mismatch()` while
+sasCallbacks is set, so a stray click fires mismatch (same race likely on the Wally side too, or a
+stale duplicate dialog from many retries). NEXT: move to a 'confirming/waiting' phase post-confirm
+(disable the mismatch path), add SAS-value logging both sides, then one clean re-test. crypto state
+is fine — recovery-key path bootstraps it; SAS *should* gossip the keys once it completes.
+
+Separate noted bug: WukkieMail console floods with `threadRootId`/`compareEventOrdering` recursion.
+
 ## 🔧 OPEN — found, NOT yet fixed (compaction 2026-06-01) — a sliding-sync "completeness/correction" run
 
 Joop's framing: these are all the same theme — **completeness under sliding sync**. Two live
