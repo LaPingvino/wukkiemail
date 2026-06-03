@@ -687,25 +687,6 @@ export class MatrixSource implements Source {
   // device id but the old store lingers) without dropping to the hang-prone
   // in-memory backend. Names mirror the SDK: `<prefix>::matrix-sdk-crypto` and
   // `<prefix>::matrix-sdk-crypto-meta`.
-  private deleteCryptoStores(prefix: string): Promise<void> {
-    const names = [`${prefix}::matrix-sdk-crypto`, `${prefix}::matrix-sdk-crypto-meta`];
-    return Promise.all(
-      names.map(
-        (name) =>
-          new Promise<void>((resolve) => {
-            try {
-              const req = window.indexedDB.deleteDatabase(name);
-              req.onsuccess = () => resolve();
-              req.onerror = () => resolve();
-              req.onblocked = () => resolve();
-            } catch {
-              resolve();
-            }
-          }),
-      ),
-    ).then(() => undefined);
-  }
-
   // Coalesce a burst of decryption events (e.g. a backup restore decrypting
   // hundreds of messages at once) into a single refresh.
   private decryptedNotifyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -904,65 +885,48 @@ export class MatrixSource implements Source {
     // unencrypted rooms still work.
     const params = new URLSearchParams(window.location.search);
     if (!params.has('nocrypto')) {
-      let cryptoOk = false;
+      // The Rust crypto store holds this device's identity keys + cross-signing +
+      // key-backup keys — the state that makes encryption and verification a
+      // one-time setup which PERSISTS across reloads. The store the OlmMachine
+      // opens MUST belong to the same (user, device) as the client, or the
+      // constructor rejects it ("account in the store doesn't match").
+      //
+      // So the store prefix is a DETERMINISTIC function of (userId, deviceId).
+      // We deliberately do NOT use the SDK default prefix ('matrix-js-sdk'): it
+      // is shared across logins, so a stale store from a previous device collided
+      // with the current session. The old code worked around the collision with a
+      // per-device fallback PLUS a best-effort delete of the default store — and
+      // that delete was the long-standing root-cause bug: once the default store
+      // was gone, the NEXT reload found the default prefix free, opened a FRESH
+      // EMPTY default store, succeeded, and never re-read the per-device store
+      // that actually held the keys. Result: cross-signing silently null on
+      // reload, "no secret storage", verified-then-unverified, SAS mismatched_sas
+      // (a keyless device MACs an incomplete key set). Keying by device EVERY
+      // time removes the collision, the fallback, and the empty-store trap in one
+      // move: the same device always reopens the same persistent store. Any
+      // leftover default-prefix store from before this change is simply ignored
+      // (harmless on disk); key backup repopulates the device-scoped store
+      // automatically on first load after the change.
+      const devicePrefix = `wukkiemail-crypto:${client.getUserId() ?? 'u'}:${client.getDeviceId() ?? 'd'}`;
       try {
-        // The Rust crypto store is small (device + cross-signing + backup keys)
-        // — exactly what lite storage relies on: even when the big sync store
-        // can't live in IndexedDB, this one usually can, so encryption and key
-        // backup PERSIST across reloads (verification becomes one-time).
-        await client.initRustCrypto();
-        cryptoOk = true;
+        await client.initRustCrypto({ cryptoDatabasePrefix: devicePrefix });
         this.cryptoPersistent = true;
         // eslint-disable-next-line no-console
-        console.info('[wukkiemail] crypto initialised (IndexedDB — persistent)');
+        console.info('[wukkiemail] crypto initialised (IndexedDB — persistent, per-device store)');
       } catch (e) {
-        // The common failure is a STALE crypto store from a previous login: the
-        // store's device id no longer matches this session's, so the OlmMachine
-        // refuses it ("account in the store doesn't match"). Falling straight to
-        // in-memory here was catastrophic — a keyless fresh device that can't
-        // decrypt anything, UTD-flooding and hanging load. Detect that mismatch,
-        // delete the stale store, and retry IndexedDB so the new device gets a
-        // clean PERSISTENT store (key backup can repopulate it). The default
-        // store prefix is shared across logins, hence the collision.
-        const staleStore = /account in the store does\W?n.?t match|does\W?n.?t match the account/i.test(String(e));
-        if (staleStore) {
-          // The stale store's IndexedDB connection from the failed open above is
-          // likely still held, so deleting it would block. Instead retry under a
-          // DEVICE-SCOPED store prefix: this device gets its own fresh, PERSISTENT
-          // store with no collision, and the stale default-prefix store is left
-          // behind (harmless; best-effort cleanup below). Stable same-device
-          // sessions never reach here — their default-prefix store matches.
+        // eslint-disable-next-line no-console
+        console.warn('[wukkiemail] initRustCrypto (IndexedDB, per-device) failed', e);
+        // Last resort: in-memory. E2EE works this session but nothing persists,
+        // so key backup must be re-entered on every load. Avoided wherever we can
+        // — it is what hangs load — but better than no crypto at all.
+        try {
+          await client.initRustCrypto({ useIndexedDB: false });
+          this.cryptoPersistent = false;
           // eslint-disable-next-line no-console
-          console.warn('[wukkiemail] crypto store is from a previous device — retrying with a per-device store', e);
-          try {
-            const devicePrefix = `wukkiemail-crypto:${client.getUserId() ?? 'u'}:${client.getDeviceId() ?? 'd'}`;
-            await client.initRustCrypto({ cryptoDatabasePrefix: devicePrefix });
-            cryptoOk = true;
-            this.cryptoPersistent = true;
-            // eslint-disable-next-line no-console
-            console.info('[wukkiemail] crypto initialised (IndexedDB — persistent, per-device store)');
-            void this.deleteCryptoStores('matrix-js-sdk'); // best-effort, non-blocking
-          } catch (e2) {
-            // eslint-disable-next-line no-console
-            console.warn('[wukkiemail] per-device crypto store init failed', e2);
-          }
-        } else {
+          console.warn('[wukkiemail] crypto initialised (in-memory — will NOT persist; key backup re-entry needed each load)');
+        } catch (e3) {
           // eslint-disable-next-line no-console
-          console.warn('[wukkiemail] initRustCrypto (IndexedDB) failed', e);
-        }
-        if (!cryptoOk) {
-          // Last resort: in-memory. E2EE works this session but nothing persists,
-          // so key backup must be re-entered on every load. Avoided wherever we
-          // can — see the store-reset path above — because it is what hangs load.
-          try {
-            await client.initRustCrypto({ useIndexedDB: false });
-            this.cryptoPersistent = false;
-            // eslint-disable-next-line no-console
-            console.warn('[wukkiemail] crypto initialised (in-memory — will NOT persist; key backup re-entry needed each load)');
-          } catch (e3) {
-            // eslint-disable-next-line no-console
-            console.warn('[wukkiemail] crypto unavailable, continuing without encryption', e3);
-          }
+          console.warn('[wukkiemail] crypto unavailable, continuing without encryption', e3);
         }
       }
       // Surface incoming verification requests (e.g. another of the user's
@@ -2313,8 +2277,12 @@ export class MatrixSource implements Source {
     if (!this.client) throw new Error('client not started');
     let crypto = this.client.getCrypto?.();
     if (crypto) return crypto;
+    // Same DETERMINISTIC device-scoped prefix as the boot path (see initRustCrypto
+    // at startup): the store MUST be keyed by (userId, deviceId) so on-demand
+    // init reopens the SAME persistent store rather than the shared default one.
+    const devicePrefix = `wukkiemail-crypto:${this.client.getUserId() ?? 'u'}:${this.client.getDeviceId() ?? 'd'}`;
     try {
-      await this.client.initRustCrypto();
+      await this.client.initRustCrypto({ cryptoDatabasePrefix: devicePrefix });
     } catch {
       try { await this.client.initRustCrypto({ useIndexedDB: false }); } catch { /* fall through */ }
     }
