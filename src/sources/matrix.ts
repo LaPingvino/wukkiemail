@@ -11,7 +11,7 @@
 // to be observable end-to-end before we add caching layers.
 
 import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { ClientEvent, MatrixEvent, MatrixEventEvent, NotificationCountType } from 'matrix-js-sdk';
+import { ClientEvent, MatrixEvent, MatrixEventEvent, NotificationCountType, RoomEvent } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent.js';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager.js';
 import { MatrixRTCSessionEvent, type MatrixRTCSession } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession.js';
@@ -1084,6 +1084,10 @@ export class MatrixSource implements Source {
     // Typing indicators don't fire on the generic 'sync' event; hook
     // RoomMember.typing directly so RoomPanel re-renders.
     client.on('RoomMember.typing' as never, (() => this.notify()) as never);
+    // Re-render the open room the instant a message is sent (local echo) and on
+    // each status change (sending → sent / not_sent), not only when the server
+    // echo arrives via sync — otherwise a just-sent message appears to vanish.
+    client.on(RoomEvent.LocalEchoUpdated as never, (() => this.notify()) as never);
     // start() resolves now — UI can render whatever rooms are available,
     // and re-render as the sync stream lands more.
   }
@@ -2808,7 +2812,16 @@ export class MatrixSource implements Source {
     const room = this.client.getRoom(roomId);
     if (!room) return null;
     const messages: TimelineMessage[] = [];
-    const all = room.getLiveTimeline().getEvents();
+    const live = room.getLiveTimeline().getEvents();
+    // Local-echo (pending) events are DETACHED from the live timeline under the
+    // SDK's pending-event ordering, so a just-sent message would be invisible
+    // until the server echoes it back — it looked like the message vanished into
+    // the ether. Merge the pending queue in (deduped; they sort newest, after the
+    // live events) so it shows immediately, flagged `pending` for a "sending" look
+    // until the real echo replaces it.
+    const pending = room.getPendingEvents?.() ?? [];
+    const liveIds = new Set(live.map((e) => e.getId()));
+    const all = pending.length ? [...live, ...pending.filter((e) => !liveIds.has(e.getId()))] : live;
     const selfId = this.client.getUserId() ?? '';
 
     // Edits index: targetEventId -> latest replacement content. We pick
@@ -2930,6 +2943,8 @@ export class MatrixSource implements Source {
         body: isReply ? stripReplyFallback(rawBody) : rawBody,
         ts: ev.getTs(),
         msgtype,
+        // Still in flight (local echo) — shown muted until the server echo lands.
+        pending: st === 'sending' || st === 'queued' || undefined,
       };
       // Inline media: thumbnail-size HTTPS URL via mxcUrlToHttp. Encrypted
       // rooms carry content.file (an EncryptedFile) instead of content.url;
@@ -3147,6 +3162,7 @@ export interface TimelineMessage {
   body: string;
   ts: number;
   msgtype: string;
+  pending?: boolean; // local echo still sending/queued — render muted until the server echo replaces it
   image?: { url: string; alt: string; w?: number; h?: number; encrypted?: EncryptedFile; sticker?: boolean };
   file?: { url: string; name: string; mimetype?: string; size?: number; encrypted?: EncryptedFile };
   reactions?: { key: string; count: number; selfReacted: boolean }[];

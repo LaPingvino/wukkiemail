@@ -555,10 +555,15 @@ export function RoomPanel({
         ) : (
           <ul className="comment-list">
             {snap.messages.map((m, i) => (
-              <li key={m.id} data-msg-idx={i} className={i === msgCursor ? 'msg-cursor' : undefined}>
+              <li
+                key={m.id}
+                data-msg-idx={i}
+                className={[i === msgCursor ? 'msg-cursor' : '', m.pending ? 'msg-pending' : ''].filter(Boolean).join(' ') || undefined}
+                style={m.pending ? { opacity: 0.55 } : undefined}
+              >
                 <div className="comment-head">
                   <strong>{m.senderName}</strong>
-                  <span className="ts">{new Date(m.ts).toLocaleString()}</span>
+                  <span className="ts">{m.pending ? 'Sending…' : new Date(m.ts).toLocaleString()}</span>
                 </div>
                 {m.image && m.image.encrypted ? (
                   <EncryptedImage matrix={matrix} file={m.image.encrypted} alt={m.image.alt} sticker={m.image.sticker} />
