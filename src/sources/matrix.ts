@@ -674,12 +674,28 @@ export class MatrixSource implements Source {
   // class as the m.direct bug, one type at a time.
   private async commitAccountData(type: string, content: Record<string, unknown>): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.setAccountData(type as never, content as never);
+    // Reflect locally FIRST, so getAccountData is immediately authoritative. Under
+    // sliding sync client.setAccountData blocks until the server ECHOES the write
+    // (a whole poll cycle, ~3s); if we only stored locally after that await — as
+    // this did — a routine sync notify in the gap fires the inbox refresh(), which
+    // re-reads the still-stale store and REVERTS the optimistic change. That's why
+    // "hide this bundle" popped straight back up: the hide was undone a frame later
+    // by a refresh reading account data that hadn't updated yet.
     const prev = this.client.getAccountData(type as never);
     const ev = new MatrixEvent({ type, content });
     this.client.store.storeAccountDataEvents([ev]);
     this.client.emit(ClientEvent.AccountData, ev, prev ?? undefined);
     this.notify();
+    // Then persist to the server. client.setAccountData would now no-op (the local
+    // store already matches its deep-compare) AND it waits for the echo — so PUT
+    // directly. A transient failure keeps the local value; the next successful write
+    // or the server echo reconciles.
+    try {
+      await this.client.setAccountDataRaw(type as never, content as never);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] account-data PUT failed; kept local value', e);
+    }
   }
 
   // Delete the Rust crypto IndexedDB stores for a given store prefix. Used to
