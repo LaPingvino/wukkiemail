@@ -1888,25 +1888,38 @@ export class MatrixSource implements Source {
   // it via sync, so each iteration reads stale state and the last write wins —
   // which is why "mark all" used to land on only one item.
   async setManuallyUnreadBatch(itemIds: string[], unread: boolean): Promise<void> {
-    const s = this.getTriageState();
-    const set = new Set(s.manuallyUnread);
-    for (const id of itemIds) { if (unread) set.add(id); else set.delete(id); }
-    await this.setTriageState({ ...s, manuallyUnread: [...set] });
+    await this.mutateTriage((s) => {
+      const set = new Set(s.manuallyUnread);
+      for (const id of itemIds) { if (unread) set.add(id); else set.delete(id); }
+      return { ...s, manuallyUnread: [...set] };
+    });
   }
 
   async setSnoozedBatch(itemIds: string[], untilMs: number | null): Promise<void> {
-    const s = this.getTriageState();
-    const snoozed = { ...s.snoozed };
-    for (const id of itemIds) {
-      if (untilMs && untilMs > Date.now()) snoozed[id] = untilMs;
-      else delete snoozed[id];
-    }
-    await this.setTriageState({ ...s, snoozed });
+    await this.mutateTriage((s) => {
+      const snoozed = { ...s.snoozed };
+      for (const id of itemIds) {
+        if (untilMs && untilMs > Date.now()) snoozed[id] = untilMs;
+        else delete snoozed[id];
+      }
+      return { ...s, snoozed };
+    });
   }
 
   private async setTriageState(next: TriageState): Promise<void> {
     if (!this.client) throw new Error('client not started');
     await this.commitAccountData(TRIAGE_EVENT_TYPE, next as unknown as Record<string, unknown>);
+  }
+
+  // Read-modify-write the triage blob, gated on the config seed so the merge base
+  // is server-authoritative — otherwise a pin/snooze/mark-unread in the pre-seed
+  // boot window (these are reachable straight from an inbox row) merges against an
+  // empty local copy and the PUT wipes the rest of the user's triage. See
+  // ensureConfigSeeded.
+  private async mutateTriage(fn: (s: TriageState) => TriageState): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.ensureConfigSeeded();
+    await this.setTriageState(fn(this.getTriageState()));
   }
 
   // Pinning a Matrix room maps to the standard m.favourite room tag, so it's
@@ -1932,18 +1945,20 @@ export class MatrixSource implements Source {
         console.warn('[wukkiemail] setRoomTag favourite failed, falling back to triage', e);
       }
     }
-    const s = this.getTriageState();
-    const set = new Set(s.pinned);
-    if (pinned) set.add(itemId); else set.delete(itemId);
-    await this.setTriageState({ ...s, pinned: [...set] });
+    await this.mutateTriage((s) => {
+      const set = new Set(s.pinned);
+      if (pinned) set.add(itemId); else set.delete(itemId);
+      return { ...s, pinned: [...set] };
+    });
   }
 
   async setSnoozed(itemId: string, untilMs: number | null): Promise<void> {
-    const s = this.getTriageState();
-    const snoozed = { ...s.snoozed };
-    if (untilMs && untilMs > Date.now()) snoozed[itemId] = untilMs;
-    else delete snoozed[itemId];
-    await this.setTriageState({ ...s, snoozed });
+    await this.mutateTriage((s) => {
+      const snoozed = { ...s.snoozed };
+      if (untilMs && untilMs > Date.now()) snoozed[itemId] = untilMs;
+      else delete snoozed[itemId];
+      return { ...s, snoozed };
+    });
   }
 
   // Verify this device with an existing recovery key (e.g. signed in
