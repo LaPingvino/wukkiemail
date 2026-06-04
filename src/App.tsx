@@ -1155,6 +1155,11 @@ function Inbox({
     const seen = new Set<string>();
     const pushUnread = (it: InboxItem) => {
       if (!it.unread) return;
+      // Skip rooms that are unread but would open to an EMPTY window: their unread
+      // is only non-rendering events (state/reactions/redactions/UTD), so they
+      // aren't useful "next unread" targets. Invites count (Accept/Decline UI);
+      // non-chat items (unreadHasText undefined) are left as-is.
+      if (it.unreadHasText === false && !it.invite) return;
       const r = itemRoomId(it.id);
       if (r && !seen.has(r)) { seen.add(r); ids.push(r); }
     };

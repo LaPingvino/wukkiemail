@@ -619,9 +619,10 @@ export class MatrixSource implements Source {
   // notify so the inbox re-reads. Idempotent — ensureAccountData leaves anything
   // already present locally untouched. Sliding-sync only; classic /sync rehydrates
   // account data itself.
+  private seedConfigPromise: Promise<void> | null = null;
   private seedConfigAccountData(): void {
     if (!this.slidingSync) return;
-    void (async () => {
+    this.seedConfigPromise = (async () => {
       const types = [
         TRIAGE_EVENT_TYPE,
         VIEWS_EVENT_TYPE,
@@ -641,6 +642,19 @@ export class MatrixSource implements Source {
       }
       this.notify();
     })();
+  }
+
+  // Config writers merge a change onto the LOCAL account-data blob. On a restored
+  // sliding-sync pos Continuwuity resends NONE of it, so until seedConfigAccountData
+  // has pulled it from the server the local copy is empty — and a write in that
+  // window would merge against nothing and PUT an empty blob, silently wiping the
+  // user's saved bundles / pins / views server-side. Gate config writes on the seed
+  // so the merge base is always server-authoritative. No-op once seeded, and on
+  // classic sync (which rehydrates account data itself).
+  private async ensureConfigSeeded(): Promise<void> {
+    if (!this.slidingSync) return;
+    if (!this.seedConfigPromise) this.seedConfigAccountData();
+    try { await this.seedConfigPromise; } catch { /* best-effort; writer still PUTs */ }
   }
 
   // Read the AUTHORITATIVE account-data value before a read-modify-write. Under
@@ -1822,18 +1836,21 @@ export class MatrixSource implements Source {
 
   async setManualBundles(bundles: ManualBundle[]): Promise<void> {
     if (!this.client) throw new Error('client not started');
+    await this.ensureConfigSeeded();
     const { hidden, pinned } = this.getBundlesContent();
     await this.commitAccountData(BUNDLES_EVENT_TYPE, { bundles, hidden, pinned });
   }
 
   async setHiddenBundles(hidden: string[]): Promise<void> {
     if (!this.client) throw new Error('client not started');
+    await this.ensureConfigSeeded();
     const { bundles, pinned } = this.getBundlesContent();
     await this.commitAccountData(BUNDLES_EVENT_TYPE, { bundles, hidden, pinned });
   }
 
   async setPinnedBundle(key: string, pinned: boolean): Promise<void> {
     if (!this.client) throw new Error('client not started');
+    await this.ensureConfigSeeded();
     const cur = this.getBundlesContent();
     const set = new Set(cur.pinned);
     if (pinned) set.add(key); else set.delete(key);
@@ -3151,6 +3168,23 @@ function computePriority(room: Room, flavor: string, isDm: boolean, isUnread: bo
   return p;
 }
 
+// Would this event render visible content in the room view? "Next unread"
+// navigation uses this to skip rooms whose unread is only non-rendering events
+// (state changes, reactions, redactions, or undecryptable messages) — landing on
+// one shows an empty window. Only message/sticker events with actual content count.
+function rendersInRoomView(ev: MatrixEvent): boolean {
+  if (ev.isState()) return false;
+  if (ev.isRedacted?.()) return false;
+  if (ev.isDecryptionFailure?.()) return false; // UTD — nothing to show
+  const type = ev.getType();
+  if (type === 'm.sticker') return true;
+  if (type === 'm.room.message') {
+    const body = (ev.getContent() as { body?: string }).body;
+    return typeof body === 'string' && body.length > 0;
+  }
+  return false; // reactions, receipts, call.member, membership, etc.
+}
+
 function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], client?: MatrixClient, weights: PriorityWeights = DEFAULT_WEIGHTS): InboxItem | null {
   const memberIds = room.getJoinedMembers().map((m) => m.userId);
   const flavor = flavorForRoomMembers(memberIds.filter((id) => id !== selfId));
@@ -3237,6 +3271,19 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // message loaded, then flipped them back on open (read-receipt race).
   const notifs = room.getUnreadNotificationCount?.() ?? 0;
   const highlights = room.getUnreadNotificationCount?.('highlight' as never) ?? 0;
+  // Does the unread portion contain anything the room view renders? Scan the
+  // loaded timeline back to this user's read marker; stop at the first renderable
+  // message. If the unread is only state/reactions/redactions/UTD, the room would
+  // open to an empty window, so "next unread" should skip it (see unreadHasText).
+  let unreadHasText = false;
+  if (notifs > 0) {
+    const readUpTo = selfId ? room.getEventReadUpTo(selfId) : null;
+    for (let i = live.length - 1; i >= 0; i -= 1) {
+      const ev = live[i];
+      if (readUpTo && ev.getId() === readUpTo) break; // reached read marker — rest is read
+      if (rendersInRoomView(ev)) { unreadHasText = true; break; }
+    }
+  }
   const presenceRaw = client?.getUser(senderId)?.presence;
   const senderPresence = (presenceRaw === 'online' || presenceRaw === 'unavailable' || presenceRaw === 'offline')
     ? presenceRaw : undefined;
@@ -3268,6 +3315,7 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     // a big priority bump to float to the top.
     unread: isInvite || notifs > 0,
     unreadCount: notifs,
+    unreadHasText,
     invite: isInvite || undefined,
     threadCount: live.length,
     priority: computePriority(room, flavor, isDm, notifs > 0, highlights > 0, lastTs, senderId, weights, catAdjust) + (isInvite ? 50 : 0),

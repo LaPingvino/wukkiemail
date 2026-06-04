@@ -26,6 +26,13 @@ export interface InboxItem {
   ts: number;            // ms epoch of most recent activity
   unread: boolean;
   unreadCount?: number;  // number of unread notifications (for "most unread" ordering); 0/absent when read
+  // Does the UNREAD portion contain something the room view actually renders
+  // (a message/sticker), vs only non-rendering events (state, reactions,
+  // redactions, undecryptable)? Drives "next unread" navigation: a room that is
+  // unread but would open to an EMPTY window is skipped as a next-unread target.
+  // Undefined for non-chat items (treated as renderable). Invites render their
+  // own Accept/Decline UI, so they count regardless of this flag.
+  unreadHasText?: boolean;
   invite?: boolean;      // a pending invite (you're invited but haven't joined) — shows Accept/Decline
   joinable?: boolean;    // a room listed in a space you're in but haven't joined — shows Join
   threadCount: number;
