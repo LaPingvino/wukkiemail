@@ -1200,7 +1200,12 @@ function Inbox({
     // Pinned pinned to the very top; Snoozed + Other to the bottom.
     const pinnedNode = pinnedItems.length > 0 ? mkNode('pinned', 'Pinned', pinnedItems) : null;
     const snoozedNode = snoozedItems.length > 0 ? mkNode('snoozed', 'Snoozed', snoozedItems) : null;
-    const otherNode = (otherItems.length > 0 || hiddenBundles.length > 0) ? mkNode('other', 'Other', otherItems) : null;
+    // "Other" is itself an auto-synthesized bundle — mark it virtual for
+    // consistency with the quiet/updates folds. It KEEPS its dedicated icon and
+    // its fixed bottom placement: it holds bundles the user explicitly hid, so
+    // de-emphasising it is intentional — folding it into the priority sort would
+    // resurface exactly what they chose to bury.
+    const otherNode = (otherItems.length > 0 || hiddenBundles.length > 0) ? { ...mkNode('other', 'Other', otherItems), virtual: true } : null;
 
     // Bundle-level pin: a pinned bundle floats to the top as a unit (its
     // items stay inside it), as opposed to per-item pinning which dissolves
