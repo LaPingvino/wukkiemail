@@ -15,6 +15,21 @@ import { CollapsibleBody } from './CollapsibleBody';
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Shared look for the muted, full-width "tap to retry" timeline markers (start
+// of room / empty room). Under sliding sync an empty or bottomed-out view is
+// often just a not-yet-arrived pagination token, so both are clickable retries.
+const RETRY_MARKER_STYLE: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  background: 'none',
+  border: 'none',
+  color: 'var(--muted)',
+  fontSize: 12,
+  textAlign: 'center',
+  margin: '8px 0',
+  padding: 4,
+};
+
 // Lazily fetch + decrypt an E2EE image into a blob URL, revoking on unmount.
 function EncryptedImage({ matrix, file, alt, sticker }: { matrix: MatrixSource; file: import('./media').EncryptedFile; alt: string; sticker?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -586,24 +601,21 @@ export function RoomPanel({
             onClick={() => void retryOlder()}
             disabled={loadingOlder}
             title="Sliding sync may not have loaded all history yet — tap to check for earlier messages"
-            style={{
-              display: 'block',
-              width: '100%',
-              background: 'none',
-              border: 'none',
-              cursor: loadingOlder ? 'default' : 'pointer',
-              color: 'var(--muted)',
-              fontSize: 12,
-              textAlign: 'center',
-              margin: '8px 0',
-              padding: 4,
-            }}
+            style={{ ...RETRY_MARKER_STYLE, cursor: loadingOlder ? 'default' : 'pointer' }}
           >
             {loadingOlder ? 'Checking for earlier messages…' : '— start of room — (tap to retry)'}
           </button>
         )}
         {snap.messages.length === 0 ? (
-          <p style={{ color: 'var(--muted)' }}>No messages.</p>
+          <button
+            type="button"
+            onClick={() => void retryOlder()}
+            disabled={loadingOlder}
+            title="Sliding sync may not have loaded this room's messages yet — tap to retry"
+            style={{ ...RETRY_MARKER_STYLE, cursor: loadingOlder ? 'default' : 'pointer' }}
+          >
+            {loadingOlder ? 'Checking for messages…' : 'No messages — tap to retry'}
+          </button>
         ) : (
           <ul className="comment-list">
             {snap.messages.map((m, i) => (
