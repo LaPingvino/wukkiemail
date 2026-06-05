@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef, useDeferredValue } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, useTransition } from 'react';
 import type { BundleSpec, ItemFlavor } from './sources/types';
 import type { MessageHit } from './search';
 import { parseQuery, matchItem, EMPTY_FILTER, isEmptyFilter } from './filter';
@@ -152,12 +152,24 @@ function ConnectScreen({
 // components emit native 'input' events but expose .value as a property,
 // so a ref-attached listener is the simplest bridge.
 function fieldRef(setter: (v: string) => void) {
+  // Inline ref callbacks are re-run on EVERY render (React calls the old one
+  // with null, then the new one with the node). The previous version added an
+  // 'input' listener each time and never removed it, so handlers piled up
+  // unboundedly — every keystroke ended up firing N stale handlers and queuing
+  // N setStates, getting slower the longer the field lived. Track and remove the
+  // listener on cleanup so there is always exactly one.
+  let bound: { el: HTMLElement; handler: (ev: Event) => void } | null = null;
   return (el: HTMLElement | null) => {
+    if (bound) {
+      bound.el.removeEventListener('input', bound.handler);
+      bound = null;
+    }
     if (!el) return;
     const handler = (ev: Event) => {
       setter((ev.target as HTMLInputElement & { value: string }).value);
     };
     el.addEventListener('input', handler);
+    bound = { el, handler };
   };
 }
 
@@ -298,11 +310,27 @@ function Inbox({
   const [syncing, setSyncing] = useState(true);
   // The bundled stream is the only view now; bundle scoping is always 'all'.
   const bundle: BundleKey = 'all';
+  // `query` drives all the heavy filtering. It is updated ONLY inside a
+  // transition (setSearch below), and the search input is UNCONTROLLED (no
+  // value={query}) — so a keystroke does zero blocking React work: the browser
+  // owns the text natively, and the filtered-list re-render runs as an
+  // interruptible transition that yields the main thread back to your typing.
+  // Nothing in a render can stall the box. The clear/chip paths set the field's
+  // value imperatively (the field is the source of truth for its text).
   const [query, setQuery] = useState('');
-  // Heavy filtering (visible/bundled recompute + list re-render) runs on the
-  // deferred value so typing in the search box stays responsive — the input
-  // updates immediately; results catch up at lower priority.
-  const deferredQuery = useDeferredValue(query);
+  const [, startSearch] = useTransition();
+  // Update the search query off the typing hot path. Coalesces automatically:
+  // fast keystrokes keep restarting the transition, so the list only settles
+  // once typing slows — self-debouncing and fully interruptible.
+  const setSearch = useCallback((v: string) => { startSearch(() => setQuery(v)); }, []);
+  // Programmatic search changes (clear button, Escape, filter chips). The field
+  // is uncontrolled, so we must push the text in imperatively, then update the
+  // filter through the same transition.
+  const applySearch = useCallback((v: string) => {
+    const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null;
+    if (f) f.value = v;
+    setSearch(v);
+  }, [setSearch]);
   const [msgHits, setMsgHits] = useState<MessageHit[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<{ roomId: string; issueId: string } | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
@@ -563,7 +591,7 @@ function Inbox({
   // sender); room-level predicates (is:/flavor:/status:/in:) post-filter the
   // hits against live items. Debounced; cleared when there's nothing to run.
   useEffect(() => {
-    const f = parseQuery(deferredQuery);
+    const f = parseQuery(query);
     if (!matrixSrc || (f.text.length === 0 && f.from.length === 0)) { setMsgHits([]); return; }
     let cancelled = false;
     const t = setTimeout(() => {
@@ -585,7 +613,7 @@ function Inbox({
         .catch(() => { if (!cancelled) setMsgHits([]); });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [deferredQuery, matrixSrc, items, selfMxid]);
+  }, [query, matrixSrc, items, selfMxid]);
 
   // Android back / browser back closes the topmost modal-ish layer
   // instead of leaving the SPA. Each open pushes a history state; popstate
@@ -718,9 +746,9 @@ function Inbox({
   // Parse the search box through the shared filter system, so the box
   // understands is:unread / flavor:x / from: / status: / is:mine alongside
   // free text — the same predicates bundles will be built from.
-  const parsedQuery = useMemo(() => parseQuery(deferredQuery), [deferredQuery]);
+  const parsedQuery = useMemo(() => parseQuery(query), [query]);
   const visible = useMemo(() => {
-    const q = deferredQuery.trim();
+    const q = query.trim();
     return items.filter((it) => {
       const isSnoozed = it.bundles.includes('snoozed');
       // Read filter for messages; never for snoozed items (they live in the
@@ -739,7 +767,7 @@ function Inbox({
       if (!q) return true;
       return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, deferredQuery, parsedQuery, readFilter, selfMxid]);
+  }, [items, query, parsedQuery, readFilter, selfMxid]);
 
   // Read-INCLUSIVE counterpart, used only by the bundled accordion so each
   // bundle can apply its own read filter (the memo narrows per node, defaulting
@@ -747,12 +775,12 @@ function Inbox({
   // keyboard nav, the flat search view and the empty check, so their behavior
   // is unchanged. Search filtering is identical; only the read step differs.
   const visibleStream = useMemo(() => {
-    const q = deferredQuery.trim();
+    const q = query.trim();
     return items.filter((it) => {
       if (!q) return true;
       return matchItem(parsedQuery, it, { selfMxid });
     });
-  }, [items, deferredQuery, parsedQuery, selfMxid]);
+  }, [items, query, parsedQuery, selfMxid]);
 
   // Per-section/per-bundle display filter for tasks (status chips + Mine).
   // Applied at render so the controlling chips never vanish with their items.
@@ -857,7 +885,7 @@ function Inbox({
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
         if (selectedEmail) { setSelectedEmail(null); return; }
-        if (query) { setQuery(''); return; }
+        if (query) { applySearch(''); return; }
       }
       // When a chat / task / email panel or any modal is open, IT owns the
       // keyboard (RoomPanel drives its own arrow nav). Don't also move the
@@ -961,7 +989,7 @@ function Inbox({
     // bundle tree — so don't pay the (expensive) tree build, sorting and space
     // resolution on every keystroke. This was the main cause of search lag on
     // large accounts.
-    if (deferredQuery.trim()) return { loose: [] as InboxItem[], groups: [] as BundleNode[] };
+    if (query.trim()) return { loose: [] as InboxItem[], groups: [] as BundleNode[] };
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
     const hiddenSet = new Set(hiddenBundles);
     const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
@@ -1122,7 +1150,7 @@ function Inbox({
       ] as BundleNode[],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleStream, readFilter, bundleFilters, spaceBundles, mailBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, deferredQuery]);
+  }, [visibleStream, readFilter, bundleFilters, spaceBundles, mailBundles, spaceTree, matrixSrc, items, manualBundles, hiddenBundles, pinnedBundleKeys, selfMxid, query]);
 
   // Message rooms in the exact order they appear in the stream (loose, then
   // each bundle's items, recursing into nested spaces; Snoozed excluded).
@@ -1586,8 +1614,7 @@ function Inbox({
             <md-outlined-text-field
               label="Search"
               placeholder="Search — try is:unread or flavor:whatsapp"
-              value={query}
-              ref={fieldRef((v) => setQuery(v))}
+              ref={fieldRef((v) => setSearch(v))}
               style={{ flex: 1 }}
             />
             {query && (
@@ -1595,7 +1622,7 @@ function Inbox({
                 type="button"
                 className="hamburger"
                 aria-label="Clear search"
-                onClick={() => { setQuery(''); const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null; if (f) f.value = ''; }}
+                onClick={() => applySearch('')}
               >
                 <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
@@ -1616,11 +1643,7 @@ function Inbox({
               <QueryChips
                 query={query}
                 flavors={presentFlavors}
-                onChange={(q) => {
-                  setQuery(q);
-                  const f = document.querySelector('.toolbar md-outlined-text-field') as (HTMLElement & { value: string }) | null;
-                  if (f) f.value = q;
-                }}
+                onChange={(q) => applySearch(q)}
               />
             </div>
           )}
@@ -1670,7 +1693,7 @@ function Inbox({
             {(() => {
               const rendered: React.ReactNode[] = [];
               let idx = 0;
-              const isBundled = bundle === 'all' && !deferredQuery.trim();
+              const isBundled = bundle === 'all' && !query.trim();
 
               if (isBundled) {
                 // Config bundle at the very top — folds open to settings +
