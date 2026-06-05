@@ -9,3 +9,9 @@ dist/
 .vscode/
 .idea/
 package-lock.json
+
+# Stray compiled output: the src tree is all TypeScript. The old build ran
+# `tsc -b` (no noEmit), which emitted .js next to every .tsx; the build now
+# uses `tsgo --noEmit` so this shouldn't recur, but guard against it.
+/src/**/*.js
+/src/**/*.js.map
