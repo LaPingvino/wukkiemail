@@ -11,7 +11,7 @@
 // to be observable end-to-end before we add caching layers.
 
 import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { ClientEvent, MatrixEvent, MatrixEventEvent, NotificationCountType, RoomEvent } from 'matrix-js-sdk';
+import { ClientEvent, MatrixEvent, MatrixEventEvent, NotificationCountType, PendingEventOrdering, RoomEvent } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent.js';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager.js';
 import { MatrixRTCSessionEvent, type MatrixRTCSession } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession.js';
@@ -1012,6 +1012,13 @@ export class MatrixSource implements Source {
       const explicit = forceSliding && !forceClassic ? SlidingSync.create(client, {}) : undefined;
       await client.startClient({
         threadSupport: true,            // organise m.thread relations into threads
+        // Detached: local echoes live in room.getPendingEvents() instead of being
+        // spliced into the live timeline. getRoomTimeline + cancelFailedEvents call
+        // getPendingEvents(), which THROWS under the default 'chronological'
+        // ("Cannot call getPendingEvents with pendingEventOrdering == chronological")
+        // — that crashed the room view on restore. Makes the client match the
+        // assumption the timeline code already documented.
+        pendingEventOrdering: PendingEventOrdering.Detached,
         slidingSync: explicit,          // forced instance, if any (else undefined)
         autoSlidingSync: !forceClassic, // else let the SDK feature-detect
         // Classic-sync fallback tuning — ONLY on the classic path, never under
