@@ -201,6 +201,14 @@ const stableItemCmp = (a: InboxItem, b: InboxItem): number =>
   || (Math.floor(b.ts / DAY_MS) - Math.floor(a.ts / DAY_MS))
   || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
+// "Quiet" = read and not an invite — nothing is waiting on you. These are the
+// rooms the virtual fold compresses and the read-sink pushes down.
+const isQuietItem = (it: InboxItem): boolean => !it.unread && !it.invite;
+// Minimum quiet rooms before they fold into a collapsed "quiet conversations"
+// bundle (run-length hysteresis, mirroring the chat fold's "don't fold a single
+// event" rule). Below this they stay visible as ordinary rows.
+const QUIET_FOLD_MIN = 3;
+
 // Bundles are now keyed by string. Standard keys: 'all', 'dm',
 // 'flavor:<flavor>', 'space:<roomId>'. Source-provided space bundles
 // arrive via matrixSrc.listBundles().
@@ -248,6 +256,8 @@ interface BundleNode {
   count: number;        // incl. descendants
   children: BundleNode[];
   pinned?: boolean;     // bundle pinned as a unit → floats to the top intact
+  virtual?: boolean;    // auto-synthesized (e.g. the "quiet conversations" fold), not a structural/manual bundle
+  priority?: number;    // collective priority (max member) — drives unified ordering (phase 3); undefined for structural bundles
 }
 
 // All items in a bundle, including nested spaces — bundle-level actions
@@ -1150,13 +1160,41 @@ function Inbox({
     // items stay inside it), as opposed to per-item pinning which dissolves
     // members into the synthetic Pinned bundle above. Only manual/auto/space
     // bundles can be bundle-pinned; the synthetic pinned/snoozed/other can't.
+    // ── Read-sink + virtual "quiet conversations" fold (experimental, phase 1) ──
+    // Top-level rooms no longer sit unconditionally above every bundle: the fully
+    // -read tail of the loose list folds into one collapsible virtual bundle that
+    // sinks with the other read bundles, so when the top is all read the unread
+    // bundles rise to where you're looking. Small quiet tails (< QUIET_FOLD_MIN)
+    // stay inline rather than fold (run-length hysteresis, like the chat fold).
+    const looseActive = looseRead.filter((it) => !isQuietItem(it));
+    const looseQuiet = looseRead.filter((it) => isQuietItem(it));
+    const fold = looseQuiet.length >= QUIET_FOLD_MIN;
+    const looseVisible = fold ? looseActive : looseRead;
+    const quietNode: BundleNode | null = fold
+      ? {
+        key: 'virtual:quiet',
+        label: `${looseQuiet.length} quiet conversation${looseQuiet.length === 1 ? '' : 's'}`,
+        flavor: 'matrix',
+        items: looseQuiet,
+        unread: 0,
+        count: looseQuiet.length,
+        children: [],
+        virtual: true,
+        priority: looseQuiet[0]?.priority,
+      }
+      : null;
+
     const pinnedKeySet = new Set(pinnedBundleKeys);
-    const middle = [...manualList, ...autoTop].map((n) =>
+    const middle = [...manualList, ...autoTop, ...(quietNode ? [quietNode] : [])].map((n) =>
       (pinnedKeySet.has(n.key) ? { ...n, pinned: true } : n));
     const pinnedMiddle = middle.filter((n) => n.pinned);
     const restMiddle = middle.filter((n) => !n.pinned);
+    // Read-sink: bundles with unread float above fully-read ones. Array.sort is
+    // stable, so the prior order is preserved WITHIN each tier (manual order, then
+    // autos by unread). The virtual quiet bundle (unread 0) lands in the read tier.
+    restMiddle.sort((a, b) => (a.unread > 0 ? 0 : 1) - (b.unread > 0 ? 0 : 1));
     return {
-      loose: looseRead,
+      loose: looseVisible,
       groups: [
         ...(pinnedNode ? [pinnedNode] : []),
         ...pinnedMiddle,
@@ -1542,6 +1580,7 @@ function Inbox({
               const ic = g.key === 'pinned' ? 'push_pin'
                 : g.key === 'snoozed' ? 'schedule'
                 : g.key === 'other' ? 'inbox'
+                : g.virtual ? 'unfold_more'
                 : g.manual ? 'bookmark'
                 : g.children.length > 0 ? 'folder' : null;
               return ic
