@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './ErrorBoundary';
 import './material'; // side-effect: register Material Web custom elements
 import './styles.css';
 
@@ -42,9 +43,22 @@ const root = document.getElementById('root');
 if (!root) throw new Error('no #root');
 createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );
+
+// Tell the boot watchdog (inline in index.html) that React mounted successfully,
+// so it clears its one-shot retry flag and a future failed boot can self-heal
+// again. Done on the next frame, after the first paint commits into #root.
+requestAnimationFrame(() => {
+  try {
+    sessionStorage.removeItem('wm:boot-retry');
+  } catch {
+    /* sessionStorage unavailable (private mode / disabled) — non-fatal */
+  }
+});
 
 // Register the service worker on idle so it doesn't fight first paint.
 // Production-only: dev server uses its own HMR which conflicts with SW.

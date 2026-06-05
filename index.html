@@ -17,6 +17,53 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Boot watchdog. Chrome's Memory/Data Saver discards a backgrounded tab;
+         on return it force-reloads, and the entry bundle's fetch can hard-fail
+         (503 from the SW) while the network is still cold on restore — leaving
+         #root empty = a blank white screen with no recovery. This self-heals
+         with ONE automatic reload (network is usually warm a beat later), then
+         falls back to a visible retry instead of white. Inline on purpose: an
+         external script would fail under the exact condition it guards against.
+         The flag is cleared by main.tsx once React mounts (requestAnimationFrame). -->
+    <script>
+      (function () {
+        var KEY = 'wm:boot-retry';
+        var GRACE = 10000; // allow a genuinely slow boot (crypto wasm on mobile) before acting
+        function rootEmpty() {
+          var r = document.getElementById('root');
+          return !r || r.childElementCount === 0;
+        }
+        function tried() {
+          try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+        }
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            if (!rootEmpty()) return; // booted fine; main.tsx clears the flag
+            if (!tried()) {
+              try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+              location.reload();
+              return;
+            }
+            // Second consecutive blank: stop (no reload loop) and show a retry.
+            var r = document.getElementById('root');
+            if (r) {
+              r.innerHTML =
+                '<div style="display:grid;gap:12px;place-content:center;min-height:100dvh;' +
+                'padding:24px;text-align:center;font:14px/1.5 system-ui,sans-serif;color:#e6e6e6;background:#111">' +
+                '<strong style="font-size:18px">WukkieMail couldn\'t load</strong>' +
+                '<p style="margin:0;color:#999">The network was unavailable while restoring. Try again.</p>' +
+                '<button id="wm-retry" style="justify-self:center;padding:8px 20px;border-radius:999px;border:none;' +
+                'cursor:pointer;background:#14b8a6;color:#04201c;font-weight:600">Retry</button></div>';
+              var b = document.getElementById('wm-retry');
+              if (b) b.addEventListener('click', function () {
+                try { sessionStorage.removeItem(KEY); } catch (e) {}
+                location.reload();
+              });
+            }
+          }, GRACE);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
