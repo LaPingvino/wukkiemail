@@ -1067,6 +1067,38 @@ function Inbox({
     // global value this reproduces the old visible-time filtering exactly.
     const readF = (key: string, xs: InboxItem[]) => xs.filter((it) => passesRead(it, scopedRead(key), false));
 
+    // ── Phase 3: bundles as elements with a collective priority + nested folds ──
+    // Collective priority = the max priority across a bundle's items and
+    // descendants, so a bundle is ranked by its hottest member ("treat as one
+    // element"). Used as the within-tier order in the unified sort below.
+    const nodePriority = (n: BundleNode): number => {
+      let p = -Infinity;
+      for (const it of n.items) if (it.priority > p) p = it.priority;
+      for (const c of n.children) { const cp = nodePriority(c); if (cp > p) p = cp; }
+      return p;
+    };
+    // Fold a bundle's OWN quiet (read) rooms into a nested "N quiet" child when
+    // there are enough (run-length hysteresis) — a busy space/flavour then shows
+    // its active rooms and tucks the quiet tail into one collapsible line. This is
+    // the in-chat event-fold, one level down.
+    const foldQuietWithin = (parentKey: string, items: InboxItem[]): { active: InboxItem[]; quietChild: BundleNode | null } => {
+      const quiet = items.filter(isQuietItem);
+      if (quiet.length < QUIET_FOLD_MIN) return { active: items, quietChild: null };
+      return {
+        active: items.filter((it) => !isQuietItem(it)),
+        quietChild: {
+          key: `virtual:quiet:${parentKey}`,
+          label: `${quiet.length} quiet`,
+          flavor: 'matrix',
+          items: quiet,
+          unread: 0,
+          count: quiet.length,
+          children: [],
+          virtual: true,
+        },
+      };
+    };
+
     // Manual bundles first, in user order, always present.
     const manualList: BundleNode[] = manualBundles.map((b) => {
       const gItems = sortItems(readF(`manual:${b.id}`, groups.get(`manual:${b.id}`) ?? []));
@@ -1096,10 +1128,13 @@ function Inbox({
       else { roots.push(s.id); }
     }
     const buildSpace = (id: string): BundleNode => {
-      const direct = sortItems(readF(`space:${id}`, groups.get(`space:${id}`) ?? []));
+      const directAll = sortItems(readF(`space:${id}`, groups.get(`space:${id}`) ?? []));
       groups.delete(`space:${id}`);
-      const children = (childrenOf.get(id) ?? []).map(buildSpace).filter((n) => n.count > 0);
-      children.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
+      const { active: direct, quietChild } = foldQuietWithin(`space:${id}`, directAll);
+      const spaceChildren = (childrenOf.get(id) ?? []).map(buildSpace).filter((n) => n.count > 0);
+      spaceChildren.sort((a, b) => (b.unread - a.unread) || (b.count - a.count) || a.label.localeCompare(b.label));
+      // Child spaces first, then this space's own quiet fold at the bottom.
+      const children = quietChild ? [...spaceChildren, quietChild] : spaceChildren;
       const unread = unreadOf(direct) + children.reduce((s, c) => s + c.unread, 0);
       const count = direct.length + children.reduce((s, c) => s + c.count, 0);
       return { key: `space:${id}`, label: labelOf.get(id) ?? id, flavor: 'matrix', items: direct, unread, count, children };
@@ -1145,14 +1180,15 @@ function Inbox({
     // per-bundle read filter and drop any the filter emptied.
     const flatAuto: BundleNode[] = [...groups.entries()].map(([key, gItems]) => {
       const xs = sortItems(readF(key, gItems));
+      const { active, quietChild } = foldQuietWithin(key, xs);
       return {
         key,
         label: bundleLabel(key as BundleKey, [...spaceBundles, ...mailBundles]),
         flavor: (key.startsWith('flavor:') ? key.slice(7) : 'matrix') as ItemFlavor,
-        items: xs,
+        items: active,
         unread: unreadOf(xs),
         count: xs.length,
-        children: [],
+        children: quietChild ? [quietChild] : [],
       };
     }).filter((n) => n.count > 0);
 
@@ -1212,10 +1248,17 @@ function Inbox({
       (pinnedKeySet.has(n.key) ? { ...n, pinned: true } : n));
     const pinnedMiddle = middle.filter((n) => n.pinned);
     const restMiddle = middle.filter((n) => !n.pinned);
-    // Read-sink: bundles with unread float above fully-read ones. Array.sort is
-    // stable, so the prior order is preserved WITHIN each tier (manual order, then
-    // autos by unread). The virtual quiet bundle (unread 0) lands in the read tier.
-    restMiddle.sort((a, b) => (a.unread > 0 ? 0 : 1) - (b.unread > 0 ? 0 : 1));
+    // Unified order (phase 3): bundles compete as elements. Primary key is the
+    // tier (any unread → above fully-read), which gives the read-sink and is
+    // stable (a room rarely crosses it). Within a tier, order by collective
+    // priority (the bundle's hottest member), so the biggest/hottest pile bubbles
+    // up. Virtual quiet/updates bundles (unread 0) land in the read tier and sink.
+    const tierRank = (n: BundleNode) => (n.unread > 0 ? 0 : 1);
+    restMiddle.sort((a, b) =>
+      (tierRank(a) - tierRank(b))
+      || (nodePriority(b) - nodePriority(a))
+      || (b.count - a.count)
+      || a.label.localeCompare(b.label));
     return {
       loose: looseVisible,
       groups: [
