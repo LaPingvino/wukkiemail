@@ -308,11 +308,31 @@ export function RoomPanel({
     if (loadingOlder || !hasMore) return;
     setLoadingOlder(true);
     try {
-      const more = await matrix.loadOlder(roomId, 50);
+      const { more } = await matrix.loadOlder(roomId, 50);
       setHasMore(more);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[wukkiemail] loadOlder failed', e);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // Force a back-pagination even when we believe we're at the start. Under
+  // sliding sync the backward token often isn't ready when the room first
+  // opens, so the SDK reports "no more history" prematurely and we strand the
+  // user at a false "start of room". This bypasses the hasMore guard so the
+  // clickable marker can retry once the token has landed (usually by the time
+  // the user reads the marker and taps it).
+  const retryOlder = async () => {
+    if (loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const { more } = await matrix.loadOlder(roomId, 50);
+      if (more) setHasMore(true); // history appeared → the normal button returns
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wukkiemail] retry loadOlder failed', e);
     } finally {
       setLoadingOlder(false);
     }
@@ -326,7 +346,10 @@ export function RoomPanel({
   useEffect(() => { autoLoadCount.current = 0; }, [roomId, threadRootId]);
   useEffect(() => {
     if (!snap || threadRootId) return;             // threads scan the live timeline, no backfill
-    if (snap.messages.length >= 15) return;        // enough to fill the view
+    // Count only real messages — a window full of folded join/leave blocks
+    // shouldn't satisfy "enough to fill the view" and stop backfill early.
+    const realCount = snap.messages.reduce((n, m) => n + (m.kind === 'state' ? 0 : 1), 0);
+    if (realCount >= 15) return;                    // enough actual content to fill the view
     if (loadingOlder || !hasMore) return;
     if (autoLoadCount.current >= 4) return;         // ~200 events max, then stop
     autoLoadCount.current += 1;
@@ -546,15 +569,54 @@ export function RoomPanel({
           </button>
         )}
         {!hasMore && snap.messages.length > 0 && (
-          <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center', margin: '8px 0' }}>
-            — start of room —
-          </p>
+          <button
+            type="button"
+            onClick={() => void retryOlder()}
+            disabled={loadingOlder}
+            title="Sliding sync may not have loaded all history yet — tap to check for earlier messages"
+            style={{
+              display: 'block',
+              width: '100%',
+              background: 'none',
+              border: 'none',
+              cursor: loadingOlder ? 'default' : 'pointer',
+              color: 'var(--muted)',
+              fontSize: 12,
+              textAlign: 'center',
+              margin: '8px 0',
+              padding: 4,
+            }}
+          >
+            {loadingOlder ? 'Checking for earlier messages…' : '— start of room — (tap to retry)'}
+          </button>
         )}
         {snap.messages.length === 0 ? (
           <p style={{ color: 'var(--muted)' }}>No messages.</p>
         ) : (
           <ul className="comment-list">
             {snap.messages.map((m, i) => (
+              m.kind === 'state' ? (
+                <li key={m.id} className="state-fold" data-msg-idx={i}>
+                  {(m.stateCount ?? 1) <= 1 ? (
+                    <p className="state-line">{m.stateLines?.[0]}</p>
+                  ) : (
+                    <details className="state-details">
+                      <summary className="state-line">{m.stateCount} room changes</summary>
+                      <ul className="state-list">
+                        {m.stateLines?.map((line, j) => (
+                          // eslint-disable-next-line react/no-array-index-key
+                          <li key={j}>{line}</li>
+                        ))}
+                        {(m.stateCount ?? 0) > (m.stateLines?.length ?? 0) && (
+                          <li className="state-more">
+                            +{(m.stateCount ?? 0) - (m.stateLines?.length ?? 0)} more
+                          </li>
+                        )}
+                      </ul>
+                    </details>
+                  )}
+                </li>
+              ) : (
               <li
                 key={m.id}
                 data-msg-idx={i}
@@ -694,6 +756,7 @@ export function RoomPanel({
                   </div>
                 )}
               </li>
+              )
             ))}
           </ul>
         )}

@@ -1840,3 +1840,18 @@ body {
 /* Make Material Web buttons fit the layout */
 md-filled-button, md-outlined-button, md-text-button { width: 100%; }
 md-outlined-text-field { width: 100%; }
+
+/* Folded membership / room-state changes — quiet one-liners, not message cards.
+   Overrides the .comment-list li card chrome for these items. */
+.comment-list li.state-fold { background: none; padding: 2px 6px; border-radius: 0; }
+.state-fold .state-line { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+.state-fold summary.state-line { cursor: pointer; list-style: none; user-select: none; }
+.state-fold summary.state-line::-webkit-details-marker { display: none; }
+.state-fold summary.state-line::before { content: '▸ '; }
+.state-fold details[open] summary.state-line::before { content: '▾ '; }
+.state-fold .state-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.comment-list li.state-fold .state-list li {
+  background: none; padding: 1px 0; border-radius: 0;
+  font-size: 12px; color: var(--muted); text-align: center;
+}
+.state-fold .state-more { opacity: 0.7; font-style: italic; }

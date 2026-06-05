@@ -1311,16 +1311,37 @@ export class MatrixSource implements Source {
       .sort((a, b) => b.count - a.count);
   }
 
-  // Paginate the live timeline backwards by ~limit events. Resolves true
-  // if more history exists; false if we hit the start of the room. The
-  // SDK appends events to the existing timeline, so consumers re-render
-  // via the next sync/change tick.
-  async loadOlder(roomId: string, limit = 50): Promise<boolean> {
-    if (!this.client) return false;
+  // Paginate the live timeline backwards by ~limit events. Returns `more` (the
+  // SDK's "history may remain" flag) and `added` (how many events actually
+  // landed). The SDK appends to the existing timeline, so consumers re-render
+  // via the next change tick.
+  //
+  // Sliding-sync race: right after a room enters the window its backward
+  // pagination token often isn't populated yet, so the first paginate is a
+  // no-op — it returns false (→ a premature "start of room") OR true-but-empty
+  // (→ a "Load older" button that does nothing when clicked). Both symptoms are
+  // the same missing token. We give the sync a brief moment and retry a few
+  // times; if the token still hasn't arrived, the caller keeps a clickable
+  // affordance so the user can try again once it has.
+  async loadOlder(roomId: string, limit = 50): Promise<{ more: boolean; added: number }> {
+    if (!this.client) return { more: false, added: 0 };
     const room = this.client.getRoom(roomId);
-    if (!room) return false;
+    if (!room) return { more: false, added: 0 };
     const timeline = room.getLiveTimeline();
-    const more = await this.client.paginateEventTimeline(timeline, { backwards: true, limit });
+    const before = timeline.getEvents().length;
+    // Genuinely at the start (oldest loaded event is the room create) vs a
+    // missing token — only the latter is worth retrying. Without this, short
+    // rooms would spin ~1.5s on every "Load older" before admitting the obvious.
+    const atStart = () => timeline.getEvents()[0]?.getType() === 'm.room.create';
+    let more = await this.client.paginateEventTimeline(timeline, { backwards: true, limit });
+    let added = timeline.getEvents().length - before;
+    for (let i = 0; added === 0 && !atStart() && i < 3; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => { setTimeout(r, 500); });
+      // eslint-disable-next-line no-await-in-loop
+      more = await this.client.paginateEventTimeline(timeline, { backwards: true, limit });
+      added = timeline.getEvents().length - before;
+    }
     // Index the freshly-paginated history so older messages become findable.
     const roomName = room.name || room.roomId;
     const docs: MessageDoc[] = [];
@@ -1330,7 +1351,9 @@ export class MatrixSource implements Source {
     }
     void this.search.addMessages(docs);
     this.notify();
-    return more;
+    // Treat "events actually arrived" as proof more history exists, even if the
+    // SDK's flag says otherwise — so we never strand the user at a false bottom.
+    return { more: more || added > 0, added };
   }
 
   // ── Triage state (pin / snooze) via account data ────────────────────
@@ -2895,9 +2918,44 @@ export class MatrixSource implements Source {
       else { prev.count++; if (ets >= prev.latestTs) { prev.latestTs = ets; prev.latestEventId = eid; } }
     }
 
+    // Accumulator for a run of consecutive membership/state changes (newest-first,
+    // since the loop walks backwards). Flushed as ONE folded summary message when a
+    // real message interrupts the run or the loop ends. This is also why "Load
+    // older" through a window full of joins/leaves now shows something instead of
+    // silently adding nothing: the run becomes a visible one-line block.
+    let pendingState: { lines: string[]; count: number; ts: number; firstId: string } | null = null;
+    const flushState = () => {
+      if (!pendingState) return;
+      messages.push({
+        id: `state:${pendingState.firstId}`,
+        kind: 'state',
+        stateLines: pendingState.lines.slice().reverse(), // collected newest-first → chronological
+        stateCount: pendingState.count,
+        senderId: '',
+        senderName: '',
+        body: '',
+        msgtype: 'm.room.member',
+        ts: pendingState.ts,
+      });
+      pendingState = null;
+    };
+
     for (let i = all.length - 1; i >= 0 && messages.length < limit; i--) {
       const ev = all[i];
       const type = ev.getType();
+      // Fold membership / room-state changes into a one-line summary rather than
+      // dropping them. Not in thread view (threads show only message events).
+      if (!threadRootId && SUMMARIZABLE_STATE.has(type)) {
+        const line = formatStateEvent(ev, room);
+        if (line) {
+          if (!pendingState) {
+            pendingState = { lines: [], count: 0, ts: ev.getTs(), firstId: ev.getId() ?? String(ev.getTs()) };
+          }
+          pendingState.count += 1;
+          if (pendingState.lines.length < 60) pendingState.lines.push(line); // cap formatting; count keeps the true total
+        }
+        continue;
+      }
       if (type !== 'm.room.message' && type !== 'm.room.encrypted' && type !== 'm.sticker') continue;
       if (ev.isRedacted?.()) continue;
       // Hide failed/cancelled local echoes — showing them looks as if the
@@ -3027,8 +3085,13 @@ export class MatrixSource implements Source {
         const ts = threadIdx.get(msg.id);
         if (ts) msg.threadSummary = { count: ts.count, latestTs: ts.latestTs };
       }
+      // Close any state run that sits between this message and the newer one
+      // above it, so the fold lands in the right chronological slot.
+      flushState();
       messages.push(msg);
     }
+    // Oldest run, with no older message after it.
+    flushState();
     messages.reverse();
     return {
       roomId,
@@ -3169,6 +3232,13 @@ export interface TimelineMessage {
   body: string;
   ts: number;
   msgtype: string;
+  // A folded run of consecutive membership / room-state changes (joins, leaves,
+  // renames, topic/avatar). These don't render as normal messages — RoomPanel
+  // shows a one-line "N room changes" summary that expands to `stateLines`.
+  // `rendersInRoomView` already keeps them out of next-unread navigation.
+  kind?: 'message' | 'state';
+  stateLines?: string[]; // chronological human one-liners (capped; see stateCount for the true total)
+  stateCount?: number;   // total changes in the run (may exceed stateLines.length)
   pending?: boolean; // local echo still sending/queued — render muted until the server echo replaces it
   image?: { url: string; alt: string; w?: number; h?: number; encrypted?: EncryptedFile; sticker?: boolean };
   file?: { url: string; name: string; mimetype?: string; size?: number; encrypted?: EncryptedFile };
@@ -3221,6 +3291,70 @@ function rendersInRoomView(ev: MatrixEvent): boolean {
     return typeof body === 'string' && body.length > 0;
   }
   return false; // reactions, receipts, call.member, membership, etc.
+}
+
+// Room-state events we fold into a one-line summary in the timeline instead of
+// dropping. Anything else (call.member, reactions, custom state) is still hidden.
+const SUMMARIZABLE_STATE = new Set([
+  'm.room.member',
+  'm.room.name',
+  'm.room.topic',
+  'm.room.avatar',
+  'm.room.canonical_alias',
+]);
+
+// Human one-liner for a foldable membership change. Returns null for no-op
+// member events (a 'join' that changed neither name nor avatar) so we don't fold
+// in invisible noise.
+function formatMemberEvent(ev: MatrixEvent, room: Room): string | null {
+  const content = ev.getContent() as { membership?: string; displayname?: string; avatar_url?: string };
+  const prev = (ev.getPrevContent?.() ?? {}) as { membership?: string; displayname?: string; avatar_url?: string };
+  const target = ev.getStateKey() ?? '';
+  const sender = ev.getSender() ?? '';
+  const name = content.displayname || room.getMember(target)?.name || target;
+  switch (content.membership) {
+    case 'join':
+      if (prev.membership === 'join') {
+        if ((prev.displayname || '') !== (content.displayname || '')) {
+          return `${prev.displayname || target} is now ${content.displayname || target}`;
+        }
+        if ((prev.avatar_url || '') !== (content.avatar_url || '')) return `${name} changed their avatar`;
+        return null; // join->join with no visible change
+      }
+      return `${name} joined`;
+    case 'leave':
+      return sender === target ? `${name} left` : `${name} was removed`;
+    case 'invite':
+      return `${name} was invited`;
+    case 'ban':
+      return `${name} was banned`;
+    case 'knock':
+      return `${name} requested to join`;
+    default:
+      return null;
+  }
+}
+
+// Human one-liner for a foldable room-state change, or null to skip it.
+function formatStateEvent(ev: MatrixEvent, room: Room): string | null {
+  const type = ev.getType();
+  if (type === 'm.room.member') return formatMemberEvent(ev, room);
+  const sender = ev.getSender() ?? '';
+  const who = room.getMember(sender)?.name || sender;
+  switch (type) {
+    case 'm.room.name': {
+      const n = (ev.getContent() as { name?: string }).name;
+      return n ? `${who} changed the room name to “${n}”` : `${who} removed the room name`;
+    }
+    case 'm.room.topic':
+      return `${who} changed the topic`;
+    case 'm.room.avatar':
+      return `${who} changed the room avatar`;
+    case 'm.room.canonical_alias':
+      return `${who} changed the main address`;
+    default:
+      return null;
+  }
 }
 
 function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], client?: MatrixClient, weights: PriorityWeights = DEFAULT_WEIGHTS): InboxItem | null {
