@@ -3448,14 +3448,25 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // message. If the unread is only state/reactions/redactions/UTD, the room would
   // open to an empty window, so "next unread" should skip it (see unreadHasText).
   let unreadHasText = false;
+  let scanReachedMarker = false;
   if (notifs > 0) {
     const readUpTo = selfId ? room.getEventReadUpTo(selfId) : null;
     for (let i = live.length - 1; i >= 0; i -= 1) {
       const ev = live[i];
-      if (readUpTo && ev.getId() === readUpTo) break; // reached read marker — rest is read
+      if (readUpTo && ev.getId() === readUpTo) { scanReachedMarker = true; break; } // whole unread window scanned
       if (rendersInRoomView(ev)) { unreadHasText = true; break; }
     }
   }
+  // A room whose ENTIRE unread window is non-rendering events (membership/state/
+  // reactions/redactions/UTD) would open to an empty view — count it as fully
+  // read: no unread badge, out of the unread tallies (so bundle unread-sort and
+  // Next-unread stay honest), no unread priority bump. Gate on scanReachedMarker:
+  // timelines load contiguously, so a loaded read marker means we saw the whole
+  // unread window. If the marker ISN'T loaded the real message may just be
+  // unpaginated — stay unread (the documented race that bit the old
+  // meaningfulFound gating). A highlight/mention always keeps the room unread.
+  const unreadOnlyFiltered = notifs > 0 && highlights === 0 && !unreadHasText && scanReachedMarker;
+  const msgUnread = notifs > 0 && !unreadOnlyFiltered;
   const presenceRaw = client?.getUser(senderId)?.presence;
   const senderPresence = (presenceRaw === 'online' || presenceRaw === 'unavailable' || presenceRaw === 'offline')
     ? presenceRaw : undefined;
@@ -3485,12 +3496,12 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     ts: isInvite && inviteEvent ? (inviteEvent.getTs() ?? lastTs) : lastTs,
     // Invites are always "unread" so they surface in the default view, and get
     // a big priority bump to float to the top.
-    unread: isInvite || notifs > 0,
-    unreadCount: notifs,
+    unread: isInvite || msgUnread,
+    unreadCount: unreadOnlyFiltered ? 0 : notifs,
     unreadHasText,
     invite: isInvite || undefined,
     threadCount: live.length,
-    priority: computePriority(room, flavor, isDm, notifs > 0, highlights > 0, lastTs, senderId, weights, catAdjust) + (isInvite ? 50 : 0),
+    priority: computePriority(room, flavor, isDm, msgUnread, highlights > 0, lastTs, senderId, weights, catAdjust) + (isInvite ? 50 : 0),
     eventCategory: category,
     openPath: `/m/${encodeURIComponent(room.roomId)}`,
     senderPresence,
