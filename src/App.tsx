@@ -190,6 +190,17 @@ const sectionHead: React.CSSProperties = {
 
 const errStyle: React.CSSProperties = { color: 'var(--md-sys-color-error)', margin: 0, fontSize: 13 };
 
+// Stable inbox ordering within a priority class. Day-bucketed recency keeps
+// "newer above older" at a coarse grain without the continuous-ts churn (every
+// event reshuffling the list); the id tiebreak makes it fully deterministic so
+// the order — and the virtual-bundle fold boundary built on top of it — holds
+// steady between renders.
+const DAY_MS = 86_400_000;
+const stableItemCmp = (a: InboxItem, b: InboxItem): number =>
+  (b.priority - a.priority)
+  || (Math.floor(b.ts / DAY_MS) - Math.floor(a.ts / DAY_MS))
+  || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 // Bundles are now keyed by string. Standard keys: 'all', 'dm',
 // 'flavor:<flavor>', 'space:<roomId>'. Source-provided space bundles
 // arrive via matrixSrc.listBundles().
@@ -1027,8 +1038,13 @@ function Inbox({
     // Loose items are top-level (global) scope, so they use the global read
     // filter. Per-bundle read overrides are applied per node below via readF.
     const looseRead = loose.filter((it) => passesRead(it, readFilter, false));
-    looseRead.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
-    const sortItems = (xs: InboxItem[]) => xs.sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+    // Stable intra-priority order: coarse day-bucketed recency, then a fixed id
+    // tiebreak. The old `(b.ts - a.ts)` used continuous wall-clock time, so EVERY
+    // incoming event reshuffled the list (and would move the virtual-bundle fold
+    // boundary) under the user. Day buckets keep recency meaningful while holding
+    // order steady between days; the id tiebreak makes it fully deterministic.
+    looseRead.sort(stableItemCmp);
+    const sortItems = (xs: InboxItem[]) => xs.sort(stableItemCmp);
     const unreadOf = (xs: InboxItem[]) => xs.filter((g) => g.unread).length;
     // Narrow a group's items by that bundle's effective read filter (its own
     // override, or the global readFilter when unset). By defaulting to the
