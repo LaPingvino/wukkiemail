@@ -1042,6 +1042,12 @@ function Inbox({
       // collect their items (a Top-section bundle must, to show anything).
       const manualKey = matchManual(it);
       if (manualKey) { pushTo(manualKey, it); continue; }
+      // Rooms whose only "unread" was filtered noise (membership/reactions/UTD —
+      // already counted as read) collect into one quiet "only updates" fold
+      // instead of scattering through the auto bundles. A manual bundle still
+      // claims them first (above); the global read filter hides them in the
+      // Unread view, so they only surface when browsing All.
+      if (it.onlyUpdates) { pushTo('virtual:updates', it); continue; }
       if (it.priority >= topLevel) { loose.push(it); continue; }
       pushTo(assignAuto(it), it);
     }
@@ -1108,6 +1114,10 @@ function Inbox({
     // The "Other" bundle: items whose auto-bundle the user hid.
     const otherItems = sortItems(readF('other', groups.get('other') ?? []));
     groups.delete('other');
+    // The "only updates" fold: rooms counted as read because their whole unread
+    // window was filtered noise. Read filter hides them in the Unread view.
+    const updatesItems = sortItems(readF('virtual:updates', groups.get('virtual:updates') ?? []));
+    groups.delete('virtual:updates');
 
     // Mail mailboxes nest under a synthetic "Mail" parent, mirroring how rooms
     // nest under spaces. Each mailbox:<id> group becomes a child; mail with no
@@ -1184,8 +1194,21 @@ function Inbox({
       }
       : null;
 
+    const updatesNode: BundleNode | null = updatesItems.length > 0
+      ? {
+        key: 'virtual:updates',
+        label: `${updatesItems.length} room${updatesItems.length === 1 ? '' : 's'} with only updates`,
+        flavor: 'matrix',
+        items: updatesItems,
+        unread: 0,
+        count: updatesItems.length,
+        children: [],
+        virtual: true,
+      }
+      : null;
+
     const pinnedKeySet = new Set(pinnedBundleKeys);
-    const middle = [...manualList, ...autoTop, ...(quietNode ? [quietNode] : [])].map((n) =>
+    const middle = [...manualList, ...autoTop, ...(quietNode ? [quietNode] : []), ...(updatesNode ? [updatesNode] : [])].map((n) =>
       (pinnedKeySet.has(n.key) ? { ...n, pinned: true } : n));
     const pinnedMiddle = middle.filter((n) => n.pinned);
     const restMiddle = middle.filter((n) => !n.pinned);

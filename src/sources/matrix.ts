@@ -3499,6 +3499,7 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     unread: isInvite || msgUnread,
     unreadCount: unreadOnlyFiltered ? 0 : notifs,
     unreadHasText,
+    onlyUpdates: unreadOnlyFiltered || undefined,
     invite: isInvite || undefined,
     threadCount: live.length,
     priority: computePriority(room, flavor, isDm, msgUnread, highlights > 0, lastTs, senderId, weights, catAdjust) + (isInvite ? 50 : 0),

@@ -33,6 +33,11 @@ export interface InboxItem {
   // Undefined for non-chat items (treated as renderable). Invites render their
   // own Accept/Decline UI, so they count regardless of this flag.
   unreadHasText?: boolean;
+  // The server reported unread but the ENTIRE unread window was non-rendering
+  // (membership/state/reactions/redactions/UTD) — so we count it as read. Set so
+  // the inbox can surface these as a distinct "only updates" fold rather than
+  // lumping them with genuinely-quiet rooms.
+  onlyUpdates?: boolean;
   invite?: boolean;      // a pending invite (you're invited but haven't joined) — shows Accept/Decline
   joinable?: boolean;    // a room listed in a space you're in but haven't joined — shows Join
   threadCount: number;
