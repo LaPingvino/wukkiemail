@@ -1174,10 +1174,12 @@ function Inbox({
     return ids;
   }, [bundled]);
 
-  // The "Next" triage order: every unread chat, not just top-level ones.
-  // Top-level (loose) unread come first; then bundles in descending order of
-  // how many unread chats each holds (recursing into nested spaces the same
-  // way). Within a bundle, its own unread chats precede its children's.
+  // The "Next" triage order: every unread chat, in the SAME top-to-bottom order
+  // you see on screen. This is `roomNavOrder` (loose rows first, then each bundle
+  // in render order, recursing into nested spaces) narrowed to unread — so the
+  // Next button walks the layout you're looking at instead of hopping to whatever
+  // bundle happens to hold the most unread. It also keeps Next consistent with
+  // its plain-stream fallback (roomNavOrder[i+1]), which always used this order.
   const nextUnreadOrder = useMemo(() => {
     const ids: string[] = [];
     const seen = new Set<string>();
@@ -1193,12 +1195,10 @@ function Inbox({
     };
     for (const it of bundled.loose) pushUnread(it);
     const walk = (nodes: BundleNode[]) => {
-      const ranked = nodes
-        .filter((g) => g.key !== 'snoozed' && g.unread > 0)
-        .sort((a, b) => b.unread - a.unread); // most unread chats first
-      for (const g of ranked) {
+      for (const g of nodes) {
+        if (g.key === 'snoozed') continue;
         for (const it of g.items) pushUnread(it);
-        walk(g.children);
+        walk(g.children); // a bundle's own unread precede its children's, in layout order
       }
     };
     walk(bundled.groups);
