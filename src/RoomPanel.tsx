@@ -462,10 +462,15 @@ export function RoomPanel({
   // panel underneath don't both move on one press.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const isArrow = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+      // Enter/Space activate the cursored row — used to expand/collapse a folded
+      // room-changes block so its toggle is reachable from the same arrow-nav
+      // (not only via Tab to the native <summary>).
+      const isActivate = e.key === 'Enter' || e.key === ' ';
+      if (!isArrow && !isActivate) return;
       const panels = document.querySelectorAll('.room-panel');
       if (!panelRootRef.current || panels[panels.length - 1] !== panelRootRef.current) return;
-      // Don't steal arrows from an input / textarea / Material field / editor.
+      // Don't steal keys from an input / textarea / Material field / editor.
       let node: Element | null = (e.target as Element | null) ?? document.activeElement;
       while (node) {
         const tag = node.tagName?.toLowerCase() ?? '';
@@ -474,6 +479,13 @@ export function RoomPanel({
         const root = (node as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
         if (root?.activeElement) { node = root.activeElement; continue; }
         break;
+      }
+      if (isActivate) {
+        // Toggle a folded room-changes block when the cursor is on it; otherwise
+        // leave the key alone (so it doesn't swallow Enter elsewhere).
+        const details = panelRootRef.current.querySelector<HTMLDetailsElement>('.comment-list > li.msg-cursor details');
+        if (details) { e.preventDefault(); details.open = !details.open; }
+        return;
       }
       const count = panelRootRef.current.querySelectorAll('.comment-list > li').length;
       if (e.key === 'ArrowDown') {
@@ -596,7 +608,7 @@ export function RoomPanel({
           <ul className="comment-list">
             {snap.messages.map((m, i) => (
               m.kind === 'state' ? (
-                <li key={m.id} className="state-fold" data-msg-idx={i}>
+                <li key={m.id} className={`state-fold${i === msgCursor ? ' msg-cursor' : ''}`} data-msg-idx={i}>
                   {(m.stateCount ?? 1) <= 1 ? (
                     <p className="state-line">{m.stateLines?.[0]}</p>
                   ) : (
