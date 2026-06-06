@@ -1099,7 +1099,10 @@ function Inbox({
       };
     };
 
-    // Manual bundles first, in user order, always present.
+    // Manual bundles are always present (even empty) and claim matching items
+    // first (see matchManual). Their display position is by tier+priority like
+    // any bundle now — there's no meaningful user order to preserve (no reorder
+    // UI, and editing one moves it to the end of the array anyway).
     const manualList: BundleNode[] = manualBundles.map((b) => {
       const gItems = sortItems(readF(`manual:${b.id}`, groups.get(`manual:${b.id}`) ?? []));
       groups.delete(`manual:${b.id}`);
