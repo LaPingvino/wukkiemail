@@ -260,6 +260,11 @@ interface BundleNode {
   priority?: number;    // collective priority (max member) — drives unified ordering (phase 3); undefined for structural bundles
 }
 
+// One element of the interleaved inbox stream: an individual (loose) room OR a
+// bundle. Loose rooms and bundles compete for position in one tier+priority sort
+// (Approach A) instead of loose always rendering as a band above the bundles.
+type StreamEl = { kind: 'room'; item: InboxItem } | { kind: 'bundle'; node: BundleNode };
+
 // All items in a bundle, including nested spaces — bundle-level actions
 // (mark all, snooze all) must reach descendants, not just direct items.
 function collectBundleItems(node: BundleNode): InboxItem[] {
@@ -1010,7 +1015,7 @@ function Inbox({
     // bundle tree — so don't pay the (expensive) tree build, sorting and space
     // resolution on every keystroke. This was the main cause of search lag on
     // large accounts.
-    if (query.trim()) return { loose: [] as InboxItem[], groups: [] as BundleNode[] };
+    if (query.trim()) return { stream: [] as StreamEl[], loose: [] as InboxItem[], groups: [] as BundleNode[] };
     const topLevel = matrixSrc?.getWeights().topLevel ?? 5;
     const hiddenSet = new Set(hiddenBundles);
     const manualParsed = manualBundles.map((b) => ({ b, f: parseQuery(b.query) }));
@@ -1256,18 +1261,37 @@ function Inbox({
       (pinnedKeySet.has(n.key) ? { ...n, pinned: true } : n));
     const pinnedMiddle = middle.filter((n) => n.pinned);
     const restMiddle = middle.filter((n) => !n.pinned);
-    // Unified order (phase 3): bundles compete as elements. Primary key is the
-    // tier (any unread → above fully-read), which gives the read-sink and is
-    // stable (a room rarely crosses it). Within a tier, order by collective
-    // priority (the bundle's hottest member), so the biggest/hottest pile bubbles
-    // up. Virtual quiet/updates bundles (unread 0) land in the read tier and sink.
-    const tierRank = (n: BundleNode) => (n.unread > 0 ? 0 : 1);
-    restMiddle.sort((a, b) =>
-      (tierRank(a) - tierRank(b))
-      || (nodePriority(b) - nodePriority(a))
-      || (b.count - a.count)
-      || a.label.localeCompare(b.label));
+    // Unified order (Approach A): individual loose rooms and bundles compete in
+    // ONE stream instead of loose always sitting as a band above the bundles.
+    // Primary key is the tier (any unread → above fully-read) for read-sink +
+    // stability (a room rarely crosses it); within a tier, collective priority
+    // (a bundle's hottest member vs a room's own priority), so a hot bundle can
+    // outrank a quiet loose room and vice versa. Deterministic id/key tiebreak.
+    const elTier = (el: StreamEl): number =>
+      el.kind === 'room' ? (el.item.unread || el.item.invite ? 0 : 1) : (el.node.unread > 0 ? 0 : 1);
+    const elPriority = (el: StreamEl): number =>
+      el.kind === 'room' ? el.item.priority : nodePriority(el.node);
+    const elKey = (el: StreamEl): string => (el.kind === 'room' ? el.item.id : el.node.key);
+    const middleEls: StreamEl[] = [
+      ...looseVisible.map((item): StreamEl => ({ kind: 'room', item })),
+      ...restMiddle.map((node): StreamEl => ({ kind: 'bundle', node })),
+    ];
+    middleEls.sort((a, b) =>
+      (elTier(a) - elTier(b))
+      || (elPriority(b) - elPriority(a))
+      || (elKey(a) < elKey(b) ? -1 : elKey(a) > elKey(b) ? 1 : 0));
+    // Full top-to-bottom order: pinned (top), interleaved middle, Other/Snoozed
+    // (bottom). `stream` drives the render AND nav; `groups` is kept for the
+    // inline-manual top-section loop and the empty check (order there is moot).
+    const stream: StreamEl[] = [
+      ...(pinnedNode ? [{ kind: 'bundle', node: pinnedNode } as StreamEl] : []),
+      ...pinnedMiddle.map((node): StreamEl => ({ kind: 'bundle', node })),
+      ...middleEls,
+      ...(otherNode ? [{ kind: 'bundle', node: otherNode } as StreamEl] : []),
+      ...(snoozedNode ? [{ kind: 'bundle', node: snoozedNode } as StreamEl] : []),
+    ];
     return {
+      stream,
       loose: looseVisible,
       groups: [
         ...(pinnedNode ? [pinnedNode] : []),
@@ -1290,7 +1314,6 @@ function Inbox({
       const r = itemRoomId(it.id);
       if (r && !seen.has(r)) { seen.add(r); ids.push(r); }
     };
-    for (const it of bundled.loose) push(it);
     const walk = (nodes: BundleNode[]) => {
       for (const g of nodes) {
         if (g.key === 'snoozed') continue;
@@ -1298,7 +1321,11 @@ function Inbox({
         walk(g.children);
       }
     };
-    walk(bundled.groups);
+    // Walk the interleaved stream so nav order == render order.
+    for (const el of bundled.stream) {
+      if (el.kind === 'room') push(el.item);
+      else walk([el.node]);
+    }
     return ids;
   }, [bundled]);
 
@@ -1321,7 +1348,6 @@ function Inbox({
       const r = itemRoomId(it.id);
       if (r && !seen.has(r)) { seen.add(r); ids.push(r); }
     };
-    for (const it of bundled.loose) pushUnread(it);
     const walk = (nodes: BundleNode[]) => {
       for (const g of nodes) {
         if (g.key === 'snoozed') continue;
@@ -1329,7 +1355,11 @@ function Inbox({
         walk(g.children); // a bundle's own unread precede its children's, in layout order
       }
     };
-    walk(bundled.groups);
+    // Walk the interleaved stream so Next-unread order == render order.
+    for (const el of bundled.stream) {
+      if (el.kind === 'room') pushUnread(el.item);
+      else walk([el.node]);
+    }
     return ids;
   }, [bundled]);
 
@@ -1960,10 +1990,15 @@ function Inbox({
                   );
                   for (const it of its) rendered.push(renderItem(it, counter.n++));
                 }
-                // Loose (important) items shown directly at the top level.
-                for (const it of bundled.loose) if (displayFilter(it)) rendered.push(renderItem(it, counter.n++));
-                // Everything else folds into bundles (spaces nest), opened in place.
-                for (const g of bundled.groups) rendered.push(renderBundleNode(g, 0, counter));
+                // Interleaved stream: individual loose rooms and bundles in one
+                // tier+priority order (rooms render as rows, bundles fold in place).
+                for (const el of bundled.stream) {
+                  if (el.kind === 'room') {
+                    if (displayFilter(el.item)) rendered.push(renderItem(el.item, counter.n++));
+                  } else {
+                    rendered.push(renderBundleNode(el.node, 0, counter));
+                  }
+                }
                 idx = counter.n;
                 // New-bundle entry at the end of the stream.
                 rendered.push(
