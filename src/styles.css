@@ -2109,3 +2109,56 @@ md-outlined-text-field { width: 100%; }
   color: var(--muted);
 }
 .pinned-chip.unread .pinned-chip-label { color: var(--fg); font-weight: 600; }
+.pinned-picker-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border: 1px dashed color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent);
+}
+.pinned-chip-picker .pinned-chip-label { color: var(--md-sys-color-primary); }
+
+/* ── Full-screen single-bundle overlay ──────────────────────────────────── */
+.bundle-overlay {
+  position: fixed; inset: 0; z-index: 35;
+  background: var(--bg); overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.bundle-overlay-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--md-sys-color-surface-variant, rgba(0,0,0,0.08));
+}
+.bundle-overlay-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.bundle-overlay-title .bundle-label { font-size: 18px; font-weight: 600; }
+.bundle-overlay-body { padding: 8px 0 24px; max-width: 760px; width: 100%; margin: 0 auto; }
+
+/* ── Pinned bar inside a chat header (compact, no labels) ────────────────── */
+/* Lowest space priority: this is the flex FILLER between the room name (left)
+   and the nav buttons (right). It takes only leftover room and is the first to
+   shrink/scroll/clip; the name truncates and the buttons never give up width. */
+.header-pinned-bar {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; overflow-y: hidden;
+  margin: 0 8px; padding: 2px 0;
+  scrollbar-width: none;
+}
+.header-pinned-bar::-webkit-scrollbar { display: none; }
+.header-pin {
+  flex: 0 0 auto;
+  border: none; background: none; cursor: pointer; padding: 0;
+  border-radius: 50%; line-height: 0;
+  opacity: 0.85;
+}
+.header-pin:hover { opacity: 1; }
+.header-pin:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.header-pin .avatar-wrap { width: 30px; height: 30px; }
+.header-pin .avatar-badge, .header-pin .avatar-presence { display: none; }
+.header-pin.unread .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-primary); }
+.header-pin.current .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-on-surface); }
+/* On narrow viewports the header has no room to spare — hide it entirely so the
+   name + nav buttons keep their space (the "anything else pushes it away" rule). */
+@media (max-width: 680px) { .header-pinned-bar { display: none; } }

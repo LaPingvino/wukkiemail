@@ -11,28 +11,36 @@ import { parseQuery, matchItem } from './filter';
 import { QueryChips } from './QueryChips';
 
 export function BundleSheet({
-  items, selfMxid, initial, initialQuery, onSave, onDelete, onClose,
+  items, selfMxid, initial, initialQuery, onSave, onCreateSpace, onDelete, onClose,
 }: {
   items: InboxItem[];
   selfMxid: string | null;
   initial?: ManualBundle;            // editing an existing bundle
   initialQuery?: string;             // seed query (e.g. "save current search")
   onSave: (bundle: ManualBundle) => void;
+  onCreateSpace?: (name: string) => void; // create a real Matrix Space (renders as a bundle)
   onDelete?: (id: string) => void;
   onClose: () => void;
 }) {
   const [label, setLabel] = useState(initial?.label ?? '');
   const [query, setQuery] = useState(initial?.query ?? initialQuery ?? '');
   const [display, setDisplay] = useState<'folded' | 'expanded' | 'inline'>(initial?.display ?? 'folded');
+  // A new bundle can be a saved filter (the classic) or a real Space. Editing
+  // is always a saved filter (existing manual bundles are filters).
+  const [kind, setKind] = useState<'filter' | 'space'>('filter');
+  const isSpace = !initial && kind === 'space';
 
   const matchCount = useMemo(() => {
     const f = parseQuery(query);
     return items.filter((it) => matchItem(f, it, { selfMxid })).length;
   }, [query, items, selfMxid]);
 
-  const canSave = label.trim().length > 0 && query.trim().length > 0;
+  const canSave = isSpace
+    ? label.trim().length > 0
+    : label.trim().length > 0 && query.trim().length > 0;
   const save = () => {
     if (!canSave) return;
+    if (isSpace) { onCreateSpace?.(label.trim()); return; }
     onSave({ id: initial?.id ?? crypto.randomUUID(), label: label.trim(), query: query.trim(), display });
   };
 
@@ -43,7 +51,7 @@ export function BundleSheet({
           <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
             <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
-          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>{initial ? 'Edit bundle' : 'New bundle'}</div>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>{initial ? 'Edit bundle' : isSpace ? 'New space' : 'New bundle'}</div>
           {initial && onDelete && (
             <button type="button" className="hamburger" aria-label="Delete bundle" title="Delete" onClick={() => onDelete(initial.id)}>
               <span aria-hidden="true" className="material-symbols-outlined">delete</span>
@@ -51,10 +59,24 @@ export function BundleSheet({
           )}
         </header>
         <div className="sheet-body">
+          {!initial && onCreateSpace && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className={`chip ${kind === 'filter' ? 'active' : ''}`} title="A saved search that gathers matching conversations" onClick={() => setKind('filter')}>Saved filter</button>
+              <button type="button" className={`chip ${kind === 'space' ? 'active' : ''}`} title="A real Matrix Space — a shared, movable folder for rooms" onClick={() => setKind('space')}>Space</button>
+            </div>
+          )}
           <label className="sheet-label">
             <span>Name</span>
-            <input type="text" autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Family, Work, Bills" />
+            <input type="text" autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder={isSpace ? 'e.g. Family, Team, Project X' : 'e.g. Family, Work, Bills'} />
           </label>
+          {isSpace ? (
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+              Creates a shared Space that shows here as a bundle. You can move
+              rooms into it, and (unlike a saved filter) it syncs across your
+              devices and people you invite.
+            </div>
+          ) : (
+          <>
           <label className="sheet-label">
             <span>Filter query</span>
             <input
@@ -90,8 +112,10 @@ export function BundleSheet({
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             Matches <strong>{matchCount}</strong> current item{matchCount === 1 ? '' : 's'}.
           </div>
+          </>
+          )}
           <button type="button" className="sheet-submit" onClick={save} disabled={!canSave} style={{ justifySelf: 'end' }}>
-            {initial ? 'Save changes' : 'Create bundle'}
+            {initial ? 'Save changes' : isSpace ? 'Create space' : 'Create bundle'}
           </button>
         </div>
       </div>

@@ -334,6 +334,17 @@ function collectBundleItems(node: BundleNode): InboxItem[] {
   return out;
 }
 
+// Find a bundle node by key anywhere in the tree (used by the full-screen
+// single-bundle overlay, which only stores the key so it stays live).
+function findBundleNode(nodes: BundleNode[], key: string): BundleNode | null {
+  for (const n of nodes) {
+    if (n.key === key) return n;
+    const hit = findBundleNode(n.children, key);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 // Extract the Matrix room id from an inbox item id (`matrix:<roomId>`, with
 // issue items as `matrix:<roomId>:issue:<issueId>`). Room ids may or may not
 // contain a colon: pre-v12 ids are !localpart:homeserver, but room v12+ ids
@@ -498,6 +509,8 @@ function Inbox({
   // Bundle-level bulk-action sheet (keyed by bundle key).
   const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
   const [bundleSnoozeFor, setBundleSnoozeFor] = useState<string | null>(null);
+  // Full-screen single-bundle view (stores the bundle key; node looked up live).
+  const [fullscreenBundle, setFullscreenBundle] = useState<string | null>(null);
   // Optional JMAP mail source, multiplexed into the inbox alongside Matrix.
   const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
@@ -1009,6 +1022,7 @@ function Inbox({
         // effect), so history.back() runs that same tested onPop cascade and
         // dismisses the topmost one — keyboard parity with scrim-click / back.
         if (anyModalOpen) { e.preventDefault(); history.back(); return; }
+        if (fullscreenBundle) { setFullscreenBundle(null); return; }
         if (settingsInTopBar && settingsOverlayOpen) { setSettingsOverlayOpen(false); return; }
         // Profile / room-settings open on top of a room — close them first, via
         // history.back() so the pushed entry is popped (the cascade's onPop does
@@ -1089,7 +1103,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings, membersRoom, settingsInTopBar, settingsOverlayOpen]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings, membersRoom, settingsInTopBar, settingsOverlayOpen, fullscreenBundle]);
 
   useEffect(() => {
     const el = document.querySelector(`[data-nav][data-idx="${cursor}"]`);
@@ -1839,6 +1853,10 @@ function Inbox({
               onMore={() => setBundleActionFor(g.key)}
             />
           )}
+          <button type="button" className="item-kebab" aria-label={`Open ${g.label} full screen`} title="Open full screen"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFullscreenBundle(g.key); }}>
+            <span aria-hidden="true" className="material-symbols-outlined">open_in_full</span>
+          </button>
           {matrixSrc && (
             <button type="button" className="item-kebab" aria-label="Bundle actions"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBundleActionFor(g.key); }}>
@@ -1935,8 +1953,21 @@ function Inbox({
             </div>
           )}
         </div>
-        {matrixSrc && pinnedBar.length > 0 && (
+        {matrixSrc && (
           <div className="pinned-bar" role="list" aria-label="Pinned conversations">
+            <button
+              type="button"
+              role="listitem"
+              className="pinned-chip pinned-chip-picker"
+              title="Start a chat with someone"
+              aria-label="Start a chat with someone"
+              onClick={() => setNewDmOpen(true)}
+            >
+              <span className="pinned-picker-avatar" aria-hidden="true">
+                <span className="material-symbols-outlined">person_add</span>
+              </span>
+              <span className="pinned-chip-label">New chat</span>
+            </button>
             {pinnedBar.map((it) => (
               <button
                 key={it.id}
@@ -2313,6 +2344,23 @@ function Inbox({
             onOpenSettings={() => setRoomSettings(selectedRoom)}
             incomingCall={incomingCalls[0]}
             onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
+            headerExtra={pinnedBar.length > 0 ? (
+              <div className="header-pinned-bar" role="list" aria-label="Pinned conversations">
+                {pinnedBar.map((it) => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    role="listitem"
+                    className={`header-pin ${it.unread ? 'unread' : ''} ${itemRoomId(it.id) === selectedRoom ? 'current' : ''}`}
+                    title={it.subject || it.from}
+                    aria-label={`Open ${it.subject || it.from}${it.unread ? ', unread' : ''}`}
+                    onClick={() => openItem(it)}
+                  >
+                    <Avatar name={it.subject || it.from} flavor={it.flavor} url={it.avatarUrl} />
+                  </button>
+                ))}
+              </div>
+            ) : undefined}
           />
         );
       })()}
@@ -2440,6 +2488,32 @@ function Inbox({
           <span aria-hidden="true" className="material-symbols-outlined">close</span>
         </button>
       )}
+      {fullscreenBundle && (() => {
+        const node = findBundleNode(bundled.groups, fullscreenBundle);
+        if (!node) return null;
+        const counter = { n: 0 };
+        const ovItems = node.items.filter((it) => displayFilter(it, node.key)).slice(0, 500);
+        return (
+          <div className="bundle-overlay" role="region" aria-label={node.label}>
+            <header className="bundle-overlay-head">
+              <button type="button" className="hamburger" aria-label="Close" onClick={() => setFullscreenBundle(null)}>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
+              </button>
+              <div className="bundle-overlay-title">
+                <span className="bundle-label">{node.label}</span>
+                <span className="bundle-count">{node.unread > 0 ? `${node.unread} unread · ` : ''}{node.count}</span>
+              </div>
+            </header>
+            <div className="bundle-overlay-body item-list" role="tree" aria-label={node.label} aria-multiselectable="false">
+              {ovItems.map((it) => renderItem(it, counter.n++, 1))}
+              {node.children.map((child) => renderBundleNode(child, 0, counter))}
+              {ovItems.length === 0 && node.children.length === 0 && (
+                <div className="empty" style={{ padding: 24, fontSize: 13 }}><p>Nothing here right now.</p></div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {selectedProfile && matrixSrc && (
         <ProfilePage
           matrix={matrixSrc}
@@ -2481,6 +2555,11 @@ function Inbox({
             setManualBundles(next);
             setBundleSheet(null);
             await matrixSrc.setManualBundles(next);
+          }}
+          onCreateSpace={async (name) => {
+            setBundleSheet(null);
+            try { await matrixSrc.createSpace(name); }
+            catch (e) { console.warn('[wukkiemail] createSpace failed', e); }
           }}
           onDelete={async (id) => {
             const next = manualBundles.filter((x) => x.id !== id);

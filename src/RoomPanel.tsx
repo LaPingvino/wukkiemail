@@ -2,7 +2,7 @@
 // Subscribes to the source's change events so new messages appear as
 // they arrive. No compose/reply yet — this is the read-side preview.
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
@@ -137,6 +137,7 @@ export function RoomPanel({
   onOpenThread,
   onOpenProfile,
   onOpenSettings,
+  headerExtra,
 }: {
   matrix: MatrixSource;
   roomId: string;
@@ -162,6 +163,9 @@ export function RoomPanel({
   onOpenProfile?: (userId: string) => void;
   // Open this room's settings (header button). Undefined in thread view.
   onOpenSettings?: () => void;
+  // Optional node rendered in the header between the title and the nav buttons
+  // (the pinned quick-access bar). Yields space first — see .header-pinned-bar.
+  headerExtra?: ReactNode;
 }) {
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200, threadRootId));
   const [composeText, setComposeText] = useState('');
@@ -594,6 +598,7 @@ export function RoomPanel({
         onOpenSettings={!threadRootId ? onOpenSettings : undefined}
         incomingCall={!threadRootId ? incomingCall : undefined}
         onPickUp={onPickUp}
+        headerExtra={threadRootId ? undefined : headerExtra}
       />
       {threadsOpen && onOpenThread && (
         <ThreadsDrawer
@@ -1429,16 +1434,17 @@ function EditHistorySheet({ matrix, roomId, eventId, onClose }: {
   );
 }
 
-function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, onOpenSettings, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; onOpenSettings?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
+function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, onOpenSettings, incomingCall, onPickUp, headerExtra }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; onOpenSettings?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void; headerExtra?: ReactNode }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
         <md-icon>close</md-icon>
       </md-icon-button>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: headerExtra ? '0 1 auto' : 1, minWidth: 0 }}>
         <div className="issue-title">{title}</div>
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
+      {headerExtra}
       {incomingCall && onPickUp && (
         <button
           type="button"

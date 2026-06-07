@@ -1738,6 +1738,26 @@ export class MatrixSource implements Source {
     return roomId;
   }
 
+  // Create a Space (a room with creation type m.space). Spaces render as
+  // bundles in the inbox (key `space:<id>`), so to the user this "creates a
+  // bundle" that other rooms can be filed under. Invite-only, not encrypted
+  // (spaces hold structure, not messages).
+  async createSpace(name: string, invites: string[] = []): Promise<string> {
+    if (!this.client) throw new Error('client not started');
+    const res = await this.client.createRoom({
+      name,
+      visibility: 'private' as never,
+      preset: 'private_chat' as never,
+      invite: invites.filter(Boolean),
+      creation_content: { type: 'm.space' } as never,
+      power_level_content_override: { events_default: 100 } as never,
+    });
+    const roomId = (res as { room_id?: string }).room_id;
+    if (!roomId) throw new Error('createRoom returned no room_id');
+    this.notify();
+    return roomId;
+  }
+
   // Targeted, lightweight space sync — run when a space bundle is opened.
   // A space's m.space.child can reference rooms the local sync store doesn't
   // have (the user is joined, but the initial /sync didn't include them, or the
@@ -2096,6 +2116,13 @@ export class MatrixSource implements Source {
       if (pinned) set.add(itemId); else set.delete(itemId);
       return { ...s, pinned: [...set] };
     });
+  }
+
+  // Is a room currently pinned (m.favourite tag)? Used by the profile page's
+  // Pin toggle. Mirrors the isFavourite check in the item builder.
+  isRoomPinned(roomId: string): boolean {
+    const room = this.client?.getRoom(roomId);
+    return !!(room?.tags && room.tags['m.favourite']);
   }
 
   async setSnoozed(itemId: string, untilMs: number | null): Promise<void> {

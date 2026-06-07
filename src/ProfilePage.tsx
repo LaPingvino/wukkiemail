@@ -33,6 +33,16 @@ export function ProfilePage({
   }, [matrix, userId, roomId]);
 
   const dmRoom = matrix.findDirectMessage(userId);
+  const [pinned, setPinned] = useState(() => (dmRoom ? matrix.isRoomPinned(dmRoom) : false));
+  // Re-sync the toggle if the resolved DM room changes (async profile fill).
+  useEffect(() => { setPinned(dmRoom ? matrix.isRoomPinned(dmRoom) : false); }, [matrix, dmRoom]);
+  const togglePin = async () => {
+    if (!dmRoom) return;
+    const next = !pinned;
+    setPinned(next); // optimistic
+    try { await matrix.setPinned(`matrix:${dmRoom}`, next); }
+    catch (e) { setPinned(!next); console.warn('[wukkiemail] pin toggle failed', e); }
+  };
   const name = profile?.displayName ?? userId;
   const presence = profile?.presence;
   const sharedRooms = profile?.sharedRooms ?? [];
@@ -72,6 +82,19 @@ export function ProfilePage({
         {dmRoom && onOpenRoom && (
           <button type="button" className="config-btn" style={{ marginTop: 8 }} onClick={() => onOpenRoom(dmRoom)}>
             <span aria-hidden="true" className="material-symbols-outlined">chat</span> Message
+          </button>
+        )}
+
+        {dmRoom && (
+          <button
+            type="button"
+            className="config-btn"
+            style={{ marginTop: 8 }}
+            aria-pressed={pinned}
+            onClick={() => void togglePin()}
+          >
+            <span aria-hidden="true" className="material-symbols-outlined" style={pinned ? { fontVariationSettings: "'FILL' 1", color: 'var(--md-sys-color-primary)' } : undefined}>push_pin</span>
+            {pinned ? 'Pinned — tap to unpin' : 'Pin to quick-access bar'}
           </button>
         )}
 
