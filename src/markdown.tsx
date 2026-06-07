@@ -43,7 +43,10 @@ export function renderFormattedHtml(
     ALLOWED_TAGS: ['a', 'b', 'strong', 'em', 'i', 'u', 'code', 'pre', 'br', 'p', 'span', 'blockquote',
       'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'del', 's', 'sub', 'sup',
       'mx-reply', 'div', 'img'],
-    ALLOWED_ATTR: ['href', 'title', 'name', 'target', 'rel', 'src', 'alt', 'width', 'height'],
+    // data-mx-spoiler is explicitly allowed (ALLOW_DATA_ATTR stays false for
+    // everything else) so spoiler markup survives and we can hide it below —
+    // otherwise the attribute was stripped and spoiler text showed in the clear.
+    ALLOWED_ATTR: ['href', 'title', 'name', 'target', 'rel', 'src', 'alt', 'width', 'height', 'data-mx-spoiler'],
     ALLOW_DATA_ATTR: false,
   });
   // Force target=_blank rel=noopener on all anchors. DOMPurify's hooks
@@ -53,6 +56,14 @@ export function renderFormattedHtml(
   tpl.content.querySelectorAll('a').forEach((a) => {
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
+    // Style matrix.to user/room mention links as pills so mentions stand out.
+    const href = a.getAttribute('href') ?? '';
+    if (/matrix\.to\/#\/[@!#]/.test(href)) a.classList.add('mention-pill');
+  });
+  // Spoilers: hide the content until clicked. The marker survived sanitise via
+  // ALLOWED_ATTR; the click-to-reveal is wired on the wrapper span below.
+  tpl.content.querySelectorAll('[data-mx-spoiler]').forEach((el) => {
+    el.classList.add('spoiler');
   });
   // Every surviving <img> is now a resolved custom emoji (remote images were
   // dropped pre-sanitise) — style it inline and lazy-load. The class is added
@@ -61,7 +72,17 @@ export function renderFormattedHtml(
     img.classList.add('inline-emoji');
     img.setAttribute('loading', 'lazy');
   });
-  return <span dangerouslySetInnerHTML={{ __html: tpl.innerHTML }} />;
+  return (
+    <span
+      className="formatted-body"
+      onClick={(e) => {
+        // Click-to-reveal spoilers (content is raw HTML, so no per-node handler).
+        const sp = (e.target as HTMLElement).closest?.('.spoiler');
+        if (sp && !sp.classList.contains('revealed')) { e.preventDefault(); sp.classList.add('revealed'); }
+      }}
+      dangerouslySetInnerHTML={{ __html: tpl.innerHTML }}
+    />
+  );
 }
 
 const URL_RE = /\b(https?:\/\/[^\s)]+[^\s.,;:!?)\]'"])/g;

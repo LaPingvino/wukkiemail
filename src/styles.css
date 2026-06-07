@@ -1936,3 +1936,20 @@ md-outlined-text-field { width: 100%; }
 
 /* Consecutive same-sender messages: tighten the gap and drop the head */
 .comment-list > li.msg-grouped { margin-top: -8px; }
+
+/* Spoilers: hidden until clicked */
+.spoiler {
+  background: var(--md-sys-color-on-surface, #888); color: transparent;
+  border-radius: 4px; padding: 0 3px; cursor: pointer; transition: color 0.1s;
+}
+.spoiler * { visibility: hidden; }
+.spoiler.revealed { background: var(--md-sys-color-surface-variant, rgba(127,127,127,0.18)); color: inherit; cursor: text; }
+.spoiler.revealed * { visibility: visible; }
+
+/* Inbound user/room mention links rendered as pills */
+.mention-pill {
+  background: var(--md-sys-color-primary-container, rgba(20,184,166,0.18));
+  color: var(--md-sys-color-on-primary-container, var(--md-sys-color-primary, #14b8a6));
+  border-radius: 999px; padding: 0 7px; text-decoration: none; font-weight: 500; white-space: nowrap;
+}
+.mention-pill:hover { text-decoration: underline; }
