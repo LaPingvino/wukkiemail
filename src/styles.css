@@ -1923,6 +1923,25 @@ md-outlined-text-field { width: 100%; }
 .settings-field input:disabled, .settings-field textarea:disabled { opacity: 0.6; }
 .settings-danger { color: var(--md-sys-color-error); }
 
+/* Pinned messages banner */
+.pinned-banner {
+  margin: 0 0 8px; padding: 6px 10px; border-radius: 8px;
+  background: var(--md-sys-color-surface-variant, rgba(127,127,127,0.1)); font-size: 13px;
+}
+.pinned-banner > summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); list-style: none;
+}
+.pinned-banner > summary::-webkit-details-marker { display: none; }
+.pinned-banner > summary .material-symbols-outlined { font-size: 16px; }
+.pinned-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.pinned-item {
+  display: flex; gap: 6px; width: 100%; text-align: left; background: none; border: none;
+  cursor: pointer; color: inherit; font: inherit; padding: 4px; border-radius: 6px; min-width: 0;
+}
+.pinned-item:hover { background: var(--md-sys-color-surface, rgba(127,127,127,0.12)); }
+.pinned-sender { font-weight: 600; flex: 0 0 auto; color: var(--md-sys-color-primary, #14b8a6); }
+.pinned-body { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--muted); }
+
 /* Own-message 'sent' tick (read state shows via the read-by avatars instead) */
 .msg-status { display: inline-flex; color: var(--muted); }
 .msg-status .material-symbols-outlined { font-size: 16px; }

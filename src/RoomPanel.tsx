@@ -173,6 +173,7 @@ export function RoomPanel({
   const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
   const selfId = matrix.id;
   const canRedactOthers = matrix.canRedactOthers(roomId);
+  const pinned = threadRootId ? [] : matrix.getPinnedMessages(roomId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -622,6 +623,35 @@ export function RoomPanel({
           if (f) void onFileSelected(f);
         }}
       >
+        {pinned.length > 0 && (
+          <details className="pinned-banner">
+            <summary>
+              <span aria-hidden="true" className="material-symbols-outlined">push_pin</span>
+              {pinned.length} pinned message{pinned.length === 1 ? '' : 's'}
+            </summary>
+            <ul className="pinned-list">
+              {pinned.map((p) => (
+                <li key={p.eventId}>
+                  <button
+                    type="button"
+                    className="pinned-item"
+                    onClick={() => {
+                      const j = snap.messages.findIndex((x) => x.id === p.eventId);
+                      if (j < 0) return;
+                      setMsgCursor(j);
+                      panelRootRef.current
+                        ?.querySelector(`.comment-list > li[data-msg-idx="${j}"]`)
+                        ?.scrollIntoView({ block: 'center' });
+                    }}
+                  >
+                    {p.senderName && <span className="pinned-sender">{p.senderName}</span>}
+                    <span className="pinned-body">{p.body}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {hasMore && (
           <button
             type="button"

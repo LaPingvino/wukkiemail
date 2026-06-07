@@ -1593,6 +1593,23 @@ export class MatrixSource implements Source {
     };
   }
 
+  // Pinned messages (m.room.pinned_events): resolve each pinned event id to a
+  // sender + snippet (like the reply preview). Unloaded events get a placeholder.
+  getPinnedMessages(roomId: string): { eventId: string; senderName: string; body: string }[] {
+    if (!this.client) return [];
+    const room = this.client.getRoom(roomId);
+    if (!room) return [];
+    const ev = room.currentState.getStateEvents('m.room.pinned_events', '');
+    const ids = (ev?.getContent() as { pinned?: string[] } | undefined)?.pinned ?? [];
+    return ids.map((id) => {
+      const e = room.findEventById(id);
+      const sender = e?.getSender() ?? '';
+      const c = e?.getContent() as { body?: string } | undefined;
+      const body = c?.body ? c.body.replace(/\s+/g, ' ').trim().slice(0, 140) : '(message not loaded)';
+      return { eventId: id, senderName: sender ? (room.getMember(sender)?.name ?? sender) : '', body };
+    });
+  }
+
   async setRoomName(roomId: string, name: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
     await this.client.setRoomName(roomId, name);
