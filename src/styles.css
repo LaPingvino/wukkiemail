@@ -1923,6 +1923,10 @@ md-outlined-text-field { width: 100%; }
 .settings-field input:disabled, .settings-field textarea:disabled { opacity: 0.6; }
 .settings-danger { color: var(--md-sys-color-error); }
 
+/* Own-message 'sent' tick (read state shows via the read-by avatars instead) */
+.msg-status { display: inline-flex; color: var(--muted); }
+.msg-status .material-symbols-outlined { font-size: 16px; }
+
 /* Edit-history marker + popover */
 .edited-marker {
   background: none; border: none; cursor: pointer; padding: 0 0 0 4px;

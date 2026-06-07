@@ -917,6 +917,14 @@ export function RoomPanel({
                     )}
                   </div>
                 )}
+                {/* Delivery: own messages that have echoed back (not pending) but
+                    nobody has read yet get a single 'sent' tick. Once read, the
+                    read-by avatars above are the indicator. */}
+                {m.senderId === selfId && !m.pending && (!m.readBy || m.readBy.length === 0) && (
+                  <span className="msg-status" title="Sent" aria-label="Sent">
+                    <span aria-hidden="true" className="material-symbols-outlined">done</span>
+                  </span>
+                )}
               </li>
               </Fragment>
               );
