@@ -23,6 +23,7 @@ import { JmapLoginSheet } from './JmapLoginSheet';
 import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
+import { MembersPage } from './MembersPage';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -431,6 +432,7 @@ function Inbox({
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<{ userId: string; roomId?: string } | null>(null);
   const [roomSettings, setRoomSettings] = useState<string | null>(null);
+  const [membersRoom, setMembersRoom] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const jmapEmail = loadJmapCreds()?.email ?? loadJmapCreds()?.sessionUrl ?? null;
   // User-authored bundles (saved filters), and the create/edit sheet.
@@ -692,14 +694,14 @@ function Inbox({
   // exactly like the sheet cascade above. Hardware back / Escape / the close
   // button all collapse to one path: pop the entry → onPop closes the panel,
   // leaving the room beneath intact (same hash, so no hashchange fires).
-  const panelOverlayOpen = !!selectedProfile || !!roomSettings;
+  const panelOverlayOpen = !!selectedProfile || !!roomSettings || !!membersRoom;
   useEffect(() => {
     if (panelOverlayOpen) {
       history.pushState({ wukkiePanel: true }, '');
-      const onPop = () => {
-        if (roomSettings) setRoomSettings(null);
-        else if (selectedProfile) setSelectedProfile(null);
-      };
+      // Close ALL panel overlays unconditionally — one history entry covers the
+      // whole profile/settings/members stack, and they replace each other within
+      // it, so popping collapses straight back to the room beneath.
+      const onPop = () => { setRoomSettings(null); setSelectedProfile(null); setMembersRoom(null); };
       window.addEventListener('popstate', onPop);
       return () => {
         window.removeEventListener('popstate', onPop);
@@ -948,7 +950,7 @@ function Inbox({
       // When a chat / task / email panel or any modal is open, IT owns the
       // keyboard (RoomPanel drives its own arrow nav). Don't also move the
       // inbox cursor underneath.
-      if (selectedRoom || selectedIssue || selectedEmail || openThread || anyModalOpen || selectedProfile || roomSettings) return;
+      if (selectedRoom || selectedIssue || selectedEmail || openThread || anyModalOpen || selectedProfile || roomSettings || membersRoom) return;
       // Navigate over the ACTUALLY-RENDERED rows (the bundled view reorders
       // items and hides collapsed bundles, so the global `visible` order does
       // not match what's on screen). Cap on the rendered count, and resolve the
@@ -1014,7 +1016,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings, membersRoom]);
 
   useEffect(() => {
     const el = document.querySelector(`[data-nav][data-idx="${cursor}"]`);
@@ -2329,6 +2331,15 @@ function Inbox({
           roomId={roomSettings}
           onClose={() => setRoomSettings(null)}
           onLeft={() => { setRoomSettings(null); setSelectedRoom(null); }}
+          onOpenMembers={() => { const r = roomSettings; setRoomSettings(null); setMembersRoom(r); }}
+        />
+      )}
+      {membersRoom && matrixSrc && (
+        <MembersPage
+          matrix={matrixSrc}
+          roomId={membersRoom}
+          onClose={() => setMembersRoom(null)}
+          onOpenProfile={(uid) => { const r = membersRoom; setMembersRoom(null); setSelectedProfile({ userId: uid, roomId: r ?? undefined }); }}
         />
       )}
       {composeOpen && jmapSrc && (

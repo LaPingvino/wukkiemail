@@ -1532,6 +1532,25 @@ export class MatrixSource implements Source {
     return { ...base, displayName, avatarUrl };
   }
 
+  // Joined members of a room, for the member-list page. Sorted by power level
+  // (admins/mods first) then name. (Distinct from getRoomMembers, which returns
+  // the lean shape used for mention autocomplete.)
+  getRoomMemberList(roomId: string): RoomMemberRow[] {
+    if (!this.client) return [];
+    const room = this.client.getRoom(roomId);
+    if (!room) return [];
+    return room.getJoinedMembers().map((m) => {
+      const mxc = m.getMxcAvatarUrl?.();
+      return {
+        userId: m.userId,
+        name: m.name || m.userId,
+        avatarUrl: mxc ? (this.client!.mxcUrlToHttp(mxc, 64, 64, 'crop') ?? undefined) : undefined,
+        powerLevel: m.powerLevel ?? 0,
+        presence: this.getPresence(m.userId) ?? undefined,
+      };
+    }).sort((a, b) => (b.powerLevel - a.powerLevel) || a.name.localeCompare(b.name));
+  }
+
   // Names of (non-space) rooms this user shares with us, for the profile page.
   sharedRoomsWith(userId: string): string[] {
     if (!this.client) return [];
@@ -3392,6 +3411,14 @@ export interface UserProfile {
   avatarUrl?: string;
   presence?: 'online' | 'unavailable' | 'offline';
   sharedRooms: string[];
+}
+
+export interface RoomMemberRow {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  powerLevel: number;
+  presence?: 'online' | 'unavailable' | 'offline';
 }
 
 export interface RoomInfo {

@@ -9,11 +9,13 @@ export function RoomSettings({
   roomId,
   onClose,
   onLeft,
+  onOpenMembers,
 }: {
   matrix: MatrixSource;
   roomId: string;
   onClose: () => void;
   onLeft: () => void;
+  onOpenMembers?: () => void;
 }) {
   const [info, setInfo] = useState<RoomInfo | null>(() => matrix.roomInfo(roomId));
   const [name, setName] = useState(info?.name ?? '');
@@ -88,6 +90,12 @@ export function RoomSettings({
             ? <img className="profile-avatar" src={info.avatarUrl} alt="" />
             : <span className="profile-avatar profile-avatar-fallback" aria-hidden="true">{(info.name || '?').slice(0, 1).toUpperCase()}</span>}
         </div>
+
+        {onOpenMembers && (
+          <button type="button" className="config-btn" onClick={onOpenMembers}>
+            <span aria-hidden="true" className="material-symbols-outlined">group</span> Members · {info.memberCount}
+          </button>
+        )}
 
         {readOnly && (
           <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center' }}>
