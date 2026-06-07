@@ -686,6 +686,30 @@ function Inbox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyModalOpen]);
 
+  // Back-button parity for the profile / room-settings panels. They open ON TOP
+  // of a room (which lives in the hash), so unlike room/issue/email they don't
+  // change the URL — we just push a history entry on open and pop it on close,
+  // exactly like the sheet cascade above. Hardware back / Escape / the close
+  // button all collapse to one path: pop the entry → onPop closes the panel,
+  // leaving the room beneath intact (same hash, so no hashchange fires).
+  const panelOverlayOpen = !!selectedProfile || !!roomSettings;
+  useEffect(() => {
+    if (panelOverlayOpen) {
+      history.pushState({ wukkiePanel: true }, '');
+      const onPop = () => {
+        if (roomSettings) setRoomSettings(null);
+        else if (selectedProfile) setSelectedProfile(null);
+      };
+      window.addEventListener('popstate', onPop);
+      return () => {
+        window.removeEventListener('popstate', onPop);
+        if (history.state?.wukkiePanel) history.back();
+      };
+    }
+    return;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOverlayOpen]);
+
   // Hash routing for the content panels (chat / task / mail). Opening one
   // writes the URL hash; a refresh restores it (RoomPanel/EmailView read from
   // the local IndexedDB cache, so it comes back instantly), and browser
@@ -911,9 +935,10 @@ function Inbox({
         // effect), so history.back() runs that same tested onPop cascade and
         // dismisses the topmost one — keyboard parity with scrim-click / back.
         if (anyModalOpen) { e.preventDefault(); history.back(); return; }
-        // Profile / room-settings open on top of a room — close them first.
-        if (roomSettings) { setRoomSettings(null); return; }
-        if (selectedProfile) { setSelectedProfile(null); return; }
+        // Profile / room-settings open on top of a room — close them first, via
+        // history.back() so the pushed entry is popped (the cascade's onPop does
+        // the setState), keeping the back stack consistent with hardware back.
+        if (panelOverlayOpen) { e.preventDefault(); history.back(); return; }
         if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
