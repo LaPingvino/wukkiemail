@@ -169,6 +169,7 @@ export function RoomPanel({
   const sendingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
+  const [editHistoryFor, setEditHistoryFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
   const selfId = matrix.id;
   const canRedactOthers = matrix.canRedactOthers(roomId);
@@ -600,6 +601,14 @@ export function RoomPanel({
           onOpen={(rootId) => { setThreadsOpen(false); onOpenThread(rootId); }}
         />
       )}
+      {editHistoryFor && (
+        <EditHistorySheet
+          matrix={matrix}
+          roomId={roomId}
+          eventId={editHistoryFor}
+          onClose={() => setEditHistoryFor(null)}
+        />
+      )}
       <div
         className={`issue-body ${dragOver ? 'drag-over' : ''}`}
         ref={bodyRef}
@@ -777,7 +786,14 @@ export function RoomPanel({
                   </CollapsibleBody>
                 )}
                 {m.edited && (
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}> (edited)</span>
+                  <button
+                    type="button"
+                    className="edited-marker"
+                    title="View edit history"
+                    onClick={() => setEditHistoryFor(m.id)}
+                  >
+                    (edited)
+                  </button>
                 )}
                 {!threadRootId && m.threadSummary && onOpenThread && (
                   <button
@@ -1326,6 +1342,48 @@ function ThreadsDrawer({ messages, onClose, onOpen }: {
               </span>
               <span className="thread-row-meta">{m.threadSummary!.count} repl{m.threadSummary!.count === 1 ? 'y' : 'ies'} · {new Date(m.threadSummary!.latestTs).toLocaleString()}</span>
             </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Edit-history popover: the original message plus every later version, oldest
+// first. Fetched lazily (relations are a network call); the newest is the one
+// shown inline, so this is mostly for auditing what changed.
+function EditHistorySheet({ matrix, roomId, eventId, onClose }: {
+  matrix: MatrixSource;
+  roomId: string;
+  eventId: string;
+  onClose: () => void;
+}) {
+  const [versions, setVersions] = useState<{ body: string; ts: number }[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void matrix.getEditHistory(roomId, eventId).then((v) => { if (!cancelled) setVersions(v); });
+    return () => { cancelled = true; };
+  }, [matrix, roomId, eventId]);
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit history">
+        <header className="sheet-head">
+          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
+          </button>
+          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>Edit history</div>
+        </header>
+        <div className="sheet-body" style={{ gap: 8 }}>
+          {versions === null && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+          {versions && versions.length === 0 && <p style={{ color: 'var(--muted)' }}>No history available.</p>}
+          {versions?.map((v, i) => (
+            // eslint-disable-next-line react/no-array-index-key
+            <div key={i} className="edit-version">
+              <div className="edit-version-ts">
+                {new Date(v.ts).toLocaleString()}{i === versions.length - 1 ? ' · current' : ''}
+              </div>
+              <div className="edit-version-body">{v.body || '(empty)'}</div>
+            </div>
           ))}
         </div>
       </div>

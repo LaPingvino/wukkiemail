@@ -1923,6 +1923,17 @@ md-outlined-text-field { width: 100%; }
 .settings-field input:disabled, .settings-field textarea:disabled { opacity: 0.6; }
 .settings-danger { color: var(--md-sys-color-error); }
 
+/* Edit-history marker + popover */
+.edited-marker {
+  background: none; border: none; cursor: pointer; padding: 0 0 0 4px;
+  font-size: 11px; color: var(--muted); font: inherit;
+}
+.edited-marker { font-size: 11px; }
+.edited-marker:hover { text-decoration: underline; color: var(--md-sys-color-primary); }
+.edit-version { border-left: 2px solid var(--border, rgba(127,127,127,0.3)); padding-left: 10px; }
+.edit-version-ts { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.edit-version-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* Member list */
 .member-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
 .member-row {

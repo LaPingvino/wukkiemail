@@ -2824,6 +2824,28 @@ export class MatrixSource implements Source {
     await this.client.sendMessage(roomId, content as never);
   }
 
+  // Prior versions of an edited message: the original plus every m.replace, in
+  // chronological order. Returns [] (or just the current) if relations aren't
+  // available. Used by the "(edited)" history popover.
+  async getEditHistory(roomId: string, eventId: string): Promise<{ body: string; ts: number }[]> {
+    if (!this.client) return [];
+    const versions: { body: string; ts: number }[] = [];
+    const original = this.client.getRoom(roomId)?.findEventById(eventId);
+    if (original) {
+      const c = original.getContent() as { body?: string };
+      versions.push({ body: c.body ?? '', ts: original.getTs() });
+    }
+    try {
+      const rel = await this.client.relations(roomId, eventId, 'm.replace', 'm.room.message');
+      for (const ev of rel.events ?? []) {
+        const c = ev.getContent() as { 'm.new_content'?: { body?: string }; body?: string };
+        const body = c['m.new_content']?.body ?? c.body ?? '';
+        versions.push({ body, ts: ev.getTs() });
+      }
+    } catch { /* server may not expose relations — fall back to what we have */ }
+    return versions.sort((a, b) => a.ts - b.ts);
+  }
+
   async sendMessage(
     roomId: string, body: string, html?: string | null,
     replyTo?: { eventId: string; senderName: string; body: string } | null,
