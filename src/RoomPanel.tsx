@@ -824,6 +824,26 @@ export function RoomPanel({
                   >
                     <span aria-hidden="true" className="material-symbols-outlined">reply</span>
                   </button>
+                  {!m.image && !m.file && !m.utd && m.body && (
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label="Copy text"
+                      title="Copy text"
+                      onClick={() => { try { void navigator.clipboard?.writeText(m.body); } catch { /* clipboard blocked */ } }}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">content_copy</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="msg-reply"
+                    aria-label="Copy link to message"
+                    title="Copy link to message"
+                    onClick={() => { try { void navigator.clipboard?.writeText(`https://matrix.to/#/${roomId}/${m.id}`); } catch { /* clipboard blocked */ } }}
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined">link</span>
+                  </button>
                   {!threadRootId && onOpenThread && (
                     <button
                       type="button"
