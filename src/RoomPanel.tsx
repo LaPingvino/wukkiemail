@@ -124,6 +124,8 @@ export function RoomPanel({
   onPickUp,
   threadRootId,
   onOpenThread,
+  onOpenProfile,
+  onOpenSettings,
 }: {
   matrix: MatrixSource;
   roomId: string;
@@ -145,6 +147,10 @@ export function RoomPanel({
   threadRootId?: string;
   // Open the thread hanging off a given message (main timeline only).
   onOpenThread?: (rootEventId: string) => void;
+  // Open a user's profile (tap a sender avatar/name).
+  onOpenProfile?: (userId: string) => void;
+  // Open this room's settings (header button). Undefined in thread view.
+  onOpenSettings?: () => void;
 }) {
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200, threadRootId));
   const [composeText, setComposeText] = useState('');
@@ -571,6 +577,7 @@ export function RoomPanel({
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
         onOpenWidgets={!threadRootId && onOpenWidgets ? () => onOpenWidgets(snap.roomName) : undefined}
         onOpenThreads={!threadRootId && onOpenThread && snap.messages.some((m) => m.threadSummary) ? () => setThreadsOpen(true) : undefined}
+        onOpenSettings={!threadRootId ? onOpenSettings : undefined}
         incomingCall={!threadRootId ? incomingCall : undefined}
         onPickUp={onPickUp}
       />
@@ -657,10 +664,18 @@ export function RoomPanel({
                 style={m.pending ? { opacity: 0.55 } : undefined}
               >
                 <div className="comment-head">
-                  {m.senderAvatarUrl
-                    ? <img className="msg-avatar" src={m.senderAvatarUrl} alt="" loading="lazy" />
-                    : <span className="msg-avatar msg-avatar-fallback" aria-hidden="true">{(m.senderName || '?').slice(0, 1).toUpperCase()}</span>}
-                  <strong>{m.senderName}</strong>
+                  <button
+                    type="button"
+                    className="sender-link"
+                    disabled={!onOpenProfile}
+                    title={onOpenProfile ? `View ${m.senderName}'s profile` : undefined}
+                    onClick={() => onOpenProfile?.(m.senderId)}
+                  >
+                    {m.senderAvatarUrl
+                      ? <img className="msg-avatar" src={m.senderAvatarUrl} alt="" loading="lazy" />
+                      : <span className="msg-avatar msg-avatar-fallback" aria-hidden="true">{(m.senderName || '?').slice(0, 1).toUpperCase()}</span>}
+                    <strong>{m.senderName}</strong>
+                  </button>
                   <span className="ts">{m.pending ? 'Sending…' : new Date(m.ts).toLocaleString()}</span>
                 </div>
                 {m.replyTo && (
@@ -1266,7 +1281,7 @@ function ThreadsDrawer({ messages, onClose, onOpen }: {
   );
 }
 
-function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
+function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, onOpenSettings, incomingCall, onPickUp }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; onOpenSettings?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void }) {
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -1295,6 +1310,11 @@ function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel
       {onOpenWidgets && (
         <button type="button" className="hamburger" aria-label="Widgets" title="Widgets" onClick={onOpenWidgets}>
           <span aria-hidden="true" className="material-symbols-outlined">widgets</span>
+        </button>
+      )}
+      {onOpenSettings && (
+        <button type="button" className="hamburger" aria-label="Room settings" title="Room settings" onClick={onOpenSettings}>
+          <span aria-hidden="true" className="material-symbols-outlined">settings</span>
         </button>
       )}
       {onStartCall && (

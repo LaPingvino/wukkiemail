@@ -1885,3 +1885,40 @@ md-outlined-text-field { width: 100%; }
 .msg-notice { opacity: 0.85; border-left: 2px solid var(--muted); padding-left: 8px; }
 .msg-emote { font-style: italic; }
 .emote-actor { font-style: italic; color: var(--muted); }
+
+/* Clickable sender (avatar + name) → profile */
+.sender-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  color: inherit; font: inherit; min-width: 0;
+}
+.sender-link:disabled { cursor: default; }
+.sender-link:not(:disabled):hover strong { text-decoration: underline; }
+
+/* Profile + room-settings pages (full-screen, share the issue-panel chrome) */
+.profile-hero { display: grid; justify-items: center; gap: 8px; padding: 16px 0 8px; }
+.profile-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; }
+.profile-avatar-fallback {
+  display: grid; place-items: center;
+  background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.12)); color: var(--muted);
+  font-size: 40px; font-weight: 600;
+}
+.profile-name { font-size: 20px; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.profile-mxid {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; overflow-wrap: anywhere;
+}
+.profile-mxid:hover { color: var(--md-sys-color-primary); }
+.profile-shared { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.profile-shared li { color: var(--muted); font-size: 14px; padding: 4px 0; }
+
+.settings-field { display: grid; gap: 4px; margin: 12px 0; }
+.settings-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.settings-field input, .settings-field textarea {
+  width: 100%; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border, var(--md-sys-color-outline, #555));
+  background: var(--md-sys-color-surface-container, transparent); color: inherit; font: inherit;
+}
+.settings-field input:disabled, .settings-field textarea:disabled { opacity: 0.6; }
+.settings-danger { color: var(--md-sys-color-error); }

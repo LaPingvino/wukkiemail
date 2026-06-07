@@ -1514,6 +1514,82 @@ export class MatrixSource implements Source {
     return null;
   }
 
+  // User profile: room-scoped name/avatar if available (instant), supplemented
+  // by the global profile (async). Shared rooms + presence for context.
+  async getUserProfile(userId: string, roomId?: string): Promise<UserProfile> {
+    const base: UserProfile = { userId, displayName: userId, presence: this.getPresence(userId) ?? undefined, sharedRooms: this.sharedRoomsWith(userId) };
+    if (!this.client) return base;
+    let displayName = userId;
+    let avatarMxc: string | null | undefined;
+    const member = roomId ? this.client.getRoom(roomId)?.getMember(userId) : null;
+    if (member) { displayName = member.name || userId; avatarMxc = member.getMxcAvatarUrl(); }
+    try {
+      const prof = await this.client.getProfileInfo(userId);
+      if (prof?.displayname && displayName === userId) displayName = prof.displayname;
+      if (!avatarMxc && prof?.avatar_url) avatarMxc = prof.avatar_url;
+    } catch { /* federation/profile may be unavailable — keep room-scoped values */ }
+    const avatarUrl = avatarMxc ? (this.client.mxcUrlToHttp(avatarMxc, 256, 256, 'crop') ?? undefined) : undefined;
+    return { ...base, displayName, avatarUrl };
+  }
+
+  // Names of (non-space) rooms this user shares with us, for the profile page.
+  sharedRoomsWith(userId: string): string[] {
+    if (!this.client) return [];
+    const self = this.client.getUserId();
+    if (userId === self) return [];
+    return this.client.getRooms()
+      .filter((r) => !isSpace(r) && r.getMember(userId)?.membership === 'join')
+      .map((r) => r.name || r.roomId)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  // Find an existing 1:1 DM room with this user (membership join/invite), if any.
+  findDirectMessage(userId: string): string | null {
+    if (!this.client) return null;
+    const dm = this.client.getRooms().find((r) => {
+      if (isSpace(r)) return false;
+      const members = r.getJoinedMembers();
+      return members.length === 2 && members.some((m) => m.userId === userId);
+    });
+    return dm?.roomId ?? null;
+  }
+
+  // ── Room editing (settings page) ──────────────────────────────────────
+  roomInfo(roomId: string): RoomInfo | null {
+    if (!this.client) return null;
+    const room = this.client.getRoom(roomId);
+    if (!room) return null;
+    const selfId = this.client.getUserId() ?? '';
+    const topicEv = room.currentState.getStateEvents('m.room.topic', '');
+    const topic = (topicEv?.getContent() as { topic?: string } | undefined)?.topic ?? '';
+    const mxc = room.getMxcAvatarUrl?.();
+    return {
+      roomId,
+      name: room.name || '',
+      topic,
+      avatarUrl: mxc ? (this.client.mxcUrlToHttp(mxc, 256, 256, 'crop') ?? undefined) : undefined,
+      memberCount: room.getJoinedMemberCount(),
+      canEditName: room.currentState.maySendStateEvent('m.room.name', selfId),
+      canEditTopic: room.currentState.maySendStateEvent('m.room.topic', selfId),
+    };
+  }
+
+  async setRoomName(roomId: string, name: string): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.setRoomName(roomId, name);
+  }
+
+  async setRoomTopic(roomId: string, topic: string): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.setRoomTopic(roomId, topic);
+  }
+
+  async leaveRoom(roomId: string): Promise<void> {
+    if (!this.client) throw new Error('client not started');
+    await this.client.leave(roomId);
+    this.notify();
+  }
+
   // Toggle a reaction on a message: send m.reaction if absent, redact
   // our existing reaction if present.
   async toggleReaction(roomId: string, targetEventId: string, key: string): Promise<void> {
@@ -3299,6 +3375,24 @@ export interface TimelineMessage {
   replyTo?: { eventId: string; senderName: string; body: string };
   readBy?: ReadReceipt[]; // members whose latest read receipt points at this event
   threadSummary?: { count: number; latestTs: number }; // set on main-timeline thread roots
+}
+
+export interface UserProfile {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  presence?: 'online' | 'unavailable' | 'offline';
+  sharedRooms: string[];
+}
+
+export interface RoomInfo {
+  roomId: string;
+  name: string;
+  topic: string;
+  avatarUrl?: string;
+  memberCount: number;
+  canEditName: boolean;
+  canEditTopic: boolean;
 }
 
 function isSpace(room: Room): boolean {

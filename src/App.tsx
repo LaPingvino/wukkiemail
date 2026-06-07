@@ -21,6 +21,8 @@ import { BundleSheet } from './BundleSheet';
 import { QueryChips } from './QueryChips';
 import { JmapLoginSheet } from './JmapLoginSheet';
 import { EmailView } from './EmailView';
+import { ProfilePage } from './ProfilePage';
+import { RoomSettings } from './RoomSettings';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -427,6 +429,8 @@ function Inbox({
   const [jmapSrc] = useState<JmapSource | null>(() => JmapSource.tryRestore());
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState<{ userId: string; roomId?: string } | null>(null);
+  const [roomSettings, setRoomSettings] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const jmapEmail = loadJmapCreds()?.email ?? loadJmapCreds()?.sessionUrl ?? null;
   // User-authored bundles (saved filters), and the create/edit sheet.
@@ -907,6 +911,9 @@ function Inbox({
         // effect), so history.back() runs that same tested onPop cascade and
         // dismisses the topmost one — keyboard parity with scrim-click / back.
         if (anyModalOpen) { e.preventDefault(); history.back(); return; }
+        // Profile / room-settings open on top of a room — close them first.
+        if (roomSettings) { setRoomSettings(null); return; }
+        if (selectedProfile) { setSelectedProfile(null); return; }
         if (openThread) { setOpenThread(null); return; }
         if (selectedIssue) { setSelectedIssue(null); return; }
         if (selectedRoom) { setSelectedRoom(null); return; }
@@ -916,7 +923,7 @@ function Inbox({
       // When a chat / task / email panel or any modal is open, IT owns the
       // keyboard (RoomPanel drives its own arrow nav). Don't also move the
       // inbox cursor underneath.
-      if (selectedRoom || selectedIssue || selectedEmail || openThread || anyModalOpen) return;
+      if (selectedRoom || selectedIssue || selectedEmail || openThread || anyModalOpen || selectedProfile || roomSettings) return;
       // Navigate over the ACTUALLY-RENDERED rows (the bundled view reorders
       // items and hides collapsed bundles, so the global `visible` order does
       // not match what's on screen). Cap on the rendered count, and resolve the
@@ -982,7 +989,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings]);
 
   useEffect(() => {
     const el = document.querySelector(`[data-nav][data-idx="${cursor}"]`);
@@ -2156,6 +2163,8 @@ function Inbox({
             onStartCall={matrixSrc.canStartCall(selectedRoom) ? (name) => setCallRoom({ roomId: selectedRoom, name }) : undefined}
             onOpenWidgets={(matrixSrc.getRoomWidgets(selectedRoom).length > 0 || matrixSrc.canManageWidgets(selectedRoom)) ? (name) => setWidgetRoom({ roomId: selectedRoom, name }) : undefined}
             onOpenThread={(rootId) => setOpenThread({ roomId: selectedRoom, rootId })}
+            onOpenProfile={(uid) => setSelectedProfile({ userId: uid, roomId: selectedRoom })}
+            onOpenSettings={() => setRoomSettings(selectedRoom)}
             incomingCall={incomingCalls[0]}
             onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
           />
@@ -2279,6 +2288,23 @@ function Inbox({
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
       {selectedEmail && jmapSrc && (
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
+      )}
+      {selectedProfile && matrixSrc && (
+        <ProfilePage
+          matrix={matrixSrc}
+          userId={selectedProfile.userId}
+          roomId={selectedProfile.roomId}
+          onClose={() => setSelectedProfile(null)}
+          onOpenRoom={(rid) => { setSelectedProfile(null); setSelectedRoom(rid); }}
+        />
+      )}
+      {roomSettings && matrixSrc && (
+        <RoomSettings
+          matrix={matrixSrc}
+          roomId={roomSettings}
+          onClose={() => setRoomSettings(null)}
+          onLeft={() => { setRoomSettings(null); setSelectedRoom(null); }}
+        />
       )}
       {composeOpen && jmapSrc && (
         <ComposeSheet jmap={jmapSrc} onClose={() => setComposeOpen(false)} />
