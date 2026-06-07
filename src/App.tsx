@@ -479,6 +479,20 @@ function Inbox({
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   // The config bundle (settings + accounts) at the top of the stream.
   const [configOpen, setConfigOpen] = useState(false);
+  // "Settings & accounts" can live as a top-bar gear (opening an overlay) instead
+  // of a bundle at the top of the inbox. Persisted; the bundle is the same JSX,
+  // just CSS-relocated into a centered overlay when this is on.
+  const [settingsInTopBar, setSettingsInTopBar] = useState(() => {
+    try { return localStorage.getItem('wm:settings-topbar') === '1'; } catch { return false; }
+  });
+  const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false);
+  const toggleSettingsInTopBar = useCallback(() => {
+    setSettingsInTopBar((v) => {
+      const next = !v;
+      try { localStorage.setItem('wm:settings-topbar', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   // Search compose helper (predicate chips under the search box).
   const [composerOpen, setComposerOpen] = useState(false);
   // Bundle-level bulk-action sheet (keyed by bundle key).
@@ -1888,6 +1902,18 @@ function Inbox({
             >
               <span aria-hidden="true" className="material-symbols-outlined">tune</span>
             </button>
+            {settingsInTopBar && (
+              <button
+                type="button"
+                className={`hamburger ${settingsOverlayOpen ? 'on' : ''}`}
+                aria-label="Settings and accounts"
+                aria-pressed={settingsOverlayOpen}
+                title="Settings & accounts"
+                onClick={() => { setSettingsOverlayOpen((o) => !o); setConfigOpen(true); }}
+              >
+                <span aria-hidden="true" className="material-symbols-outlined">settings</span>
+              </button>
+            )}
           </div>
           {composerOpen && (
             <div className="compose-bar">
@@ -1950,7 +1976,7 @@ function Inbox({
                 // Config bundle at the very top — folds open to settings +
                 // accounts (the sidebar's non-space controls live here now).
                 rendered.push(
-                  <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''}`}>
+                  <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''} ${settingsInTopBar ? 'config-topbar' : ''} ${settingsInTopBar && settingsOverlayOpen ? 'config-overlay-open' : ''}`}>
                     <button type="button" data-idx={0} data-nav data-bundle-key="__config__" className={`bundle-head ${cursor === 0 ? 'cursor' : ''}`} onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen} aria-selected={cursor === 0}
                       aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
                       <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">
@@ -1965,6 +1991,12 @@ function Inbox({
                     {configOpen && (
                       <div className="bundle-body config-body" role="group">
                         <ThemeControls />
+                        <button type="button" className="config-btn" onClick={toggleSettingsInTopBar}>
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            {settingsInTopBar ? 'check_box' : 'check_box_outline_blank'}
+                          </span>
+                          Settings in the top bar
+                        </button>
                         {matrixSrc && cryptoStatus !== 'verified' && (
                           <div className="encryption-block">
                             <div className="encryption-block-head">
@@ -2374,6 +2406,10 @@ function Inbox({
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
       {selectedEmail && jmapSrc && (
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
+      )}
+      {settingsInTopBar && settingsOverlayOpen && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div className="config-scrim" onClick={() => setSettingsOverlayOpen(false)} aria-hidden="true" />
       )}
       {selectedProfile && matrixSrc && (
         <ProfilePage
