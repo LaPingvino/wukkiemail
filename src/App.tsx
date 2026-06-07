@@ -1470,6 +1470,26 @@ function Inbox({
     return ids;
   }, [bundled]);
 
+  // Open an item's destination view — shared by inbox rows and the pinned bar.
+  const openItem = useCallback((it: InboxItem) => {
+    const jm = it.id.match(/^jmap:(.+)$/);
+    if (jm) { setSelectedEmail(jm[1]); return; }
+    if (it.flavor === 'issue') {
+      const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
+      if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
+    } else {
+      const m = it.id.match(/^matrix:(.+)$/);
+      if (m) setSelectedRoom(m[1]);
+    }
+  }, []);
+
+  // Pinned quick-access bar: pinned items as avatars, unread first → DMs → rest.
+  const pinnedBar = useMemo(() => {
+    const pins = items.filter((it) => it.bundles.includes('pinned'));
+    const rank = (it: InboxItem) => (it.unread ? 0 : it.bundles.includes('dm') ? 1 : 2);
+    return [...pins].sort((a, b) => rank(a) - rank(b) || b.ts - a.ts);
+  }, [items]);
+
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
   // `level` is the 1-based ARIA tree depth (loose/top rows are level 1; rows
@@ -1504,18 +1524,7 @@ function Inbox({
       aria-label={ariaLabel}
       className={`item ${idx === cursor ? 'cursor' : ''} ${it.unread ? 'unread' : ''} ${it.priority <= -1 ? 'dim' : ''} ${it.invite ? 'invite' : ''}`}
       href={it.openPath}
-      onClick={(e) => {
-        e.preventDefault();
-        const jm = it.id.match(/^jmap:(.+)$/);
-        if (jm) { setSelectedEmail(jm[1]); return; }
-        if (it.flavor === 'issue') {
-          const m = it.id.match(/^matrix:(.+):issue:(.+)$/);
-          if (m) setSelectedIssue({ roomId: m[1], issueId: m[2] });
-        } else {
-          const m = it.id.match(/^matrix:(.+)$/);
-          if (m) setSelectedRoom(m[1]);
-        }
-      }}
+      onClick={(e) => { e.preventDefault(); openItem(it); }}
       style={{ color: 'inherit', textDecoration: 'none' }}
     >
       <Avatar name={it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
@@ -1926,6 +1935,24 @@ function Inbox({
             </div>
           )}
         </div>
+        {matrixSrc && pinnedBar.length > 0 && (
+          <div className="pinned-bar" role="list" aria-label="Pinned conversations">
+            {pinnedBar.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                role="listitem"
+                className={`pinned-chip ${it.unread ? 'unread' : ''}`}
+                title={it.subject || it.from}
+                aria-label={`Open ${it.subject || it.from}${it.unread ? ', unread' : ''}`}
+                onClick={() => openItem(it)}
+              >
+                <Avatar name={it.subject || it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
+                <span className="pinned-chip-label">{it.subject || it.from}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {matrixSrc && incomingCalls.length > 0 && (
           <div className="incoming-calls" role="region" aria-label="Incoming calls">
             {incomingCalls.map((c) => (

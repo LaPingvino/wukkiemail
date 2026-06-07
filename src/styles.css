@@ -2081,3 +2081,31 @@ md-outlined-text-field { width: 100%; }
   background: var(--md-sys-color-surface-container); color: var(--fg);
   display: inline-flex; align-items: center; justify-content: center;
 }
+
+/* ── Pinned quick-access bar (below the search) ─────────────────────────── */
+.pinned-bar {
+  display: flex; gap: 14px;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 10px 16px 12px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid var(--md-sys-color-surface-variant, rgba(0,0,0,0.08));
+}
+.pinned-bar::-webkit-scrollbar { height: 6px; }
+.pinned-bar::-webkit-scrollbar-thumb { background: var(--md-sys-color-surface-variant); border-radius: 3px; }
+.pinned-chip {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 60px; padding: 2px; border: none; background: none; cursor: pointer;
+  color: var(--fg); border-radius: 12px;
+}
+.pinned-chip:hover { background: var(--md-sys-color-surface-container); }
+.pinned-chip:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.pinned-chip .avatar-wrap { width: 48px; height: 48px; }
+.pinned-chip.unread .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--md-sys-color-primary); }
+.pinned-chip-label {
+  max-width: 56px; font-size: 11px; line-height: 1.2; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--muted);
+}
+.pinned-chip.unread .pinned-chip-label { color: var(--fg); font-weight: 600; }

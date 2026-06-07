@@ -112,7 +112,7 @@ export const ACCENTS: { key: Accent; label: string; color: string }[] = [
 export function getThemeMode(): ThemeMode {
   try {
     const v = localStorage.getItem(MODE_KEY);
-    if (v === 'light' || v === 'dark' || v === 'system') return v;
+    if (v === 'light' || v === 'dark' || v === 'system' || v === 'daynight') return v;
   } catch { /* storage blocked */ }
   return 'system';
 }
