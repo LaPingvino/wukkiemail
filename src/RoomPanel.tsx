@@ -171,6 +171,7 @@ export function RoomPanel({
   const [replyTo, setReplyTo] = useState<{ eventId: string; senderName: string; body: string } | null>(null);
   const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
   const selfId = matrix.id;
+  const canRedactOthers = matrix.canRedactOthers(roomId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -835,34 +836,35 @@ export function RoomPanel({
                     </button>
                   )}
                   {m.senderId === selfId && (
-                    <>
-                      <button
-                        type="button"
-                        className="msg-reply"
-                        aria-label="Edit"
-                        title="Edit"
-                        onClick={() => {
-                          setEditing({ eventId: m.id, originalBody: m.body });
-                          setComposeText(m.body);
-                          setReplyTo(null);
-                        }}
-                      >
-                        <span aria-hidden="true" className="material-symbols-outlined">edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-reply"
-                        aria-label="Delete"
-                        title="Delete"
-                        onClick={async () => {
-                          if (!confirm('Delete this message?')) return;
-                          try { await matrix.redactMessage(roomId, m.id); }
-                          catch (e) { console.warn('[wukkiemail] redact failed', e); }
-                        }}
-                      >
-                        <span aria-hidden="true" className="material-symbols-outlined">delete</span>
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label="Edit"
+                      title="Edit"
+                      onClick={() => {
+                        setEditing({ eventId: m.id, originalBody: m.body });
+                        setComposeText(m.body);
+                        setReplyTo(null);
+                      }}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">edit</span>
+                    </button>
+                  )}
+                  {(m.senderId === selfId || canRedactOthers) && (
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label={m.senderId === selfId ? 'Delete' : 'Remove message (moderator)'}
+                      title={m.senderId === selfId ? 'Delete' : 'Remove (moderator)'}
+                      onClick={async () => {
+                        // eslint-disable-next-line no-alert
+                        if (!confirm(m.senderId === selfId ? 'Delete this message?' : 'Remove this message?')) return;
+                        try { await matrix.redactMessage(roomId, m.id); }
+                        catch (e) { console.warn('[wukkiemail] redact failed', e); }
+                      }}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">delete</span>
+                    </button>
                   )}
                 </div>
                 {m.readBy && m.readBy.length > 0 && (

@@ -2776,6 +2776,15 @@ export class MatrixSource implements Source {
     await this.client.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined);
   }
 
+  // Do we have the power level to redact OTHER people's messages here?
+  canRedactOthers(roomId: string): boolean {
+    if (!this.client) return false;
+    const room = this.client.getRoom(roomId);
+    if (!room) return false;
+    const myLevel = room.getMember(this.client.getUserId() ?? '')?.powerLevel ?? 0;
+    return room.currentState.hasSufficientPowerLevelFor('redact', myLevel);
+  }
+
   async editMessage(roomId: string, originalEventId: string, body: string, html?: string | null): Promise<void> {
     if (!this.client) throw new Error('client not started');
     const newContent: Record<string, unknown> = { msgtype: 'm.text', body };
