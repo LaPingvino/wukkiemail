@@ -24,7 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
-import { ACCENTS, getAccent, getThemeMode, setAccent, setThemeMode, type ThemeMode, type Accent } from './theme';
+import { ACCENTS, getAccent, getThemeMode, setAccent, setThemeMode, requestLocation, type ThemeMode, type Accent } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -157,10 +157,11 @@ function ConnectScreen({
 function ThemeControls() {
   const [mode, setModeState] = useState<ThemeMode>(() => getThemeMode());
   const [accent, setAccentState] = useState<Accent>(() => getAccent());
-  const modes: { key: ThemeMode; label: string; icon: string }[] = [
+  const modes: { key: ThemeMode; label: string; icon: string; title?: string }[] = [
     { key: 'light', label: 'Light', icon: 'light_mode' },
     { key: 'dark', label: 'Dark', icon: 'dark_mode' },
     { key: 'system', label: 'System', icon: 'contrast' },
+    { key: 'daynight', label: 'Auto', icon: 'wb_twilight', title: 'Light by day, dark after sunset (uses your location)' },
   ];
   return (
     <div className="theme-controls">
@@ -173,7 +174,12 @@ function ThemeControls() {
               type="button"
               className={mode === m.key ? 'on' : undefined}
               aria-pressed={mode === m.key}
-              onClick={() => { setThemeMode(m.key); setModeState(m.key); }}
+              title={m.title}
+              onClick={() => {
+                setThemeMode(m.key);
+                setModeState(m.key);
+                if (m.key === 'daynight') requestLocation(); // cache location for sunset calc
+              }}
             >
               <span aria-hidden="true" className="material-symbols-outlined">{m.icon}</span>{m.label}
             </button>

@@ -2,12 +2,14 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './ErrorBoundary';
-import { applyTheme } from './theme';
+import { applyTheme, startThemeWatcher } from './theme';
 import './material'; // side-effect: register Material Web custom elements
 import './styles.css';
 
-// Apply the saved theme/accent before first paint to avoid a flash.
+// Apply the saved theme/accent before first paint to avoid a flash, and keep
+// day/night mode flipping around sunrise/sunset.
 applyTheme();
+startThemeWatcher();
 
 // Ask the browser to keep our storage durable BEFORE we open any IndexedDB
 // (matrix sync store + Rust crypto store). Without a persistence grant the

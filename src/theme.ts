@@ -5,11 +5,100 @@
 // The accent only sets a single base hue (--accent-base); the CSS derives
 // primary + its container/on-colours from it via color-mix.
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark' | 'system' | 'daynight';
 export type Accent = 'teal' | 'blue' | 'indigo' | 'pink' | 'amber' | 'green';
 
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
+const LOC_KEY = 'wm:geo'; // cached {lat,lon} so day/night doesn't re-prompt
+
+// ── Sunrise/sunset (SunCalc core, trimmed to the two times we need) ──────────
+const RAD = Math.PI / 180;
+const DAY_MS = 86_400_000;
+const J1970 = 2440588;
+const J2000 = 2451545;
+const OBLIQUITY = RAD * 23.4397;
+
+function toDays(date: number): number { return date / DAY_MS - 0.5 + J1970 - J2000; }
+function fromJulian(j: number): number { return (j + 0.5 - J1970) * DAY_MS; }
+function solarMeanAnomaly(d: number): number { return RAD * (357.5291 + 0.98560028 * d); }
+function eclipticLongitude(M: number): number {
+  const C = RAD * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+  return M + C + RAD * 102.9372 + Math.PI;
+}
+function declination(L: number): number { return Math.asin(Math.sin(OBLIQUITY) * Math.sin(L)); }
+function solarTransitJ(ds: number, M: number, L: number): number {
+  return J2000 + ds + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+}
+
+// Returns {sunrise, sunset} epoch ms, or null at the poles (no rise/set today).
+function sunTimes(nowMs: number, lat: number, lon: number): { sunrise: number; sunset: number } | null {
+  const lw = RAD * -lon;
+  const phi = RAD * lat;
+  const d = toDays(nowMs);
+  const n = Math.round(d - 0.0009 - lw / (2 * Math.PI));
+  const ds = 0.0009 + (0 + lw) / (2 * Math.PI) + n;
+  const M = solarMeanAnomaly(ds);
+  const L = eclipticLongitude(M);
+  const dec = declination(L);
+  const Jnoon = solarTransitJ(ds, M, L);
+  const h0 = -0.833 * RAD; // standard sunrise/sunset altitude (incl. refraction)
+  const cosH = (Math.sin(h0) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
+  if (cosH > 1 || cosH < -1) return null; // polar day/night
+  const w = Math.acos(cosH);
+  const a = 0.0009 + (w + lw) / (2 * Math.PI) + n;
+  const Jset = solarTransitJ(a, M, L);
+  const Jrise = Jnoon - (Jset - Jnoon);
+  return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset) };
+}
+
+function getCachedLocation(): { lat: number; lon: number } | null {
+  try {
+    const raw = localStorage.getItem(LOC_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (typeof v?.lat === 'number' && typeof v?.lon === 'number') return v;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// Local-clock fallback when we have no location (or it's polar): night before 7
+// or from 19:00.
+function localHourIsNight(): boolean {
+  const h = new Date().getHours();
+  return h < 7 || h >= 19;
+}
+
+// Is it currently night, for day/night mode?
+export function isNightNow(): boolean {
+  const loc = getCachedLocation();
+  if (!loc) return localHourIsNight();
+  const t = sunTimes(Date.now(), loc.lat, loc.lon);
+  if (!t) return localHourIsNight();
+  const now = Date.now();
+  return now < t.sunrise || now >= t.sunset;
+}
+
+// Ask for location once (on opting into day/night); cache it and re-apply.
+export function requestLocation(): void {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      try { localStorage.setItem(LOC_KEY, JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude })); } catch { /* ignore */ }
+      applyTheme();
+    },
+    () => { /* denied/unavailable — day/night falls back to local clock */ },
+    { maximumAge: 6 * 60 * 60 * 1000, timeout: 10_000 },
+  );
+}
+
+// Re-apply day/night periodically so it flips around sunrise/sunset.
+let watcherStarted = false;
+export function startThemeWatcher(): void {
+  if (watcherStarted) return;
+  watcherStarted = true;
+  setInterval(() => { if (getThemeMode() === 'daynight') applyTheme(); }, 5 * 60 * 1000);
+}
 
 export const ACCENTS: { key: Accent; label: string; color: string }[] = [
   { key: 'teal', label: 'Teal', color: '#0d9488' },
@@ -40,6 +129,7 @@ export function applyTheme(): void {
   const root = document.documentElement;
   const mode = getThemeMode();
   if (mode === 'system') root.removeAttribute('data-theme');
+  else if (mode === 'daynight') root.setAttribute('data-theme', isNightNow() ? 'dark' : 'light');
   else root.setAttribute('data-theme', mode);
   root.setAttribute('data-accent', getAccent());
 }
