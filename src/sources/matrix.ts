@@ -2986,7 +2986,8 @@ export class MatrixSource implements Source {
       // When the message is a rich reply, strip the spec's '> quoted'
       // fallback prefix from the plain body; the formatted_body keeps
       // the styled <mx-reply> block so the quote still shows.
-      const isReply = !!content['m.relates_to']?.['m.in_reply_to']?.event_id;
+      const replyId = content['m.relates_to']?.['m.in_reply_to']?.event_id;
+      const isReply = !!replyId;
       const stripReplyFallback = (s: string) => {
         const lines = s.split('\n');
         let i = 0;
@@ -2994,6 +2995,14 @@ export class MatrixSource implements Source {
         // Skip the blank line separator the spec mandates.
         if (i < lines.length && lines[i] === '') i++;
         return lines.slice(i).join('\n');
+      };
+      // One-line preview of a replied-to event: its plain body with its own reply
+      // fallback stripped, capped. Falls back to a type marker for media/UTD.
+      const replySnippet = (e: MatrixEvent): string => {
+        const c = e.getContent() as { body?: string; msgtype?: string };
+        const raw = c.body ?? (e.getType() === 'm.room.encrypted' ? '🔒 encrypted' : `[${c.msgtype ?? e.getType()}]`);
+        const line = stripReplyFallback(raw).replace(/\s+/g, ' ').trim();
+        return line.length > 140 ? `${line.slice(0, 140)}…` : line;
       };
       const senderId = ev.getSender() ?? '?';
       const senderMember = room.getMember(senderId);
@@ -3011,6 +3020,30 @@ export class MatrixSource implements Source {
         // Still in flight (local echo) — shown muted until the server echo lands.
         pending: st === 'sending' || st === 'queued' || undefined,
       };
+      // Structured reply preview, resolved from the replied-to event if it's
+      // loaded (else senderName/body stay empty and we show a bare "Reply").
+      if (replyId) {
+        const orig = room.findEventById?.(replyId);
+        const origSender = orig?.getSender() ?? '';
+        msg.replyTo = {
+          eventId: replyId,
+          senderName: origSender ? (room.getMember(origSender)?.name ?? origSender) : '',
+          body: orig ? replySnippet(orig) : '',
+        };
+      }
+      // Message-kind flags + sender avatar (per-message avatar column).
+      msg.emote = msgtype === 'm.emote' || undefined;
+      msg.notice = msgtype === 'm.notice' || undefined;
+      msg.utd = type === 'm.room.encrypted' || undefined; // decrypted events report their real type
+      const senderMxc = senderMember?.getMxcAvatarUrl?.();
+      if (senderMxc) {
+        const u = this.client.mxcUrlToHttp(senderMxc, 64, 64, 'crop');
+        if (u) msg.senderAvatarUrl = u;
+      }
+      if (msgtype === 'm.location') {
+        const geo = (content as { geo_uri?: string }).geo_uri;
+        if (geo) msg.geoUri = geo;
+      }
       // Inline media: thumbnail-size HTTPS URL via mxcUrlToHttp. Encrypted
       // rooms carry content.file (an EncryptedFile) instead of content.url;
       // we pass it through for the viewer to fetch + decrypt with Web Crypto.
@@ -3045,7 +3078,11 @@ export class MatrixSource implements Source {
         };
       }
       if (content.format === 'org.matrix.custom.html' && content.formatted_body) {
-        msg.html = content.formatted_body;
+        // Drop the spec <mx-reply> fallback block — we render our own structured
+        // reply preview (msg.replyTo), so keeping it would double the quote.
+        msg.html = isReply
+          ? content.formatted_body.replace(/<mx-reply>[\s\S]*?<\/mx-reply>/i, '').trim()
+          : content.formatted_body;
       }
       const receipts = room.getReceiptsForEvent?.(ev) ?? [];
       const seenIds = new Set<string>();
@@ -3075,7 +3112,13 @@ export class MatrixSource implements Source {
       const byKey = reactionIdx.get(msg.id);
       if (byKey && byKey.size > 0) {
         msg.reactions = [...byKey.entries()]
-          .map(([key, senders]) => ({ key, count: senders.size, selfReacted: senders.has(selfId) }))
+          .map(([key, senders]) => ({
+            key,
+            count: senders.size,
+            selfReacted: senders.has(selfId),
+            // Names for the who-reacted tooltip (capped; the data was already here).
+            reactors: [...senders].slice(0, 8).map((s) => room.getMember(s)?.name ?? s),
+          }))
           .sort((a, b) => b.count - a.count);
       }
       // In the main timeline, flag messages that have a thread hanging off them
@@ -3240,11 +3283,20 @@ export interface TimelineMessage {
   stateLines?: string[]; // chronological human one-liners (capped; see stateCount for the true total)
   stateCount?: number;   // total changes in the run (may exceed stateLines.length)
   pending?: boolean; // local echo still sending/queued — render muted until the server echo replaces it
+  senderAvatarUrl?: string; // sender's avatar (per-message avatar column)
+  emote?: boolean;   // m.emote (/me) — render "* sender body"
+  notice?: boolean;  // m.notice — render visually distinct (bot/automated)
+  utd?: boolean;     // m.room.encrypted that didn't decrypt — render an "unable to decrypt" placeholder
+  geoUri?: string;   // m.location geo: URI
   image?: { url: string; alt: string; w?: number; h?: number; encrypted?: EncryptedFile; sticker?: boolean };
   file?: { url: string; name: string; mimetype?: string; size?: number; encrypted?: EncryptedFile };
-  reactions?: { key: string; count: number; selfReacted: boolean }[];
+  reactions?: { key: string; count: number; selfReacted: boolean; reactors?: string[] }[];
   html?: string;  // formatted_body when format=org.matrix.custom.html
   edited?: boolean;
+  // Structured reply preview (resolved from m.in_reply_to), so replies render a
+  // compact quote regardless of whether the sender included an <mx-reply> HTML
+  // fallback. senderName/body empty when the replied-to event isn't loaded.
+  replyTo?: { eventId: string; senderName: string; body: string };
   readBy?: ReadReceipt[]; // members whose latest read receipt points at this event
   threadSummary?: { count: number; latestTs: number }; // set on main-timeline thread roots
 }

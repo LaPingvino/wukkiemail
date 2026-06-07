@@ -1855,3 +1855,33 @@ md-outlined-text-field { width: 100%; }
   font-size: 12px; color: var(--muted); text-align: center;
 }
 .state-fold .state-more { opacity: 0.7; font-style: italic; }
+
+/* Per-message sender avatar */
+.msg-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; align-self: center; }
+.msg-avatar-fallback {
+  display: inline-grid; place-items: center;
+  background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.12)); color: var(--muted);
+  font-size: 11px; font-weight: 600;
+}
+
+/* Structured reply preview above a reply's body */
+.reply-quote {
+  display: flex; align-items: center; gap: 4px; max-width: 100%;
+  margin: 0 0 4px; padding: 2px 8px;
+  background: none; border: none; border-left: 3px solid var(--md-sys-color-primary, #14b8a6);
+  border-radius: 0 6px 6px 0; cursor: pointer; text-align: left;
+  color: var(--muted); font-size: 12px;
+}
+.reply-quote:hover { background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.06)); }
+.reply-quote-icon { font-size: 14px; flex: 0 0 auto; }
+.reply-quote-sender { font-weight: 600; color: var(--md-sys-color-primary, #14b8a6); flex: 0 0 auto; }
+.reply-quote-body { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Undecryptable message placeholder */
+.msg-utd { display: flex; align-items: center; gap: 6px; color: var(--muted); font-style: italic; }
+.msg-utd .material-symbols-outlined { font-size: 16px; }
+
+/* m.notice (bot/automated) and m.emote (/me) */
+.msg-notice { opacity: 0.85; border-left: 2px solid var(--muted); padding-left: 8px; }
+.msg-emote { font-style: italic; }
+.emote-actor { font-style: italic; color: var(--muted); }

@@ -15,6 +15,15 @@ import { CollapsibleBody } from './CollapsibleBody';
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// "geo:52.52,13.40;u=35" → an OpenStreetMap link so m.location shares open a map
+// instead of rendering as junk text.
+function geoUriToMapUrl(geo: string): string {
+  const m = /geo:([-\d.]+),([-\d.]+)/.exec(geo);
+  if (!m) return geo;
+  const [, lat, lon] = m;
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`;
+}
+
 // Shared look for the muted, full-width "tap to retry" timeline markers (start
 // of room / empty room). Under sliding sync an empty or bottomed-out view is
 // often just a not-yet-arrived pagination token, so both are clickable retries.
@@ -648,10 +657,49 @@ export function RoomPanel({
                 style={m.pending ? { opacity: 0.55 } : undefined}
               >
                 <div className="comment-head">
+                  {m.senderAvatarUrl
+                    ? <img className="msg-avatar" src={m.senderAvatarUrl} alt="" loading="lazy" />
+                    : <span className="msg-avatar msg-avatar-fallback" aria-hidden="true">{(m.senderName || '?').slice(0, 1).toUpperCase()}</span>}
                   <strong>{m.senderName}</strong>
                   <span className="ts">{m.pending ? 'Sending…' : new Date(m.ts).toLocaleString()}</span>
                 </div>
-                {m.image && m.image.encrypted ? (
+                {m.replyTo && (
+                  <button
+                    type="button"
+                    className="reply-quote"
+                    title={m.replyTo.senderName ? `In reply to ${m.replyTo.senderName}` : 'In reply to a message'}
+                    onClick={() => {
+                      const rid = m.replyTo?.eventId;
+                      if (!rid) return;
+                      const j = snap.messages.findIndex((x) => x.id === rid);
+                      if (j < 0) return; // original not loaded into view
+                      setMsgCursor(j);
+                      panelRootRef.current
+                        ?.querySelector(`.comment-list > li[data-msg-idx="${j}"]`)
+                        ?.scrollIntoView({ block: 'center' });
+                    }}
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined reply-quote-icon">reply</span>
+                    <span className="reply-quote-sender">{m.replyTo.senderName || 'Reply'}</span>
+                    {m.replyTo.body && <span className="reply-quote-body">{m.replyTo.body}</span>}
+                  </button>
+                )}
+                {m.utd ? (
+                  <div className="comment-body msg-utd">
+                    <span aria-hidden="true" className="material-symbols-outlined">lock</span>
+                    Unable to decrypt — this device is missing the keys for this message.
+                  </div>
+                ) : m.geoUri ? (
+                  <a
+                    className="msg-file"
+                    href={geoUriToMapUrl(m.geoUri)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined">location_on</span>
+                    <span>{m.body && !m.body.startsWith('[') ? m.body : 'Shared location'}</span>
+                  </a>
+                ) : m.image && m.image.encrypted ? (
                   <EncryptedImage matrix={matrix} file={m.image.encrypted} alt={m.image.alt} sticker={m.image.sticker} />
                 ) : m.image && m.image.sticker ? (
                   <img src={m.image.url} alt={m.image.alt} className="msg-image msg-sticker" loading="lazy" />
@@ -673,9 +721,15 @@ export function RoomPanel({
                     {m.file.size && <span style={{ color: 'var(--muted)' }}>· {formatBytes(m.file.size)}</span>}
                   </a>
                 ) : m.html ? (
-                  <CollapsibleBody className="comment-body">{renderFormattedHtml(m.html, { mxcToHttp: (mxc) => matrix.mxcToHttp(mxc, 64, 64) })}</CollapsibleBody>
+                  <CollapsibleBody className={`comment-body${m.notice ? ' msg-notice' : ''}${m.emote ? ' msg-emote' : ''}`}>
+                    {m.emote && <span className="emote-actor">* {m.senderName} </span>}
+                    {renderFormattedHtml(m.html, { mxcToHttp: (mxc) => matrix.mxcToHttp(mxc, 64, 64) })}
+                  </CollapsibleBody>
                 ) : (
-                  <CollapsibleBody className="comment-body">{renderInline(m.body)}</CollapsibleBody>
+                  <CollapsibleBody className={`comment-body${m.notice ? ' msg-notice' : ''}${m.emote ? ' msg-emote' : ''}`}>
+                    {m.emote && <span className="emote-actor">* {m.senderName} </span>}
+                    {renderInline(m.body)}
+                  </CollapsibleBody>
                 )}
                 {m.edited && (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}> (edited)</span>
@@ -699,7 +753,9 @@ export function RoomPanel({
                       type="button"
                       className={`reaction ${r.selfReacted ? 'self' : ''}`}
                       onClick={() => void matrix.toggleReaction(roomId, m.id, r.key)}
-                      title={r.selfReacted ? 'Remove your reaction' : 'Add your reaction'}
+                      title={r.reactors && r.reactors.length > 0
+                        ? `${r.reactors.join(', ')}${r.count > r.reactors.length ? ` +${r.count - r.reactors.length} more` : ''}`
+                        : (r.selfReacted ? 'Remove your reaction' : 'Add your reaction')}
                     >
                       {r.key.startsWith('mxc://')
                         ? <img className="reaction-emoji" src={matrix.mxcToHttp(r.key, 32, 32) ?? ''} alt="reaction" />
