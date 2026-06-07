@@ -2,7 +2,7 @@
 // Subscribes to the source's change events so new messages appear as
 // they arrive. No compose/reply yet — this is the read-side preview.
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
@@ -14,6 +14,17 @@ import { CollapsibleBody } from './CollapsibleBody';
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Day-separator label: Today / Yesterday / weekday (this week) / full date.
+function dayLabel(ts: number): string {
+  const d = new Date(ts);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days > 1 && days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 // "geo:52.52,13.40;u=35" → an OpenStreetMap link so m.location shares open a map
 // instead of rendering as junk text.
@@ -517,7 +528,7 @@ export function RoomPanel({
         if (details) { e.preventDefault(); details.open = !details.open; }
         return;
       }
-      const count = panelRootRef.current.querySelectorAll('.comment-list > li').length;
+      const count = panelRootRef.current.querySelectorAll('.comment-list > li[data-msg-idx]').length;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setMsgCursor((c) => {
@@ -634,35 +645,52 @@ export function RoomPanel({
           </button>
         ) : (
           <ul className="comment-list">
-            {snap.messages.map((m, i) => (
-              m.kind === 'state' ? (
-                <li key={m.id} className={`state-fold${i === msgCursor ? ' msg-cursor' : ''}`} data-msg-idx={i}>
-                  {(m.stateCount ?? 1) <= 1 ? (
-                    <p className="state-line">{m.stateLines?.[0]}</p>
-                  ) : (
-                    <details className="state-details">
-                      <summary className="state-line">{m.stateCount} room changes</summary>
-                      <ul className="state-list">
-                        {m.stateLines?.map((line, j) => (
-                          // eslint-disable-next-line react/no-array-index-key
-                          <li key={j}>{line}</li>
-                        ))}
-                        {(m.stateCount ?? 0) > (m.stateLines?.length ?? 0) && (
-                          <li className="state-more">
-                            +{(m.stateCount ?? 0) - (m.stateLines?.length ?? 0)} more
-                          </li>
-                        )}
-                      </ul>
-                    </details>
-                  )}
-                </li>
-              ) : (
+            {snap.messages.map((m, i) => {
+              const prev = i > 0 ? snap.messages[i - 1] : null;
+              const showDate = !prev || new Date(m.ts).toDateString() !== new Date(prev.ts).toDateString();
+              const dateSep = showDate
+                ? <li className="date-sep"><span>{dayLabel(m.ts)}</span></li>
+                : null;
+              if (m.kind === 'state') {
+                return (
+                  <Fragment key={m.id}>
+                    {dateSep}
+                    <li className={`state-fold${i === msgCursor ? ' msg-cursor' : ''}`} data-msg-idx={i}>
+                      {(m.stateCount ?? 1) <= 1 ? (
+                        <p className="state-line">{m.stateLines?.[0]}</p>
+                      ) : (
+                        <details className="state-details">
+                          <summary className="state-line">{m.stateCount} room changes</summary>
+                          <ul className="state-list">
+                            {m.stateLines?.map((line, j) => (
+                              // eslint-disable-next-line react/no-array-index-key
+                              <li key={j}>{line}</li>
+                            ))}
+                            {(m.stateCount ?? 0) > (m.stateLines?.length ?? 0) && (
+                              <li className="state-more">
+                                +{(m.stateCount ?? 0) - (m.stateLines?.length ?? 0)} more
+                              </li>
+                            )}
+                          </ul>
+                        </details>
+                      )}
+                    </li>
+                  </Fragment>
+                );
+              }
+              // Group consecutive messages from the same sender within 5 min
+              // (not across a date break, and replies always show their head).
+              const grouped = !!prev && prev.kind !== 'state' && prev.senderId === m.senderId
+                && !m.replyTo && !showDate && (m.ts - prev.ts) < 5 * 60 * 1000;
+              return (
+              <Fragment key={m.id}>
+              {dateSep}
               <li
-                key={m.id}
                 data-msg-idx={i}
-                className={[i === msgCursor ? 'msg-cursor' : '', m.pending ? 'msg-pending' : ''].filter(Boolean).join(' ') || undefined}
+                className={[i === msgCursor ? 'msg-cursor' : '', m.pending ? 'msg-pending' : '', grouped ? 'msg-grouped' : ''].filter(Boolean).join(' ') || undefined}
                 style={m.pending ? { opacity: 0.55 } : undefined}
               >
+                {!grouped && (
                 <div className="comment-head">
                   <button
                     type="button"
@@ -678,6 +706,7 @@ export function RoomPanel({
                   </button>
                   <span className="ts">{m.pending ? 'Sending…' : new Date(m.ts).toLocaleString()}</span>
                 </div>
+                )}
                 {m.replyTo && (
                   <button
                     type="button"
@@ -851,8 +880,9 @@ export function RoomPanel({
                   </div>
                 )}
               </li>
-              )
-            ))}
+              </Fragment>
+              );
+            })}
           </ul>
         )}
       </div>

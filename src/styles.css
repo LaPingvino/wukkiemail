@@ -1922,3 +1922,17 @@ md-outlined-text-field { width: 100%; }
 }
 .settings-field input:disabled, .settings-field textarea:disabled { opacity: 0.6; }
 .settings-danger { color: var(--md-sys-color-error); }
+
+/* Day separators between messages */
+.comment-list > li.date-sep {
+  display: flex; align-items: center; gap: 10px;
+  background: none; padding: 2px 0; border-radius: 0; margin: 2px 0;
+  color: var(--muted); font-size: 12px;
+}
+.comment-list > li.date-sep::before, .comment-list > li.date-sep::after {
+  content: ''; flex: 1; height: 1px; background: var(--border, rgba(127,127,127,0.25));
+}
+.comment-list > li.date-sep span { flex: 0 0 auto; }
+
+/* Consecutive same-sender messages: tighten the gap and drop the head */
+.comment-list > li.msg-grouped { margin-top: -8px; }
