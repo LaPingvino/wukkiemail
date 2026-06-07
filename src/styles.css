@@ -14,10 +14,14 @@
 :root {
   color-scheme: light dark;
   font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif, NotoColorEmojiBahai;
-  --md-sys-color-primary: #0d9488;
+  /* A single base hue drives the accent. primary + its container/on-colours are
+     derived from it via color-mix against the current surface, so switching
+     accent only changes --accent-base, and accents adapt to light/dark for free. */
+  --accent-base: #0d9488;
+  --md-sys-color-primary: var(--accent-base);
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #ccfbf1;
-  --md-sys-color-on-primary-container: #042f2e;
+  --md-sys-color-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
+  --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 80%, var(--md-sys-color-on-surface));
   --md-sys-color-secondary: #5f6368;
   --md-sys-color-surface: #ffffff;
   --md-sys-color-surface-container: #f1f3f4;
@@ -33,12 +37,33 @@
   --border: var(--md-sys-color-outline-variant);
   --accent: var(--md-sys-color-primary);
 }
+
+/* Accent presets — change only the base hue; everything else re-derives. */
+:root[data-accent="teal"]   { --accent-base: #0d9488; }
+:root[data-accent="blue"]   { --accent-base: #1a73e8; }
+:root[data-accent="indigo"] { --accent-base: #4f46e5; }
+:root[data-accent="pink"]   { --accent-base: #d81b60; }
+:root[data-accent="amber"]  { --accent-base: #e8710a; }
+:root[data-accent="green"]  { --accent-base: #16a34a; }
+
+/* Dark tokens. Applied when the user picks Dark, OR — in System mode, where no
+   data-theme attribute is set — when the OS prefers dark. data-theme="light"
+   never matches the media rule, so Light stays light on a dark OS. The accent is
+   lightened for contrast on dark surfaces; container/on-colours re-derive. */
+:root[data-theme="dark"] {
+  --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
+  --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
+  --md-sys-color-surface: #131314;
+  --md-sys-color-surface-container: #1f2024;
+  --md-sys-color-surface-container-low: #1a1a1c;
+  --md-sys-color-on-surface: #e3e3e3;
+  --md-sys-color-on-surface-variant: #c4c7c5;
+  --md-sys-color-outline-variant: #444746;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --md-sys-color-primary: #5eead4;
-    --md-sys-color-on-primary: #042f2e;
-    --md-sys-color-primary-container: #115e59;
-    --md-sys-color-on-primary-container: #ccfbf1;
+  :root:not([data-theme]) {
+    --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
+    --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
     --md-sys-color-surface: #131314;
     --md-sys-color-surface-container: #1f2024;
     --md-sys-color-surface-container-low: #1a1a1c;
@@ -980,7 +1005,9 @@ body {
   gap: 16px; padding: 14px 20px; align-items: center;
   background: var(--card);
   border-radius: 12px;
-  transition: box-shadow 0.1s ease, transform 0.1s ease;
+  /* Faint resting elevation so cards float over the grey canvas, Inbox-style. */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
   position: relative;
   border: 1px solid transparent;
 }
@@ -998,8 +1025,8 @@ body {
 .item:hover .ts { opacity: 0; }
 .item.cursor .ts { opacity: 0; }
 .item:hover {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 10px rgba(0,0,0,0.06);
-  border-color: var(--border);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.09), 0 8px 18px rgba(0,0,0,0.07);
+  transform: translateY(-1px);
 }
 .item.cursor {
   background: var(--md-sys-color-primary-container);
@@ -2003,3 +2030,23 @@ md-outlined-text-field { width: 100%; }
   border-radius: 999px; padding: 0 7px; text-decoration: none; font-weight: 500; white-space: nowrap;
 }
 .mention-pill:hover { text-decoration: underline; }
+
+/* Theme controls (Settings & accounts panel): mode segmented + accent swatches */
+.theme-controls { display: grid; gap: 12px; margin: 4px 0 10px; }
+.theme-row-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px; }
+.theme-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.theme-seg button {
+  background: none; border: none; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px;
+  padding: 6px 14px; display: inline-flex; align-items: center; gap: 4px;
+}
+.theme-seg button + button { border-left: 1px solid var(--border); }
+.theme-seg button .material-symbols-outlined { font-size: 16px; }
+.theme-seg button.on { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.theme-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.theme-swatch {
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.theme-swatch.on { border-color: var(--fg); }
+.theme-swatch .material-symbols-outlined { font-size: 18px; color: #fff; }

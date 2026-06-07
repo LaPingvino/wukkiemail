@@ -24,6 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
+import { ACCENTS, getAccent, getThemeMode, setAccent, setThemeMode, type ThemeMode, type Accent } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -147,6 +148,57 @@ function ConnectScreen({
       <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
         Mail support (JMAP and/or a Matrix email bridge) is on the roadmap.
       </p>
+    </div>
+  );
+}
+
+// Theme picker: light/dark/system mode + accent swatch. Lives in the Settings &
+// accounts panel. theme.* persists to localStorage and re-applies to <html>.
+function ThemeControls() {
+  const [mode, setModeState] = useState<ThemeMode>(() => getThemeMode());
+  const [accent, setAccentState] = useState<Accent>(() => getAccent());
+  const modes: { key: ThemeMode; label: string; icon: string }[] = [
+    { key: 'light', label: 'Light', icon: 'light_mode' },
+    { key: 'dark', label: 'Dark', icon: 'dark_mode' },
+    { key: 'system', label: 'System', icon: 'contrast' },
+  ];
+  return (
+    <div className="theme-controls">
+      <div>
+        <div className="theme-row-label">Appearance</div>
+        <div className="theme-seg" role="group" aria-label="Theme mode">
+          {modes.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              className={mode === m.key ? 'on' : undefined}
+              aria-pressed={mode === m.key}
+              onClick={() => { setThemeMode(m.key); setModeState(m.key); }}
+            >
+              <span aria-hidden="true" className="material-symbols-outlined">{m.icon}</span>{m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="theme-row-label">Accent</div>
+        <div className="theme-swatches" role="group" aria-label="Accent colour">
+          {ACCENTS.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              className={`theme-swatch ${accent === a.key ? 'on' : ''}`}
+              style={{ background: a.color }}
+              aria-label={a.label}
+              aria-pressed={accent === a.key}
+              title={a.label}
+              onClick={() => { setAccent(a.key); setAccentState(a.key); }}
+            >
+              {accent === a.key && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1906,6 +1958,7 @@ function Inbox({
                     </button>
                     {configOpen && (
                       <div className="bundle-body config-body" role="group">
+                        <ThemeControls />
                         {matrixSrc && cryptoStatus !== 'verified' && (
                           <div className="encryption-block">
                             <div className="encryption-block-head">
