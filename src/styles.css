@@ -2050,3 +2050,34 @@ md-outlined-text-field { width: 100%; }
 }
 .theme-swatch.on { border-color: var(--fg); }
 .theme-swatch .material-symbols-outlined { font-size: 18px; color: #fff; }
+
+/* ── Bolder Inbox styling: accent rails, deeper cards, punchier accents ── */
+.item { border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.item:hover {
+  box-shadow: 0 4px 9px rgba(0,0,0,0.12), 0 12px 26px rgba(0,0,0,0.10);
+  transform: translateY(-2px);
+}
+.item.unread { border-left: 4px solid var(--md-sys-color-primary); padding-left: 16px; }
+.item.unread .from, .item.unread .subj strong { font-weight: 700; }
+.bundle-label { font-weight: 600; }
+.bundle-headline:hover .bundle-head { background: var(--md-sys-color-primary-container); }
+.bundle-count { color: var(--md-sys-color-primary); font-weight: 600; }
+.fab { border-radius: 18px; box-shadow: 0 6px 18px color-mix(in srgb, var(--md-sys-color-primary) 42%, transparent); }
+.fab:hover { transform: translateY(-3px); box-shadow: 0 10px 28px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent); }
+.section-header-label { font-weight: 700; letter-spacing: 0.3px; color: var(--md-sys-color-primary); }
+
+/* "Settings in the top bar": the config bundle is CSS-relocated into a FULL-SCREEN
+   overlay opened by the toolbar gear, instead of sitting in the inbox stream. */
+.config-bundle.config-topbar { display: none; }
+.config-bundle.config-topbar.config-overlay-open {
+  display: block; position: fixed; inset: 0; z-index: 35;
+  background: var(--bg); overflow-y: auto; padding: 56px 16px 24px;
+}
+.config-bundle.config-topbar.config-overlay-open .bundle-headline,
+.config-bundle.config-topbar.config-overlay-open .config-body { max-width: 560px; margin: 0 auto; }
+.config-overlay-close {
+  position: fixed; top: 12px; right: 12px; z-index: 36;
+  width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--md-sys-color-surface-container); color: var(--fg);
+  display: inline-flex; align-items: center; justify-content: center;
+}

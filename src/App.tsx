@@ -1009,6 +1009,7 @@ function Inbox({
         // effect), so history.back() runs that same tested onPop cascade and
         // dismisses the topmost one — keyboard parity with scrim-click / back.
         if (anyModalOpen) { e.preventDefault(); history.back(); return; }
+        if (settingsInTopBar && settingsOverlayOpen) { setSettingsOverlayOpen(false); return; }
         // Profile / room-settings open on top of a room — close them first, via
         // history.back() so the pushed entry is popped (the cascade's onPop does
         // the setState), keeping the back stack consistent with hardware back.
@@ -1088,7 +1089,7 @@ function Inbox({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings, membersRoom]);
+  }, [visible, cursor, query, selectedIssue, selectedRoom, selectedEmail, openThread, matrixSrc, shortcutsOpen, itemById, anyModalOpen, expandedBundles, selectedProfile, roomSettings, membersRoom, settingsInTopBar, settingsOverlayOpen]);
 
   useEffect(() => {
     const el = document.querySelector(`[data-nav][data-idx="${cursor}"]`);
@@ -2408,8 +2409,9 @@ function Inbox({
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
       )}
       {settingsInTopBar && settingsOverlayOpen && (
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-        <div className="config-scrim" onClick={() => setSettingsOverlayOpen(false)} aria-hidden="true" />
+        <button type="button" className="config-overlay-close" aria-label="Close settings" onClick={() => setSettingsOverlayOpen(false)}>
+          <span aria-hidden="true" className="material-symbols-outlined">close</span>
+        </button>
       )}
       {selectedProfile && matrixSrc && (
         <ProfilePage
