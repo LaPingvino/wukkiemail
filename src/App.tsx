@@ -2917,6 +2917,40 @@ function Avatar({ name, flavor, presence, url }: { name: string; flavor: string;
   );
 }
 
+// One row in the New-chat picker. Reports when it scrolls into view so the
+// parent can lazily fetch a federated profile (name/avatar) for just the
+// visible contacts instead of hammering the homeserver for the whole list.
+function ContactRow({ userId, name, avatarUrl, fav, busy, disabled, onOpen, onVisible }: {
+  userId: string; name: string; avatarUrl?: string; fav?: boolean; busy: boolean; disabled: boolean;
+  onOpen: () => void; onVisible: (userId: string) => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) { onVisible(userId); io.disconnect(); break; }
+      }
+    }, { rootMargin: '150px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [userId, onVisible]);
+  return (
+    <button ref={ref} type="button" className="contact-row" disabled={disabled} onClick={onOpen}>
+      <Avatar name={name} flavor="matrix" url={avatarUrl} />
+      <span className="contact-row-text">
+        <span className="contact-row-name">
+          {name}
+          {fav && <span className="material-symbols-outlined contact-fav" aria-hidden="true" title="Favourite">push_pin</span>}
+        </span>
+        <span className="contact-row-id">{userId}</span>
+      </span>
+      {busy && <span className="material-symbols-outlined contact-spin" aria-hidden="true">progress_activity</span>}
+    </button>
+  );
+}
+
 // Full-screen "New chat" picker. Shows the people you already DM, ranked for
 // quick picking — favourited contacts on top, then by recency — and folds in a
 // directory search (plus a raw @user:server fallback) when you type. Tapping a
@@ -2927,6 +2961,17 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
   const [busy, setBusy] = useState<string | null>(null); // userId currently opening
   const [error, setError] = useState<string | null>(null);
   const [others, setOthers] = useState<import('./sources/matrix').PersonHit[]>([]);
+  // Federated profile fills for rows that scroll into view (name/avatar that
+  // weren't cached locally). Keyed by userId; merged over the initial data.
+  const [profiles, setProfiles] = useState<Record<string, { name?: string; avatarUrl?: string }>>({});
+  const fetchedRef = useRef<Set<string>>(new Set());
+  const fetchProfile = useCallback((userId: string) => {
+    if (fetchedRef.current.has(userId)) return;
+    fetchedRef.current.add(userId);
+    void matrix.getUserProfile(userId).then((p) => {
+      setProfiles((prev) => ({ ...prev, [userId]: { name: p.displayName !== userId ? p.displayName : undefined, avatarUrl: p.avatarUrl } }));
+    }).catch(() => { /* profile unavailable — keep what we have */ });
+  }, [matrix]);
 
   const contacts = useMemo(() => matrix.listDmContacts(), [matrix]);
   const contactIds = useMemo(() => new Set(contacts.map((c) => c.userId)), [contacts]);
@@ -2963,19 +3008,22 @@ function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/
   const typed = query.trim();
   const showExact = !!q && MXID_RE.test(typed) && !contactIds.has(typed) && !others.some((o) => o.userId === typed);
 
-  const row = (userId: string, name: string, avatarUrl?: string, fav?: boolean) => (
-    <button key={userId} type="button" className="contact-row" disabled={!!busy} onClick={() => void open(userId)}>
-      <Avatar name={name} flavor="matrix" url={avatarUrl} />
-      <span className="contact-row-text">
-        <span className="contact-row-name">
-          {name}
-          {fav && <span className="material-symbols-outlined contact-fav" aria-hidden="true" title="Favourite">push_pin</span>}
-        </span>
-        <span className="contact-row-id">{userId}</span>
-      </span>
-      {busy === userId && <span className="material-symbols-outlined contact-spin" aria-hidden="true">progress_activity</span>}
-    </button>
-  );
+  const row = (userId: string, name: string, avatarUrl?: string, fav?: boolean) => {
+    const ov = profiles[userId];
+    return (
+      <ContactRow
+        key={userId}
+        userId={userId}
+        name={ov?.name ?? name}
+        avatarUrl={ov?.avatarUrl ?? avatarUrl}
+        fav={fav}
+        busy={busy === userId}
+        disabled={!!busy}
+        onOpen={() => void open(userId)}
+        onVisible={fetchProfile}
+      />
+    );
+  };
 
   return (
     <div className="bundle-overlay newchat-overlay" role="region" aria-label="New chat">
