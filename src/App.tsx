@@ -2917,42 +2917,97 @@ function Avatar({ name, flavor, presence, url }: { name: string; flavor: string;
   );
 }
 
+// Full-screen "New chat" picker. Shows the people you already DM, ranked for
+// quick picking — favourited contacts on top, then by recency — and folds in a
+// directory search (plus a raw @user:server fallback) when you type. Tapping a
+// known contact opens the EXISTING DM rather than spawning a duplicate room.
+const MXID_RE = /^@[^:\s]+:[^:\s]+$/;
 function NewDmSheet({ matrix, onClose, onCreated }: { matrix: import('./sources/matrix').MatrixSource; onClose: () => void; onCreated: (roomId: string) => void }) {
-  const [mxid, setMxid] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState<string | null>(null); // userId currently opening
   const [error, setError] = useState<string | null>(null);
-  const submit = async () => {
-    if (!mxid) return;
-    setBusy(true); setError(null);
-    try { onCreated(await matrix.createDirectMessage(mxid.trim())); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+  const [others, setOthers] = useState<import('./sources/matrix').PersonHit[]>([]);
+
+  const contacts = useMemo(() => matrix.listDmContacts(), [matrix]);
+  const contactIds = useMemo(() => new Set(contacts.map((c) => c.userId)), [contacts]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () => (!q ? contacts : contacts.filter((c) => c.name.toLowerCase().includes(q) || c.userId.toLowerCase().includes(q))),
+    [contacts, q],
+  );
+  const favs = filtered.filter((c) => c.favourite);
+  const recents = filtered.filter((c) => !c.favourite);
+
+  // Directory / known-user search for people you don't already DM (only when typing).
+  useEffect(() => {
+    if (!q) { setOthers([]); return; }
+    let cancelled = false;
+    const id = window.setTimeout(async () => {
+      try {
+        const res = await matrix.searchUsers(query.trim());
+        if (!cancelled) setOthers(res.filter((h) => !contactIds.has(h.userId)));
+      } catch { if (!cancelled) setOthers([]); }
+    }, 160);
+    return () => { cancelled = true; window.clearTimeout(id); };
+  }, [query, q, matrix, contactIds]);
+
+  const open = async (userId: string) => {
+    setBusy(userId); setError(null);
+    try {
+      const existing = matrix.findDirectMessage(userId);
+      onCreated(existing ?? await matrix.createDirectMessage(userId));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(null); }
   };
+
+  const typed = query.trim();
+  const showExact = !!q && MXID_RE.test(typed) && !contactIds.has(typed) && !others.some((o) => o.userId === typed);
+
+  const row = (userId: string, name: string, avatarUrl?: string, fav?: boolean) => (
+    <button key={userId} type="button" className="contact-row" disabled={!!busy} onClick={() => void open(userId)}>
+      <Avatar name={name} flavor="matrix" url={avatarUrl} />
+      <span className="contact-row-text">
+        <span className="contact-row-name">
+          {name}
+          {fav && <span className="material-symbols-outlined contact-fav" aria-hidden="true" title="Favourite">push_pin</span>}
+        </span>
+        <span className="contact-row-id">{userId}</span>
+      </span>
+      {busy === userId && <span className="material-symbols-outlined contact-spin" aria-hidden="true">progress_activity</span>}
+    </button>
+  );
+
   return (
-    <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label="New DM" onClick={(e) => e.stopPropagation()}>
-        <header className="sheet-head">
-          <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
-            <span aria-hidden="true" className="material-symbols-outlined">close</span>
-          </button>
-          <div style={{ flex: 1, fontWeight: 500, fontSize: 18 }}>New DM</div>
-        </header>
-        <div className="sheet-body">
-          <label className="sheet-label">
-            <span>Person</span>
-            <PersonPicker
-              matrix={matrix}
-              value={mxid ? [mxid] : []}
-              onChange={(ids) => setMxid(ids[0] ?? '')}
-              autoFocus
-              placeholder="Search people or type @friend:server"
-            />
-          </label>
-          {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13 }}>{error}</p>}
-          <button type="button" className="sheet-submit" onClick={() => void submit()} disabled={!mxid || busy} style={{ justifySelf: 'end' }}>
-            {busy ? 'Creating…' : 'Start chat'}
-          </button>
-        </div>
+    <div className="bundle-overlay newchat-overlay" role="region" aria-label="New chat">
+      <header className="bundle-overlay-head">
+        <button type="button" className="hamburger" aria-label="Close" onClick={onClose}>
+          <span aria-hidden="true" className="material-symbols-outlined">close</span>
+        </button>
+        <div className="bundle-overlay-title"><span className="bundle-label">New chat</span></div>
+      </header>
+      <div className="newchat-search">
+        <span aria-hidden="true" className="material-symbols-outlined">search</span>
+        <input
+          type="text"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search people or type @friend:server"
+          aria-label="Search people"
+        />
+      </div>
+      {error && <p style={{ color: 'var(--md-sys-color-error)', fontSize: 13, padding: '4px 16px 0' }}>{error}</p>}
+      <div className="bundle-overlay-body newchat-body">
+        {favs.length > 0 && (<><div className="section-header"><span className="section-header-label">Favourites</span></div>{favs.map((c) => row(c.userId, c.name, c.avatarUrl, true))}</>)}
+        {recents.length > 0 && (<><div className="section-header"><span className="section-header-label">{q ? 'Your chats' : 'Recent chats'}</span></div>{recents.map((c) => row(c.userId, c.name, c.avatarUrl))}</>)}
+        {others.length > 0 && (<><div className="section-header"><span className="section-header-label">Other people</span></div>{others.map((h) => row(h.userId, h.name, h.avatarUrl))}</>)}
+        {showExact && (<><div className="section-header"><span className="section-header-label">Start a new chat</span></div>{row(typed, typed)}</>)}
+        {favs.length === 0 && recents.length === 0 && others.length === 0 && !showExact && (
+          <div className="empty" style={{ padding: 24, fontSize: 13 }}>
+            <p>{q ? 'No people match. Type a full @user:server to start a new chat.' : 'No conversations yet. Type a name or @user:server to start one.'}</p>
+          </div>
+        )}
       </div>
     </div>
   );

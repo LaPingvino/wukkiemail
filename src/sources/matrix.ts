@@ -193,6 +193,17 @@ function readImageDimensions(file: File): Promise<{ w: number; h: number } | nul
 
 export interface PersonHit { userId: string; name: string; avatarUrl?: string }
 
+// A person you already have a DM with — for the "New chat" picker's relevancy
+// ordering (favourites on top, then by recency).
+export interface DmContact {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  roomId: string;       // the existing DM room (open it instead of making a new one)
+  favourite: boolean;   // m.favourite tag on the DM room
+  ts: number;           // last activity, for recency sort
+}
+
 export interface DeviceEntry {
   deviceId: string;
   displayName: string;
@@ -1571,6 +1582,39 @@ export class MatrixSource implements Source {
       return members.length === 2 && members.some((m) => m.userId === userId);
     });
     return dm?.roomId ?? null;
+  }
+
+  // Everyone you already DM with, ranked for the New-chat picker: favourited
+  // contacts first, then by most-recent activity. Derived from m.direct (the
+  // authoritative DM map), picking each contact's most-recent joined room.
+  listDmContacts(): DmContact[] {
+    if (!this.client) return [];
+    const dmEvt = this.client.getAccountData('m.direct' as never);
+    const dmContent = (dmEvt?.getContent() ?? {}) as Record<string, string[]>;
+    const out: DmContact[] = [];
+    for (const [userId, roomIds] of Object.entries(dmContent)) {
+      if (!userId) continue;
+      let best: Room | null = null;
+      let bestTs = -1;
+      for (const rid of roomIds ?? []) {
+        const room = this.client.getRoom(rid);
+        if (!room || isSpace(room) || room.getMyMembership() !== 'join') continue;
+        const ts = room.getLastActiveTimestamp?.() ?? 0;
+        if (ts > bestTs) { bestTs = ts; best = room; }
+      }
+      if (!best) continue;
+      const hit = this.resolveUser(userId);
+      out.push({
+        userId,
+        name: hit.name,
+        avatarUrl: hit.avatarUrl,
+        roomId: best.roomId,
+        favourite: !!(best.tags && best.tags['m.favourite']),
+        ts: bestTs,
+      });
+    }
+    out.sort((a, b) => (a.favourite === b.favourite ? b.ts - a.ts : a.favourite ? -1 : 1));
+    return out;
   }
 
   // ── Room editing (settings page) ──────────────────────────────────────
