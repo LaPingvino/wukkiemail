@@ -2117,6 +2117,11 @@ md-outlined-text-field { width: 100%; }
   border: 1px dashed color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent);
 }
 .pinned-chip-picker .pinned-chip-label { color: var(--md-sys-color-primary); }
+/* Spotlight = the highest-priority UNREAD that isn't pinned, shown as the first
+   chip. Distinguished from pinned-unread chips by a secondary-colour ring + label
+   so it reads as "attention", not "pinned". */
+.pinned-chip.spotlight .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--md-sys-color-secondary); }
+.pinned-chip.spotlight .pinned-chip-label { color: var(--md-sys-color-secondary); font-weight: 700; }
 
 /* ── Full-screen single-bundle overlay ──────────────────────────────────── */
 .bundle-overlay {
@@ -2191,6 +2196,9 @@ md-outlined-text-field { width: 100%; }
 .header-pin .avatar-badge, .header-pin .avatar-presence { display: none; }
 .header-pin.unread .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-primary); }
 .header-pin.current .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-on-surface); }
+.header-pin.spotlight .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-secondary); }
+/* When the spotlight chip is also the open room, the "current" ring wins. */
+.header-pin.spotlight.current .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--md-sys-color-on-surface); }
 /* On narrow viewports the header has no room to spare — hide it entirely so the
    name + nav buttons keep their space (the "anything else pushes it away" rule). */
 @media (max-width: 680px) { .header-pinned-bar { display: none; } }

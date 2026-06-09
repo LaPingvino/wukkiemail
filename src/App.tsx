@@ -1504,6 +1504,25 @@ function Inbox({
     return [...pins].sort((a, b) => rank(a) - rank(b) || b.ts - a.ts);
   }, [items]);
 
+  // The single highest-priority unread conversation that ISN'T pinned — surfaced
+  // as the FIRST chip in the quick-access bar so the most important thing waiting
+  // is always one tap away, even when you haven't pinned it. The only non-pinned
+  // entry in the bar (invites/snoozed excluded — invites already float to the top
+  // of the list with their own Accept/Decline UI).
+  const topUnread = useMemo(() => {
+    const cands = items.filter((it) =>
+      it.unread && !it.invite && !it.snoozedUntil && !it.bundles.includes('pinned'));
+    if (cands.length === 0) return null;
+    return [...cands].sort((a, b) => b.priority - a.priority || b.ts - a.ts)[0];
+  }, [items]);
+
+  // What the quick-access bar actually renders: the spotlight unread (if any)
+  // ahead of the pinned chips.
+  const barItems = useMemo(
+    () => (topUnread ? [topUnread, ...pinnedBar] : pinnedBar),
+    [topUnread, pinnedBar],
+  );
+
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
   // `level` is the 1-based ARIA tree depth (loose/top rows are level 1; rows
@@ -1954,7 +1973,7 @@ function Inbox({
           )}
         </div>
         {matrixSrc && (
-          <div className="pinned-bar" role="list" aria-label="Pinned conversations">
+          <div className="pinned-bar" role="list" aria-label="Pinned and priority conversations">
             <button
               type="button"
               role="listitem"
@@ -1968,20 +1987,23 @@ function Inbox({
               </span>
               <span className="pinned-chip-label">New chat</span>
             </button>
-            {pinnedBar.map((it) => (
+            {barItems.map((it) => {
+              const spotlight = it.id === topUnread?.id;
+              return (
               <button
                 key={it.id}
                 type="button"
                 role="listitem"
-                className={`pinned-chip ${it.unread ? 'unread' : ''}`}
+                className={`pinned-chip ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''}`}
                 title={it.subject || it.from}
-                aria-label={`Open ${it.subject || it.from}${it.unread ? ', unread' : ''}`}
+                aria-label={`Open ${it.subject || it.from}${spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
                 onClick={() => openItem(it)}
               >
                 <Avatar name={it.subject || it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
                 <span className="pinned-chip-label">{it.subject || it.from}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
         {matrixSrc && incomingCalls.length > 0 && (
@@ -2344,21 +2366,24 @@ function Inbox({
             onOpenSettings={() => setRoomSettings(selectedRoom)}
             incomingCall={incomingCalls[0]}
             onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
-            headerExtra={pinnedBar.length > 0 ? (
-              <div className="header-pinned-bar" role="list" aria-label="Pinned conversations">
-                {pinnedBar.map((it) => (
+            headerExtra={barItems.length > 0 ? (
+              <div className="header-pinned-bar" role="list" aria-label="Pinned and priority conversations">
+                {barItems.map((it) => {
+                  const spotlight = it.id === topUnread?.id;
+                  return (
                   <button
                     key={it.id}
                     type="button"
                     role="listitem"
-                    className={`header-pin ${it.unread ? 'unread' : ''} ${itemRoomId(it.id) === selectedRoom ? 'current' : ''}`}
+                    className={`header-pin ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''} ${itemRoomId(it.id) === selectedRoom ? 'current' : ''}`}
                     title={it.subject || it.from}
-                    aria-label={`Open ${it.subject || it.from}${it.unread ? ', unread' : ''}`}
+                    aria-label={`Open ${it.subject || it.from}${spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
                     onClick={() => openItem(it)}
                   >
                     <Avatar name={it.subject || it.from} flavor={it.flavor} url={it.avatarUrl} />
                   </button>
-                ))}
+                  );
+                })}
               </div>
             ) : undefined}
           />
