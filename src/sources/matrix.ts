@@ -259,6 +259,14 @@ const describeVerificationCancel = (e: unknown): string => {
   return String(e);
 };
 
+// How many back-pagination cycles to spend chasing an unloaded read marker
+// before giving up on a room (each cycle loads 50 events → ~300 back). Bounds
+// pagination cost: a marker that's redacted / in a gap / beyond what the server
+// returns would otherwise be chased indefinitely. Once we stop, the room simply
+// renders as read (roomToItem biases the unverifiable case to read) — which is
+// exactly the desired release for a stuck phantom-marker room. See markerUnverified.
+const MARKER_MAX_TRIES = 6;
+
 export class MatrixSource implements Source {
   readonly kind = 'matrix' as const;
   readonly id: string;
@@ -280,6 +288,13 @@ export class MatrixSource implements Source {
   // category get a one-shot back-pagination so the real last message surfaces.
   private inflateTimer: ReturnType<typeof setTimeout> | null = null;
   private inflateTried = new Set<string>();
+  // Read-marker backfill: rooms the server still counts unread but whose read
+  // marker isn't in the loaded (lean) timeline, so itemForRoom can't tell a
+  // genuinely-unread room from a stale count (see markerUnverified). We paginate
+  // back until the marker appears; the value tracks attempts so a marker beyond
+  // reachable history is eventually given up on (capped at MARKER_MAX_TRIES) and
+  // doesn't spin forever. Cleared on TimelineReset so a resync re-enables it.
+  private markerBackfillTries = new Map<string, number>();
   // Set once we've wired the visibility/online listeners that poke the sliding
   // sync to resend the moment the tab is foregrounded (see start()).
   private pokeWired = false;
@@ -1106,6 +1121,13 @@ export class MatrixSource implements Source {
     // each status change (sending → sent / not_sent), not only when the server
     // echo arrives via sync — otherwise a just-sent message appears to vanish.
     client.on(RoomEvent.LocalEchoUpdated as never, (() => this.notify()) as never);
+    // A limited sync resets a room's timeline and can drop the read marker we'd
+    // previously paginated to — so clear its backfill cap and re-arm the pass,
+    // otherwise a now-stale unread badge would be stuck (we'd already given up).
+    client.on(RoomEvent.TimelineReset as never, ((room?: Room) => {
+      if (room?.roomId) this.markerBackfillTries.delete(room.roomId);
+      this.scheduleInflate();
+    }) as never);
     // start() resolves now — UI can render whatever rooms are available,
     // and re-render as the sync stream lands more.
   }
@@ -1865,38 +1887,105 @@ export class MatrixSource implements Source {
     }, delayMs);
   }
 
+  // A room the server still counts as unread, but whose read marker isn't in the
+  // loaded (lean) timeline. itemForRoom verifies unread by scanning the timeline
+  // back to the marker; with the marker UNLOADED that scan stops at the last
+  // (already-read) message and can't tell "genuinely unread" from "stale server
+  // count" — so the room stays wrongly unread forever (the marker is older than
+  // the lean window, and ordinary inflation skips the room because its last event
+  // is a real message, not noise). The only fix is to paginate back until the
+  // marker loads; then the itemForRoom scan self-corrects. Highlights are
+  // excluded — a mention keeps the room unread regardless, nothing to verify. No
+  // receipt at all → can't verify by loading anything, so leave it as the server
+  // says rather than chase history forever.
+  private markerUnverified(room: Room): boolean {
+    if (room.getMyMembership?.() !== 'join') return false;
+    if ((room.getUnreadNotificationCount?.() ?? 0) === 0) return false;
+    if ((room.getUnreadNotificationCount?.('highlight' as never) ?? 0) > 0) return false;
+    const selfId = this.client?.getUserId();
+    const marker = selfId ? room.getEventReadUpTo(selfId) : null;
+    if (!marker) return false;
+    return !room.getLiveTimeline().getEvents().some((e) => e.getId() === marker);
+  }
+
   private async inflateLackingRooms(): Promise<void> {
     if (!this.client) return;
+    // PASS 1 — read-marker backfill (highest priority). These rooms are likely
+    // showing a STALE unread badge: load back to the marker so the unread can be
+    // verified. Mirrors cinny's marker-priority backfill. A bigger page than the
+    // noise pass (a far-back marker is reached in fewer cycles), and retried
+    // across cycles up to MARKER_MAX_TRIES (a marker beyond reachable history is
+    // eventually abandoned instead of paginating the whole room).
+    const markerRooms = this.client.getRooms().filter(
+      (r) => !isSpace(r)
+        && (this.markerBackfillTries.get(r.roomId) ?? 0) < MARKER_MAX_TRIES
+        && this.markerUnverified(r),
+    );
+    // Most-recent first: the unread you'd look at first settles first.
+    markerRooms.sort((a, b) => (b.getLastActiveTimestamp?.() ?? 0) - (a.getLastActiveTimestamp?.() ?? 0));
+
+    // PASS 2 — noise inflation: rooms whose only loaded event is a hidden
+    // category get a one-shot back-pagination so the real last message surfaces.
     const hidden = new Set(
       Object.entries(this.getWeights().eventTypeAdjust ?? {})
         .filter(([, v]) => v?.hidden === true)
         .map(([k]) => k),
     );
-    if (hidden.size === 0) return;
     const lacksMeaning = (room: Room): boolean => {
+      if (hidden.size === 0) return false;
       if (room.getMyMembership?.() !== 'join') return false;
       const evs = room.getLiveTimeline().getEvents();
       if (evs.length === 0) return false; // nothing loaded yet — the window will deliver one
       return !evs.some((e) => !hidden.has(eventCategory(e.getType(), (e.getContent() as { msgtype?: string }).msgtype)));
     };
-    const candidates = this.client.getRooms().filter(
+    const noiseRooms = this.client.getRooms().filter(
       (r) => !isSpace(r) && !this.inflateTried.has(r.roomId) && lacksMeaning(r),
     );
-    if (candidates.length === 0) return;
     // Inflate by IMPORTANCE, not store order: unread rooms first (you want to
     // see what's actually waiting), then most-recent. So the part of the inbox
     // you care about settles right away and the long tail fills in behind it,
     // rather than the whole list shuffling. This is the "load the right thing at
     // each moment" lever — get the order right and the correction looks seamless.
-    candidates.sort((a, b) => {
+    noiseRooms.sort((a, b) => {
       const ua = (a.getUnreadNotificationCount?.() ?? 0) > 0 ? 1 : 0;
       const ub = (b.getUnreadNotificationCount?.() ?? 0) > 0 ? 1 : 0;
       if (ua !== ub) return ub - ua;
       return (b.getLastActiveTimestamp?.() ?? 0) - (a.getLastActiveTimestamp?.() ?? 0);
     });
-    const batch = candidates.slice(0, 8);
+
+    if (markerRooms.length === 0 && noiseRooms.length === 0) return;
+
     let anyOk = false;
-    await Promise.all(batch.map(async (room) => {
+    let moreWork = false; // a marker room still being chased (needs another cycle)
+
+    // Marker backfill takes priority for the shared ~8-room concurrency budget;
+    // noise inflation fills whatever slots remain.
+    const markerBatch = markerRooms.slice(0, 8);
+    const selfId = this.client.getUserId();
+    await Promise.all(markerBatch.map(async (room) => {
+      try {
+        const more = await this.client!.paginateEventTimeline(room.getLiveTimeline(), { backwards: true, limit: 50 });
+        anyOk = true;
+        const marker = selfId ? room.getEventReadUpTo(selfId) : null;
+        const found = !!marker && room.getLiveTimeline().getEvents().some((e) => e.getId() === marker);
+        const tries = (this.markerBackfillTries.get(room.roomId) ?? 0) + 1;
+        if (found || !more || tries >= MARKER_MAX_TRIES) {
+          // Verified, ran out of history, or hit the cap — stop chasing this room.
+          // Pin to MAX so markerUnverified's gate drops it on the next cycle.
+          this.markerBackfillTries.set(room.roomId, MARKER_MAX_TRIES);
+        } else {
+          this.markerBackfillTries.set(room.roomId, tries);
+          moreWork = true; // marker still not loaded — keep going
+        }
+      } catch {
+        // Network/offline failure — DON'T count the attempt, so a later cycle
+        // retries once the connection recovers.
+      }
+    }));
+
+    const slots = 8 - markerBatch.length;
+    const noiseBatch = slots > 0 ? noiseRooms.slice(0, slots) : [];
+    await Promise.all(noiseBatch.map(async (room) => {
       try {
         await this.client!.paginateEventTimeline(room.getLiveTimeline(), { backwards: true, limit: 20 });
         // Succeeded: mark tried ONLY now. If the room is still all-noise after a
@@ -1909,10 +1998,14 @@ export class MatrixSource implements Source {
         // point: we never permanently give up on a room because of a dropped req.
       }
     }));
+
     if (anyOk) this.notify();
+    const tail = moreWork
+      || markerRooms.length > markerBatch.length
+      || noiseRooms.length > noiseBatch.length;
     if (!anyOk) {
       this.scheduleInflate(5000); // whole batch failed — back off, but keep retrying (flaky link)
-    } else if (candidates.length > batch.length) {
+    } else if (tail) {
       this.scheduleInflate(); // tail remains — continue promptly
     }
   }
@@ -3735,30 +3828,48 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // message loaded, then flipped them back on open (read-receipt race).
   const notifs = room.getUnreadNotificationCount?.() ?? 0;
   const highlights = room.getUnreadNotificationCount?.('highlight' as never) ?? 0;
-  // Does the unread portion contain anything the room view renders? Scan the
-  // loaded timeline back to this user's read marker; stop at the first renderable
-  // message. If the unread is only state/reactions/redactions/UTD, the room would
-  // open to an empty window, so "next unread" should skip it (see unreadHasText).
-  let unreadHasText = false;
-  let scanReachedMarker = false;
+  // Verify the server's unread count against the loaded timeline. Scan back from
+  // the newest event, stopping AT this user's read marker — so every event seen
+  // before the stop is strictly NEWER than the marker (genuinely unread). We
+  // learn two independent facts:
+  //   markerLoaded   — the read marker is in the loaded window (the count is
+  //                    verifiable; timelines load contiguously so we then know
+  //                    the whole unread window).
+  //   textAfterMarker— at least one renderable message sits after the marker
+  //                    (the room really does have unread content to show).
+  let markerLoaded = false;
+  let textAfterMarker = false;
+  const readUpTo = notifs > 0 && selfId ? room.getEventReadUpTo(selfId) : null;
   if (notifs > 0) {
-    const readUpTo = selfId ? room.getEventReadUpTo(selfId) : null;
     for (let i = live.length - 1; i >= 0; i -= 1) {
       const ev = live[i];
-      if (readUpTo && ev.getId() === readUpTo) { scanReachedMarker = true; break; } // whole unread window scanned
-      if (rendersInRoomView(ev)) { unreadHasText = true; break; }
+      if (readUpTo && ev.getId() === readUpTo) { markerLoaded = true; break; }
+      if (rendersInRoomView(ev)) textAfterMarker = true;
     }
   }
-  // A room whose ENTIRE unread window is non-rendering events (membership/state/
-  // reactions/redactions/UTD) would open to an empty view — count it as fully
-  // read: no unread badge, out of the unread tallies (so bundle unread-sort and
-  // Next-unread stay honest), no unread priority bump. Gate on scanReachedMarker:
-  // timelines load contiguously, so a loaded read marker means we saw the whole
-  // unread window. If the marker ISN'T loaded the real message may just be
-  // unpaginated — stay unread (the documented race that bit the old
-  // meaningfulFound gating). A highlight/mention always keeps the room unread.
-  const unreadOnlyFiltered = notifs > 0 && highlights === 0 && !unreadHasText && scanReachedMarker;
-  const msgUnread = notifs > 0 && !unreadOnlyFiltered;
+  // Unread decision. Show unread ONLY when verified: a mention, or the marker is
+  // loaded AND there's renderable text after it. When the marker is NOT loaded the
+  // count is UNVERIFIABLE — default to READ, never unread. This direction matters:
+  //   • read→unread self-heals. An active room you've read has its marker at the
+  //     tail (loaded), so new messages are correctly seen as after-marker → unread;
+  //     or the marker-backfill pass loads a recent, REACHABLE marker and the row
+  //     settles to unread a beat later.
+  //   • unread→read does NOT self-heal. A barely-active room whose marker points at
+  //     an event that can't be reached (redacted / gap / never returned by the
+  //     server) never loads its marker, so ANY "stay unread when unverifiable" rule
+  //     pins it unread FOREVER — re-surfacing every session with no way to clear it
+  //     (the original stuck-unread bug). Biasing the unverifiable case to read is
+  //     the only thing that releases those rooms; a genuinely-unread room is still
+  //     surfaced the instant backfill loads its (reachable) marker.
+  const msgUnread = notifs > 0 && (highlights > 0 || (markerLoaded && textAfterMarker));
+  // "Only updates": confirmed (marker loaded) that the unread window is purely
+  // non-rendering events — routed to the Updates bundle, kept out of the badge
+  // counts. Unverifiable rooms aren't classed here; they just render as read.
+  const unreadOnlyFiltered = notifs > 0 && highlights === 0 && markerLoaded && !textAfterMarker;
+  // Drives the "skip empty rooms in Next-unread" guard. markerLoaded → the real
+  // post-marker signal; an unverifiable mention → undefined (still worth visiting);
+  // otherwise (read) → false.
+  const unreadHasText = markerLoaded ? textAfterMarker : (msgUnread ? undefined : false);
   const presenceRaw = client?.getUser(senderId)?.presence;
   const senderPresence = (presenceRaw === 'online' || presenceRaw === 'unavailable' || presenceRaw === 'offline')
     ? presenceRaw : undefined;
@@ -3789,7 +3900,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     // Invites are always "unread" so they surface in the default view, and get
     // a big priority bump to float to the top.
     unread: isInvite || msgUnread,
-    unreadCount: unreadOnlyFiltered ? 0 : notifs,
+    // Only badge a count when we actually show the room unread — an
+    // optimistically-read (marker not yet loaded) or noise-only room shows none.
+    unreadCount: msgUnread ? notifs : 0,
     unreadHasText,
     onlyUpdates: unreadOnlyFiltered || undefined,
     invite: isInvite || undefined,

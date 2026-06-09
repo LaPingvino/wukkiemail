@@ -544,6 +544,30 @@ the SDK's `getRoomUnreadNotificationCount` (cache by readUpToId+timelineLen) so
 showed stale counts mostly self-heal, so deferred. The "read but still shows" set
 is the 75 `marker-not-loaded` rooms (read elsewhere, outside the sliding window).
 
+**RESOLVED (app-side) — marker-not-loaded stuck-unread:** the 75 above were
+showing a STALE unread badge with no way to clear it, because `roomToItem`'s
+verify-scan can only recount when the read marker is in the loaded window;
+otherwise it stopped at the last (already-read) message, declared "has unread
+text", and stayed unread forever. Ordinary inflation never helped (those rooms
+have a real last message, so `lacksMeaning` is false). Two changes in `matrix.ts`:
+  1. **Marker-priority backfill** (PASS 1 of `inflateLackingRooms` + `markerUnverified`):
+     rooms the server counts unread whose marker isn't loaded are paginated FIRST
+     (recency-ordered, 50/cycle, `MARKER_MAX_TRIES`=6 ≈ 300 back, retried across
+     cycles, give up on start-of-history). WukkieMail's port of cinny's b6d88eb92.
+     Cleared on `RoomEvent.TimelineReset` so a resync re-arms it.
+  2. **Unverifiable ⇒ READ, never unread** (`roomToItem` unread decision): now
+     `unread ⇔ notifs>0 && (highlight || (markerLoaded && textAfterMarker))`. The
+     asymmetry is the whole point — read→unread self-heals (active room's marker is
+     tail-anchored/loaded; or backfill lands a reachable marker and it settles to
+     unread), but unread→read does NOT: a redacted / gap / never-returned marker can
+     never load, so ANY "stay unread when unverifiable" rule (incl. an earlier
+     exhaustion-fallback attempt) pins the room unread every session. Biasing the
+     unverifiable case to read is the only release. Residual (accepted, read-biased):
+     a genuinely-unread room whose REACHABLE marker is deeper than ~300 events shows
+     read until opened (then self-heals as the marker jumps to the tail).
+  Backfill now does the surfacing work: it's what flips a true unread read→unread
+  once its reachable marker loads. Verified: tsc + build clean.
+
 ## SDK PORT PROJECT (in progress) — transparent sliding sync for Wally
 Goal: fold the load-bearing sliding-sync handling into the matrix-js-sdk fork so
 Wally (and any consumer) gets it without app glue. (bd not installed in this env;
