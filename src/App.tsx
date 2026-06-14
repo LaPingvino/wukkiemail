@@ -866,6 +866,14 @@ function Inbox({
   const handleMatrixLink = useCallback(async (target: MatrixLinkTarget, href: string) => {
     if (!matrixSrc) { window.open(href, '_blank', 'noopener,noreferrer'); return; }
     if (target.kind === 'user') {
+      // ?action=chat means "open a DM", not "view profile": reuse an existing
+      // direct chat if there is one, otherwise create it. Fall back to the
+      // profile (which has its own Message button) if creation fails.
+      if (target.action === 'chat') {
+        let dm = matrixSrc.findDirectMessage(target.userId);
+        if (!dm) { try { dm = await matrixSrc.createDirectMessage(target.userId); } catch { dm = null; } }
+        if (dm) { openRoomAtEvent(dm); return; }
+      }
       setSelectedProfile({ userId: target.userId, roomId: selectedRoom ?? undefined });
       return;
     }
