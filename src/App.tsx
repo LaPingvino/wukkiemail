@@ -24,7 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
-import { THEME_GROUPS, getAccent, getStyle, getThemeMode, setTheme, setThemeMode, requestLocation, type ThemeMode, type Accent, type ThemeStyle } from './theme';
+import { THEME_GROUPS, PALETTE_GRID, getAccent, getCustom, getStyle, getThemeMode, setCustomTheme, setTheme, setThemeMode, deriveRoles, requestLocation, type ThemeMode, type Accent, type ThemeStyle } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -188,35 +188,172 @@ function ThemeControls() {
           ))}
         </div>
       </div>
-      {THEME_GROUPS.map((g) => (
-        <div key={g.id}>
-          <div className="theme-row-label">{g.label}</div>
-          <div className="theme-row-hint">{g.hint}</div>
-          <div className="theme-swatches" role="group" aria-label={`${g.label} themes`}>
-            {g.swatches.map((s) => {
-              const on = accent === s.accent && style === g.style;
-              const multi = s.colors.length > 1;
-              return (
-                <button
-                  key={`${g.id}-${s.accent}`}
-                  type="button"
-                  className={`theme-swatch ${multi ? 'multi' : ''} ${on ? 'on' : ''}`}
-                  style={multi ? undefined : { background: s.colors[0] }}
-                  aria-label={`${s.label} — ${g.label}`}
-                  aria-pressed={on}
-                  title={`${s.label} — ${g.label}`}
-                  onClick={() => { setTheme(s.accent, g.style); setAccentState(s.accent); setStyleState(g.style); }}
-                >
-                  {multi && s.colors.map((c, i) => (
-                    <span key={i} className="theme-swatch-band" style={{ background: c }} />
-                  ))}
-                  {on && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
-                </button>
-              );
-            })}
+      <CustomThemeBuilder
+        active={accent === 'custom'}
+        onApplied={(st) => { setAccentState('custom'); setStyleState(st); }}
+      />
+      <details className="theme-presets">
+        <summary>Presets</summary>
+        {THEME_GROUPS.map((g) => (
+          <div key={g.id}>
+            <div className="theme-row-label">{g.label}</div>
+            <div className="theme-row-hint">{g.hint}</div>
+            <div className="theme-swatches" role="group" aria-label={`${g.label} themes`}>
+              {g.swatches.map((s) => {
+                const on = accent === s.accent && style === g.style;
+                const multi = s.colors.length > 1;
+                return (
+                  <button
+                    key={`${g.id}-${s.accent}`}
+                    type="button"
+                    className={`theme-swatch ${multi ? 'multi' : ''} ${on ? 'on' : ''}`}
+                    style={multi ? undefined : { background: s.colors[0] }}
+                    aria-label={`${s.label} — ${g.label}`}
+                    aria-pressed={on}
+                    title={`${s.label} — ${g.label}`}
+                    onClick={() => { setTheme(s.accent, g.style); setAccentState(s.accent); setStyleState(g.style); }}
+                  >
+                    {multi && s.colors.map((c, i) => (
+                      <span key={i} className="theme-swatch-band" style={{ background: c }} />
+                    ))}
+                    {on && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        ))}
+      </details>
+    </div>
+  );
+}
+
+const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+const STYLE_OPTS: { key: ThemeStyle; label: string }[] = [
+  { key: 'classic', label: 'Classic' },
+  { key: 'tinted', label: 'Tinted' },
+  { key: 'inbox', label: 'Inbox' },
+];
+// Native <input type="color"> only accepts #rrggbb; expand #rgb and fall back.
+const toColorInput = (hex: string) => {
+  const v = hex.replace('#', '');
+  if (v.length === 3) return `#${v.split('').map((c) => c + c).join('')}`;
+  return HEX_RE.test(hex) ? hex : '#1a73e8';
+};
+
+// Live theme builder: pick a base colour (palette grid / native picker / hex),
+// choose a style, and — optionally — distinct secondary & tertiary role hues.
+// Every change applies immediately via setCustomTheme (accent becomes 'custom').
+function CustomThemeBuilder({ active, onApplied }: { active: boolean; onApplied: (style: ThemeStyle) => void }) {
+  const init = getCustom();
+  const [base, setBase] = useState(init.base);
+  const [multi, setMulti] = useState(!!(init.secondary || init.tertiary));
+  const derived = deriveRoles(init.base);
+  const [secondary, setSecondary] = useState(init.secondary ?? derived.secondary);
+  const [tertiary, setTertiary] = useState(init.tertiary ?? derived.tertiary);
+  const [style, setStyle] = useState<ThemeStyle>(() => getStyle());
+
+  // Single funnel: merge the changed field over current state, persist + apply.
+  const apply = (next: Partial<{ base: string; secondary: string; tertiary: string; multi: boolean; style: ThemeStyle }>) => {
+    const b = next.base ?? base;
+    const m = next.multi ?? multi;
+    const sec = next.secondary ?? secondary;
+    const ter = next.tertiary ?? tertiary;
+    const st = next.style ?? style;
+    setCustomTheme({ base: b, secondary: m ? sec : undefined, tertiary: m ? ter : undefined }, st);
+    onApplied(st);
+  };
+  // Picking a base also refreshes the auto-derived roles (the multi pickers keep
+  // showing a sensible default until the user overrides them).
+  const pickBase = (hex: string) => {
+    setBase(hex);
+    const d = deriveRoles(hex);
+    setSecondary(d.secondary); setTertiary(d.tertiary);
+    apply({ base: hex, secondary: d.secondary, tertiary: d.tertiary });
+  };
+
+  return (
+    <div className={`theme-builder ${active ? 'active' : ''}`}>
+      <div className="theme-row-label">Custom</div>
+      <div className="theme-row-hint">Pick a base colour — the rest of the theme is built from it.</div>
+      <div className="theme-swatches" role="group" aria-label="Base colour">
+        {PALETTE_GRID.map((c) => {
+          const on = active && c.toLowerCase() === base.toLowerCase();
+          return (
+            <button
+              key={c}
+              type="button"
+              className={`theme-swatch ${on ? 'on' : ''}`}
+              style={{ background: c }}
+              aria-label={c}
+              aria-pressed={on}
+              title={c}
+              onClick={() => pickBase(c)}
+            >
+              {on && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div className="theme-custom-row">
+        <input
+          type="color"
+          className="theme-color-input"
+          aria-label="Base colour picker"
+          value={toColorInput(base)}
+          onChange={(e) => pickBase(e.target.value)}
+        />
+        <input
+          type="text"
+          className="theme-hex-input"
+          aria-label="Base colour hex"
+          spellCheck={false}
+          placeholder="#1a73e8"
+          value={base}
+          onChange={(e) => { const v = e.target.value; setBase(v); if (HEX_RE.test(v)) pickBase(v); }}
+        />
+      </div>
+      <div className="theme-seg" role="group" aria-label="Custom style">
+        {STYLE_OPTS.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={active && style === s.key ? 'on' : undefined}
+            aria-pressed={active && style === s.key}
+            onClick={() => { setStyle(s.key); apply({ style: s.key }); }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="config-btn"
+        onClick={() => { const m = !multi; setMulti(m); apply({ multi: m }); }}
+      >
+        <span aria-hidden="true" className="material-symbols-outlined">{multi ? 'check_box' : 'check_box_outline_blank'}</span>
+        Multi-hue (distinct secondary &amp; tertiary)
+      </button>
+      {multi && (
+        <div className="theme-multi-rows">
+          <div className="theme-custom-row">
+            <span className="theme-role-label">Secondary</span>
+            <input type="color" className="theme-color-input" aria-label="Secondary colour" value={toColorInput(secondary)} onChange={(e) => { setSecondary(e.target.value); apply({ secondary: e.target.value, multi: true }); }} />
+          </div>
+          <div className="theme-custom-row">
+            <span className="theme-role-label">Tertiary</span>
+            <input type="color" className="theme-color-input" aria-label="Tertiary colour" value={toColorInput(tertiary)} onChange={(e) => { setTertiary(e.target.value); apply({ tertiary: e.target.value, multi: true }); }} />
+          </div>
+          <button
+            type="button"
+            className="config-btn"
+            onClick={() => { const d = deriveRoles(base); setSecondary(d.secondary); setTertiary(d.tertiary); apply({ secondary: d.secondary, tertiary: d.tertiary, multi: true }); }}
+          >
+            <span aria-hidden="true" className="material-symbols-outlined">auto_awesome</span>
+            Auto from base
+          </button>
         </div>
-      ))}
+      )}
     </div>
   );
 }

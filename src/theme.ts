@@ -10,7 +10,13 @@
 export type ThemeMode = 'light' | 'dark' | 'system' | 'daynight';
 export type Accent =
   | 'teal' | 'blue' | 'indigo' | 'pink' | 'amber' | 'green'
-  | 'ocean' | 'sunset' | 'forest' | 'plum' | 'slate';
+  | 'ocean' | 'sunset' | 'forest' | 'plum' | 'slate'
+  | 'custom'; // user-built theme — colours come from CUSTOM_KEY, applied inline
+
+// A hand-built theme: a base hue plus optional secondary/tertiary role hues.
+// When only `base` is set, secondary/tertiary derive from it (monochrome); set
+// them for a multi-hue custom scheme. Stored as JSON under CUSTOM_KEY.
+export interface CustomTheme { base: string; secondary?: string; tertiary?: string }
 // How strongly the accent tints the surfaces: classic = none (white/grey),
 // tinted = the accent washes through, inbox = white content under a bold accent
 // app bar. Drives the data-style attribute.
@@ -19,7 +25,18 @@ export type ThemeStyle = 'classic' | 'tinted' | 'inbox';
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
 const STYLE_KEY = 'wm:theme-style';
+const CUSTOM_KEY = 'wm:custom'; // JSON CustomTheme for the 'custom' accent
 const LOC_KEY = 'wm:geo'; // cached {lat,lon} so day/night doesn't re-prompt
+
+// A spread of pleasant mid-tone hues for the custom builder's palette grid —
+// roughly the Material 600/700 family across the spectrum. The native colour
+// input + hex field cover anything not here.
+export const PALETTE_GRID = [
+  '#d32f2f', '#e53935', '#c2185b', '#d81b60', '#7b1fa2', '#512da8',
+  '#303f9f', '#1976d2', '#0288d1', '#0097a7', '#00796b', '#388e3c',
+  '#689f38', '#afb42b', '#f9a825', '#ffa000', '#f57c00', '#e64a19',
+  '#5d4037', '#455a64',
+];
 
 // ── Sunrise/sunset (SunCalc core, trimmed to the two times we need) ──────────
 const RAD = Math.PI / 180;
@@ -130,8 +147,8 @@ export const PALETTES: { key: Accent; label: string; colors: [string, string, st
   { key: 'slate', label: 'Slate', colors: ['#455a64', '#5c6bc0', '#00acc1'] },
 ];
 
-// Every selectable accent key (accents + palettes) — used to validate stored prefs.
-const ALL_THEME_KEYS: Accent[] = [...ACCENTS.map((a) => a.key), ...PALETTES.map((p) => p.key)];
+// Every selectable accent key (accents + palettes + custom) — validates stored prefs.
+const ALL_THEME_KEYS: Accent[] = [...ACCENTS.map((a) => a.key), ...PALETTES.map((p) => p.key), 'custom'];
 
 // The picker's "approach groups": each bundles a style with the accents it
 // offers, so a single click sets both axes. `swatches[].colors` is just for the
@@ -170,14 +187,50 @@ export function getStyle(): ThemeStyle {
   return 'tinted';
 }
 
+const DEFAULT_CUSTOM: CustomTheme = { base: '#1a73e8' };
+
+export function getCustom(): CustomTheme {
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (v && typeof v.base === 'string') {
+        return {
+          base: v.base,
+          secondary: typeof v.secondary === 'string' ? v.secondary : undefined,
+          tertiary: typeof v.tertiary === 'string' ? v.tertiary : undefined,
+        };
+      }
+    }
+  } catch { /* storage blocked / bad json */ }
+  return DEFAULT_CUSTOM;
+}
+
 export function applyTheme(): void {
   const root = document.documentElement;
   const mode = getThemeMode();
   if (mode === 'system') root.removeAttribute('data-theme');
   else if (mode === 'daynight') root.setAttribute('data-theme', isNightNow() ? 'dark' : 'light');
   else root.setAttribute('data-theme', mode);
-  root.setAttribute('data-accent', getAccent());
+  const accent = getAccent();
+  root.setAttribute('data-accent', accent);
   root.setAttribute('data-style', getStyle());
+  // Custom themes drive the role base vars inline (the presets do it via CSS
+  // rules keyed on data-accent). Clear the inline vars for presets so their CSS
+  // wins; for custom, an absent secondary/tertiary falls back to --accent-base
+  // in :root, i.e. a monochrome scheme derived from the one base colour.
+  if (accent === 'custom') {
+    const c = getCustom();
+    root.style.setProperty('--accent-base', c.base);
+    if (c.secondary) root.style.setProperty('--secondary-base', c.secondary);
+    else root.style.removeProperty('--secondary-base');
+    if (c.tertiary) root.style.setProperty('--tertiary-base', c.tertiary);
+    else root.style.removeProperty('--tertiary-base');
+  } else {
+    root.style.removeProperty('--accent-base');
+    root.style.removeProperty('--secondary-base');
+    root.style.removeProperty('--tertiary-base');
+  }
 }
 
 export function setThemeMode(mode: ThemeMode): void {
@@ -197,4 +250,61 @@ export function setTheme(accent: Accent, style: ThemeStyle): void {
 export function setAccent(accent: Accent): void {
   try { localStorage.setItem(ACCENT_KEY, accent); } catch { /* ignore */ }
   applyTheme();
+}
+
+// Apply a hand-built theme (accent becomes 'custom'). Live: called on every edit
+// in the builder. Empty secondary/tertiary are dropped so they derive from base.
+export function setCustomTheme(custom: CustomTheme, style: ThemeStyle): void {
+  const clean: CustomTheme = { base: custom.base };
+  if (custom.secondary) clean.secondary = custom.secondary;
+  if (custom.tertiary) clean.tertiary = custom.tertiary;
+  try {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(clean));
+    localStorage.setItem(ACCENT_KEY, 'custom');
+    localStorage.setItem(STYLE_KEY, style);
+  } catch { /* ignore */ }
+  applyTheme();
+}
+
+// Derive harmonious secondary/tertiary role hues from one base colour, by small
+// analogous hue rotations (keeps saturation/lightness). Used by the builder's
+// "Auto" multi-hue button so one pick yields a coordinated three-hue scheme.
+export function deriveRoles(base: string): { secondary: string; tertiary: string } {
+  const [h, s, l] = hexToHsl(base);
+  return {
+    secondary: hslToHex((h + 30) % 360, s, l),
+    tertiary: hslToHex((h + 60) % 360, s, l),
+  };
+}
+
+function hexToHsl(hex: string): [number, number, number] {
+  let v = hex.replace('#', '');
+  if (v.length === 3) v = v.split('').map((c) => c + c).join('');
+  const r = parseInt(v.slice(0, 2), 16) / 255;
+  const g = parseInt(v.slice(2, 4), 16) / 255;
+  const b = parseInt(v.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b); const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return [h, s, l];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0; let g = 0; let b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  const to = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
 }
