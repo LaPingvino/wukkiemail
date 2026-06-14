@@ -6,7 +6,9 @@
 // primary + its container/on-colours from it via color-mix.
 
 export type ThemeMode = 'light' | 'dark' | 'system' | 'daynight';
-export type Accent = 'teal' | 'blue' | 'indigo' | 'pink' | 'amber' | 'green';
+export type Accent =
+  | 'teal' | 'blue' | 'indigo' | 'pink' | 'amber' | 'green'
+  | 'ocean' | 'sunset' | 'forest' | 'plum' | 'slate';
 
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
@@ -109,6 +111,21 @@ export const ACCENTS: { key: Accent; label: string; color: string }[] = [
   { key: 'green', label: 'Green', color: '#16a34a' },
 ];
 
+// Richer role-based palettes (primary / secondary / tertiary). Stored in the
+// same data-accent slot as the simple accents; `colors` is just for the picker
+// preview (primary first). The actual role hues live in the CSS rule for each
+// key — keep the two in sync.
+export const PALETTES: { key: Accent; label: string; colors: [string, string, string] }[] = [
+  { key: 'ocean', label: 'Ocean', colors: ['#1565c0', '#0097a7', '#26a69a'] },
+  { key: 'sunset', label: 'Sunset', colors: ['#e4572e', '#c2185b', '#f2a541'] },
+  { key: 'forest', label: 'Forest', colors: ['#2e7d32', '#00897b', '#7cb342'] },
+  { key: 'plum', label: 'Plum', colors: ['#6a1b9a', '#ab47bc', '#ec407a'] },
+  { key: 'slate', label: 'Slate', colors: ['#455a64', '#5c6bc0', '#00acc1'] },
+];
+
+// Every selectable theme key (accents + palettes) — used to validate stored prefs.
+const ALL_THEME_KEYS: Accent[] = [...ACCENTS.map((a) => a.key), ...PALETTES.map((p) => p.key)];
+
 export function getThemeMode(): ThemeMode {
   try {
     const v = localStorage.getItem(MODE_KEY);
@@ -120,7 +137,7 @@ export function getThemeMode(): ThemeMode {
 export function getAccent(): Accent {
   try {
     const v = localStorage.getItem(ACCENT_KEY) as Accent | null;
-    if (v && ACCENTS.some((a) => a.key === v)) return v;
+    if (v && ALL_THEME_KEYS.includes(v)) return v;
   } catch { /* storage blocked */ }
   return 'teal';
 }

@@ -26,7 +26,19 @@
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
   --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 80%, var(--md-sys-color-on-surface));
-  --md-sys-color-secondary: #5f6368;
+  /* Secondary + tertiary roles. Simple accents leave these defaulting to the
+     primary hue (so they stay monochrome); the richer palettes below set all
+     three to coordinated hues. Each derives its container/on-colours from its
+     role var, exactly like primary, so dark mode (which lightens the role vars)
+     re-derives them for free. */
+  --secondary-base: var(--accent-base);
+  --tertiary-base: var(--accent-base);
+  --md-sys-color-secondary: var(--secondary-base);
+  --md-sys-color-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 16%, var(--md-sys-color-surface));
+  --md-sys-color-on-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 82%, var(--md-sys-color-on-surface));
+  --md-sys-color-tertiary: var(--tertiary-base);
+  --md-sys-color-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 16%, var(--md-sys-color-surface));
+  --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 82%, var(--md-sys-color-on-surface));
   --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 6%, #ffffff);
   --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 10%, #eceff1);
   --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 12%, #f1f3f4);
@@ -51,6 +63,15 @@
 :root[data-accent="amber"]  { --accent-base: #e8710a; }
 :root[data-accent="green"]  { --accent-base: #16a34a; }
 
+/* Role-based palettes — set all three role hues for a coordinated, multi-hued
+   look (primary = buttons/active, secondary = chips/pills, tertiary =
+   counts/links). Surface tint still follows --accent-base (the primary). */
+:root[data-accent="ocean"]  { --accent-base: #1565c0; --secondary-base: #0097a7; --tertiary-base: #26a69a; }
+:root[data-accent="sunset"] { --accent-base: #e4572e; --secondary-base: #c2185b; --tertiary-base: #f2a541; }
+:root[data-accent="forest"] { --accent-base: #2e7d32; --secondary-base: #00897b; --tertiary-base: #7cb342; }
+:root[data-accent="plum"]   { --accent-base: #6a1b9a; --secondary-base: #ab47bc; --tertiary-base: #ec407a; }
+:root[data-accent="slate"]  { --accent-base: #455a64; --secondary-base: #5c6bc0; --tertiary-base: #00acc1; }
+
 /* Dark tokens. Applied when the user picks Dark, OR — in System mode, where no
    data-theme attribute is set — when the OS prefers dark. data-theme="light"
    never matches the media rule, so Light stays light on a dark OS. The accent is
@@ -58,6 +79,8 @@
 :root[data-theme="dark"] {
   --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
   --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
+  --md-sys-color-secondary: color-mix(in srgb, var(--secondary-base), white 42%);
+  --md-sys-color-tertiary: color-mix(in srgb, var(--tertiary-base), white 42%);
   --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
   --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
   --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
@@ -70,6 +93,8 @@
   :root:not([data-theme]) {
     --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
     --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
+    --md-sys-color-secondary: color-mix(in srgb, var(--secondary-base), white 42%);
+    --md-sys-color-tertiary: color-mix(in srgb, var(--tertiary-base), white 42%);
     --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
     --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
     --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
@@ -149,7 +174,7 @@ body {
 .next-btn-sub { font-size: 12px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Email body rendering in the JMAP viewer. */
 .email-html { line-height: 1.5; overflow-wrap: anywhere; }
-.email-html a { color: var(--md-sys-color-primary); }
+.email-html a { color: var(--md-sys-color-tertiary); }
 .email-html table { max-width: 100%; }
 .email-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
 .email-images-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 0 0 12px; border-radius: 8px; background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.05)); font-size: 13px; color: var(--muted); }
@@ -613,8 +638,8 @@ body {
 }
 .chip:hover { background: var(--md-sys-color-surface-container); }
 .chip.active {
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
   border-color: transparent;
 }
 .chip.saved {
@@ -976,8 +1001,8 @@ body {
 }
 .mini-chip:hover { background: var(--md-sys-color-surface-container); }
 .mini-chip.active {
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
   border-color: transparent;
 }
 .mini-chip .chip-badge {
@@ -1493,7 +1518,7 @@ body {
   font-family: 'JetBrains Mono', Menlo, monospace;
   font-size: 0.9em;
 }
-.comment-body a { color: var(--md-sys-color-primary); }
+.comment-body a { color: var(--md-sys-color-tertiary); }
 .comment-body mx-reply {
   display: block;
   margin-bottom: 8px;
@@ -2081,8 +2106,8 @@ md-outlined-text-field { width: 100%; }
 
 /* Inbound user/room mention links rendered as pills */
 .mention-pill {
-  background: var(--md-sys-color-primary-container, rgba(20,184,166,0.18));
-  color: var(--md-sys-color-on-primary-container, var(--md-sys-color-primary, #14b8a6));
+  background: var(--md-sys-color-secondary-container, rgba(20,184,166,0.18));
+  color: var(--md-sys-color-on-secondary-container, var(--md-sys-color-secondary, #14b8a6));
   border-radius: 999px; padding: 0 7px; text-decoration: none; font-weight: 500; white-space: nowrap;
 }
 .mention-pill:hover { text-decoration: underline; }
@@ -2107,6 +2132,24 @@ md-outlined-text-field { width: 100%; }
 .theme-swatch.on { border-color: var(--fg); }
 .theme-swatch .material-symbols-outlined { font-size: 18px; color: #fff; }
 
+/* Role-based palette picker: each entry shows its primary/secondary/tertiary
+   dots plus a label, so the multi-hue scheme is visible before selecting. */
+.theme-palettes { display: flex; gap: 10px; flex-wrap: wrap; }
+.theme-palette {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 8px; cursor: pointer;
+  border: 2px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--fg); font: inherit; font-size: 13px;
+}
+.theme-palette.on { border-color: var(--fg); }
+.theme-palette-swatches { display: inline-flex; }
+.theme-palette-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid var(--card); margin-left: -6px;
+}
+.theme-palette-dot:first-child { margin-left: 0; }
+.theme-palette-check { font-size: 16px; color: var(--md-sys-color-primary); }
+
 /* ── Bolder Inbox styling: accent rails, deeper cards, punchier accents ── */
 .item { border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .item:hover {
@@ -2117,7 +2160,7 @@ md-outlined-text-field { width: 100%; }
 .item.unread .from, .item.unread .subj strong { font-weight: 700; }
 .bundle-label { font-weight: 600; }
 .bundle-headline:hover .bundle-head { background: var(--md-sys-color-primary-container); }
-.bundle-count { color: var(--md-sys-color-primary); font-weight: 600; }
+.bundle-count { color: var(--md-sys-color-tertiary); font-weight: 600; }
 .fab { border-radius: 18px; box-shadow: 0 6px 18px color-mix(in srgb, var(--md-sys-color-primary) 42%, transparent); }
 .fab:hover { transform: translateY(-3px); box-shadow: 0 10px 28px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent); }
 .section-header-label { font-weight: 700; letter-spacing: 0.3px; color: var(--md-sys-color-primary); }

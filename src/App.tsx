@@ -24,7 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
-import { ACCENTS, getAccent, getThemeMode, setAccent, setThemeMode, requestLocation, type ThemeMode, type Accent } from './theme';
+import { ACCENTS, PALETTES, getAccent, getThemeMode, setAccent, setThemeMode, requestLocation, type ThemeMode, type Accent } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -202,6 +202,30 @@ function ThemeControls() {
               onClick={() => { setAccent(a.key); setAccentState(a.key); }}
             >
               {accent === a.key && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="theme-row-label">Palettes</div>
+        <div className="theme-palettes" role="group" aria-label="Colour palette">
+          {PALETTES.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={`theme-palette ${accent === p.key ? 'on' : ''}`}
+              aria-label={p.label}
+              aria-pressed={accent === p.key}
+              title={p.label}
+              onClick={() => { setAccent(p.key); setAccentState(p.key); }}
+            >
+              <span className="theme-palette-swatches" aria-hidden="true">
+                {p.colors.map((c, i) => (
+                  <span key={i} className="theme-palette-dot" style={{ background: c }} />
+                ))}
+              </span>
+              <span className="theme-palette-label">{p.label}</span>
+              {accent === p.key && <span aria-hidden="true" className="material-symbols-outlined theme-palette-check">check</span>}
             </button>
           ))}
         </div>
