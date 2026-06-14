@@ -665,7 +665,11 @@ body {
   width: 100%;
   margin: 0 auto;
 }
-.toolbar md-outlined-text-field { flex: 1; }
+/* min-width:0 lets the field shrink below its content/placeholder width instead
+   of overflowing past the trailing buttons (the flex min-width:auto trap) — the
+   Inbox pill's large inline padding made this overflow visible and even let the
+   field overlap the settings button and swallow its clicks. */
+.toolbar md-outlined-text-field { flex: 1; min-width: 0; }
 
 .chip-bar {
   padding: 0 16px 8px;
