@@ -122,33 +122,41 @@
 :root[data-style="inbox"] {
   --tint-0: 0%; --tint-var: 0%; --tint-1: 0%; --tint-low: 0%; --tint-outline: 0%;
 }
-/* Inbox: white content (tints zeroed above) + a bold solid accent app bar, the
-   way Google Inbox framed a white message list under a coloured toolbar. The bar
-   uses the saturated --accent-base with white foreground so it stays a true
-   colour bar in both light and dark (not the contrast-lightened primary). The
-   search field is themed via Material Web's own per-component tokens — a white
-   rounded pill with white text/label/caret/placeholder. */
-:root[data-style="inbox"] .toolbar { background: var(--accent-base); }
+/* Inbox: white content (tints zeroed above) + a cohesive bold accent header
+   ZONE — the top toolbar, the filter-chip row, the pinned quick-access bar and
+   the mobile bottom nav all share the saturated --accent-base with white
+   foreground, the way Google Inbox framed a white list under solid colour. Using
+   --accent-base (not the contrast-lightened primary) keeps it a true colour bar
+   in both light and dark. */
+:root[data-style="inbox"] .toolbar,
+:root[data-style="inbox"] .chip-bar,
+:root[data-style="inbox"] .pinned-bar,
+:root[data-style="inbox"] .bottom-nav { background: var(--accent-base); }
 :root[data-style="inbox"] .toolbar-brand,
-:root[data-style="inbox"] .toolbar .hamburger { color: #fff; }
-:root[data-style="inbox"] .toolbar .hamburger.on {
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-}
+:root[data-style="inbox"] .toolbar .hamburger,
+:root[data-style="inbox"] .pinned-chip-label,
+:root[data-style="inbox"] .pinned-chip-picker .pinned-chip-label { color: #fff; }
+:root[data-style="inbox"] .pinned-bar { border-bottom-color: rgba(255, 255, 255, 0.25); }
+:root[data-style="inbox"] .toolbar .hamburger.on { background: rgba(255, 255, 255, 0.22); color: #fff; }
+:root[data-style="inbox"] .bottom-nav .tab { color: rgba(255, 255, 255, 0.7); }
+:root[data-style="inbox"] .bottom-nav .tab.active { color: #fff; }
+/* Search field — themed with Material Web's own per-component tokens: a clearly
+   outlined white pill with white text/label/caret/placeholder, so it stays
+   obviously interactive on the colour bar. */
 :root[data-style="inbox"] .toolbar md-outlined-text-field {
   --md-outlined-text-field-container-shape: 999px;
-  --md-outlined-text-field-outline-color: transparent;
-  --md-outlined-text-field-hover-outline-color: transparent;
-  --md-outlined-text-field-focus-outline-color: rgba(255, 255, 255, 0.7);
+  --md-outlined-text-field-outline-color: rgba(255, 255, 255, 0.55);
+  --md-outlined-text-field-hover-outline-color: rgba(255, 255, 255, 0.85);
+  --md-outlined-text-field-focus-outline-color: #fff;
   --md-outlined-text-field-input-text-color: #fff;
   --md-outlined-text-field-focus-input-text-color: #fff;
   --md-outlined-text-field-hover-input-text-color: #fff;
-  --md-outlined-text-field-label-text-color: rgba(255, 255, 255, 0.8);
+  --md-outlined-text-field-label-text-color: rgba(255, 255, 255, 0.85);
   --md-outlined-text-field-hover-label-text-color: #fff;
   --md-outlined-text-field-focus-label-text-color: #fff;
   --md-outlined-text-field-input-text-placeholder-color: rgba(255, 255, 255, 0.7);
   --md-outlined-text-field-caret-color: #fff;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
 }
 
