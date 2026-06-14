@@ -1072,19 +1072,21 @@ body {
   padding: 8px 12px;
   font-size: 13px;
   border-radius: 8px;
-  background: var(--md-sys-color-secondary-container, var(--surface-2, #2a2a2a));
-  color: var(--md-sys-color-on-secondary-container, inherit);
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
 }
 .focus-seek-banner button {
   background: none;
-  border: 1px solid currentColor;
-  color: inherit;
+  border: 1px solid var(--border);
+  color: var(--accent);
   border-radius: 999px;
   padding: 2px 12px;
   font-size: 12px;
   cursor: pointer;
 }
-.focus-seek-banner .focus-seek-dismiss { border-color: transparent; opacity: 0.7; }
+.focus-seek-banner .focus-seek-dismiss { color: var(--muted); }
 .wm-spinner {
   display: inline-block;
   width: 12px;
