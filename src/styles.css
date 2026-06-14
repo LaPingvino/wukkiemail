@@ -10,17 +10,21 @@
 }
 
 /* Material 3 light/dark surface tokens. Material Web reads these
-   --md-sys-color-* tokens directly. We pick a calm Inbox-ish blue. */
+   --md-sys-color-* tokens directly.
+
+   Two orthogonal axes drive everything:
+     • the HUE — one base accent (--accent-base), optionally with distinct
+       secondary/tertiary role hues for the richer palettes.
+     • the STYLE (data-style) — how much the accent washes into the surfaces.
+       Each surface token is `color-mix(accent, neutral)` where the neutral base
+       (--surf-*) and the mix amount (--tint-*) are themselves variables. So:
+         - dark mode swaps the neutral bases (and bumps the tint a little),
+         - a "style" swaps only the tint amounts (classic = 0 = pure neutral,
+           tinted = the washed look),
+       and the surface formula below never has to be repeated. */
 :root {
   color-scheme: light dark;
   font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif, NotoColorEmojiBahai;
-  /* A single base hue drives the accent. primary + its container/on-colours are
-     derived from it via color-mix against the current surface, so switching
-     accent only changes --accent-base, and accents adapt to light/dark for free.
-     The surfaces themselves are also tinted with the accent (small color-mix
-     percentages below) so a chosen accent washes through the whole UI — not just
-     buttons — without us having to define a full palette per accent. Bump the
-     percentages for a stronger wash; zero them for neutral grey. */
   --accent-base: #0d9488;
   --md-sys-color-primary: var(--accent-base);
   --md-sys-color-on-primary: #ffffff;
@@ -28,9 +32,7 @@
   --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 80%, var(--md-sys-color-on-surface));
   /* Secondary + tertiary roles. Simple accents leave these defaulting to the
      primary hue (so they stay monochrome); the richer palettes below set all
-     three to coordinated hues. Each derives its container/on-colours from its
-     role var, exactly like primary, so dark mode (which lightens the role vars)
-     re-derives them for free. */
+     three to coordinated hues. */
   --secondary-base: var(--accent-base);
   --tertiary-base: var(--accent-base);
   --md-sys-color-secondary: var(--secondary-base);
@@ -39,13 +41,20 @@
   --md-sys-color-tertiary: var(--tertiary-base);
   --md-sys-color-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 16%, var(--md-sys-color-surface));
   --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 82%, var(--md-sys-color-on-surface));
-  --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 6%, #ffffff);
-  --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 10%, #eceff1);
-  --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 12%, #f1f3f4);
-  --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 9%, #f8f9fa);
+  /* Neutral surface bases (light) and the per-style tint amounts (default =
+     "tinted"). Dark mode and the style overrides only touch these inputs. */
+  --surf-0: #ffffff;   --tint-0: 6%;
+  --surf-var: #eceff1; --tint-var: 10%;
+  --surf-1: #f1f3f4;   --tint-1: 12%;
+  --surf-low: #f8f9fa; --tint-low: 9%;
+  --outline-0: #dadce0; --tint-outline: 16%;
+  --md-sys-color-surface: color-mix(in srgb, var(--accent-base) var(--tint-0), var(--surf-0));
+  --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) var(--tint-var), var(--surf-var));
+  --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) var(--tint-1), var(--surf-1));
+  --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) var(--tint-low), var(--surf-low));
   --md-sys-color-on-surface: #1f1f1f;
   --md-sys-color-on-surface-variant: #5f6368;
-  --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 16%, #dadce0);
+  --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) var(--tint-outline), var(--outline-0));
   --md-sys-color-error: #b3261e;
   --bg: var(--md-sys-color-surface-container-low);
   --fg: var(--md-sys-color-on-surface);
@@ -74,20 +83,21 @@
 
 /* Dark tokens. Applied when the user picks Dark, OR — in System mode, where no
    data-theme attribute is set — when the OS prefers dark. data-theme="light"
-   never matches the media rule, so Light stays light on a dark OS. The accent is
-   lightened for contrast on dark surfaces; container/on-colours re-derive. */
+   never matches the media rule, so Light stays light on a dark OS. We only swap
+   the neutral bases + tint amounts + lighten the role hues; the surface formula
+   in :root re-derives from these. */
 :root[data-theme="dark"] {
   --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
   --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
   --md-sys-color-secondary: color-mix(in srgb, var(--secondary-base), white 42%);
   --md-sys-color-tertiary: color-mix(in srgb, var(--tertiary-base), white 42%);
-  --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
-  --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
-  --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
-  --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 14%, #1a1a1c);
+  --surf-0: #131314;   --tint-0: 12%;
+  --surf-var: #2a2b2f; --tint-var: 16%;
+  --surf-1: #1f2024;   --tint-1: 16%;
+  --surf-low: #1a1a1c; --tint-low: 14%;
+  --outline-0: #444746; --tint-outline: 22%;
   --md-sys-color-on-surface: #e3e3e3;
   --md-sys-color-on-surface-variant: #c4c7c5;
-  --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 22%, #444746);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
@@ -95,14 +105,36 @@
     --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
     --md-sys-color-secondary: color-mix(in srgb, var(--secondary-base), white 42%);
     --md-sys-color-tertiary: color-mix(in srgb, var(--tertiary-base), white 42%);
-    --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
-    --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
-    --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
-    --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 14%, #1a1a1c);
+    --surf-0: #131314;   --tint-0: 12%;
+    --surf-var: #2a2b2f; --tint-var: 16%;
+    --surf-1: #1f2024;   --tint-1: 16%;
+    --surf-low: #1a1a1c; --tint-low: 14%;
+    --outline-0: #444746; --tint-outline: 22%;
     --md-sys-color-on-surface: #e3e3e3;
     --md-sys-color-on-surface-variant: #c4c7c5;
-    --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 22%, #444746);
   }
+}
+
+/* ── Style axis (data-style) — how much the accent washes into surfaces ──────
+   Placed AFTER the dark blocks so the tint override wins in both light & dark
+   (equal specificity → source order). "tinted" is the default in :root above. */
+:root[data-style="classic"],
+:root[data-style="inbox"] {
+  --tint-0: 0%; --tint-var: 0%; --tint-1: 0%; --tint-low: 0%; --tint-outline: 0%;
+}
+/* Inbox: white content (tints zeroed above) + a bold solid accent app bar, the
+   way Google Inbox framed a white message list under a coloured toolbar. */
+:root[data-style="inbox"] .toolbar { background: var(--md-sys-color-primary); }
+:root[data-style="inbox"] .toolbar-brand,
+:root[data-style="inbox"] .toolbar .hamburger { color: var(--md-sys-color-on-primary); }
+:root[data-style="inbox"] .toolbar .hamburger.on {
+  background: color-mix(in srgb, var(--md-sys-color-on-primary) 22%, transparent);
+  color: var(--md-sys-color-on-primary);
+}
+:root[data-style="inbox"] .toolbar md-outlined-text-field {
+  --md-outlined-text-field-container-shape: 999px;
+  background: color-mix(in srgb, var(--md-sys-color-on-primary) 16%, transparent);
+  border-radius: 999px;
 }
 
 * { box-sizing: border-box; }
@@ -2123,32 +2155,22 @@ md-outlined-text-field { width: 100%; }
 .theme-seg button + button { border-left: 1px solid var(--border); }
 .theme-seg button .material-symbols-outlined { font-size: 16px; }
 .theme-seg button.on { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.theme-row-hint { font-size: 11px; color: var(--muted); margin: -2px 0 6px; }
 .theme-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .theme-swatch {
+  position: relative; overflow: hidden;
   width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
   border: 2px solid transparent; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .theme-swatch.on { border-color: var(--fg); }
-.theme-swatch .material-symbols-outlined { font-size: 18px; color: #fff; }
-
-/* Role-based palette picker: each entry shows its primary/secondary/tertiary
-   dots plus a label, so the multi-hue scheme is visible before selecting. */
-.theme-palettes { display: flex; gap: 10px; flex-wrap: wrap; }
-.theme-palette {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 12px 6px 8px; cursor: pointer;
-  border: 2px solid var(--border); border-radius: 999px;
-  background: var(--card); color: var(--fg); font: inherit; font-size: 13px;
+/* Multi-hue swatches (palettes) show their role colours as equal bands. */
+.theme-swatch.multi { align-items: stretch; }
+.theme-swatch-band { flex: 1 1 0; align-self: stretch; }
+.theme-swatch .material-symbols-outlined {
+  position: absolute; inset: 0; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,0.55);
 }
-.theme-palette.on { border-color: var(--fg); }
-.theme-palette-swatches { display: inline-flex; }
-.theme-palette-dot {
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 1.5px solid var(--card); margin-left: -6px;
-}
-.theme-palette-dot:first-child { margin-left: 0; }
-.theme-palette-check { font-size: 16px; color: var(--md-sys-color-primary); }
 
 /* ── Bolder Inbox styling: accent rails, deeper cards, punchier accents ── */
 .item { border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }

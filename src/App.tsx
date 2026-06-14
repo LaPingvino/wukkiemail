@@ -24,7 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
-import { ACCENTS, PALETTES, getAccent, getThemeMode, setAccent, setThemeMode, requestLocation, type ThemeMode, type Accent } from './theme';
+import { THEME_GROUPS, getAccent, getStyle, getThemeMode, setTheme, setThemeMode, requestLocation, type ThemeMode, type Accent, type ThemeStyle } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -158,6 +158,7 @@ function ConnectScreen({
 function ThemeControls() {
   const [mode, setModeState] = useState<ThemeMode>(() => getThemeMode());
   const [accent, setAccentState] = useState<Accent>(() => getAccent());
+  const [style, setStyleState] = useState<ThemeStyle>(() => getStyle());
   const modes: { key: ThemeMode; label: string; icon: string; title?: string }[] = [
     { key: 'light', label: 'Light', icon: 'light_mode' },
     { key: 'dark', label: 'Dark', icon: 'dark_mode' },
@@ -187,49 +188,35 @@ function ThemeControls() {
           ))}
         </div>
       </div>
-      <div>
-        <div className="theme-row-label">Accent</div>
-        <div className="theme-swatches" role="group" aria-label="Accent colour">
-          {ACCENTS.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              className={`theme-swatch ${accent === a.key ? 'on' : ''}`}
-              style={{ background: a.color }}
-              aria-label={a.label}
-              aria-pressed={accent === a.key}
-              title={a.label}
-              onClick={() => { setAccent(a.key); setAccentState(a.key); }}
-            >
-              {accent === a.key && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
-            </button>
-          ))}
+      {THEME_GROUPS.map((g) => (
+        <div key={g.id}>
+          <div className="theme-row-label">{g.label}</div>
+          <div className="theme-row-hint">{g.hint}</div>
+          <div className="theme-swatches" role="group" aria-label={`${g.label} themes`}>
+            {g.swatches.map((s) => {
+              const on = accent === s.accent && style === g.style;
+              const multi = s.colors.length > 1;
+              return (
+                <button
+                  key={`${g.id}-${s.accent}`}
+                  type="button"
+                  className={`theme-swatch ${multi ? 'multi' : ''} ${on ? 'on' : ''}`}
+                  style={multi ? undefined : { background: s.colors[0] }}
+                  aria-label={`${s.label} — ${g.label}`}
+                  aria-pressed={on}
+                  title={`${s.label} — ${g.label}`}
+                  onClick={() => { setTheme(s.accent, g.style); setAccentState(s.accent); setStyleState(g.style); }}
+                >
+                  {multi && s.colors.map((c, i) => (
+                    <span key={i} className="theme-swatch-band" style={{ background: c }} />
+                  ))}
+                  {on && <span aria-hidden="true" className="material-symbols-outlined">check</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-      <div>
-        <div className="theme-row-label">Palettes</div>
-        <div className="theme-palettes" role="group" aria-label="Colour palette">
-          {PALETTES.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className={`theme-palette ${accent === p.key ? 'on' : ''}`}
-              aria-label={p.label}
-              aria-pressed={accent === p.key}
-              title={p.label}
-              onClick={() => { setAccent(p.key); setAccentState(p.key); }}
-            >
-              <span className="theme-palette-swatches" aria-hidden="true">
-                {p.colors.map((c, i) => (
-                  <span key={i} className="theme-palette-dot" style={{ background: c }} />
-                ))}
-              </span>
-              <span className="theme-palette-label">{p.label}</span>
-              {accent === p.key && <span aria-hidden="true" className="material-symbols-outlined theme-palette-check">check</span>}
-            </button>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }

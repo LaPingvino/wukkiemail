@@ -1,17 +1,24 @@
-// Theme: a light/dark/system mode plus an accent colour. Both are stored in
-// localStorage and applied to <html> as data-theme / data-accent attributes,
-// which the CSS reads. System mode removes data-theme so the OS preference (the
-// prefers-color-scheme media query) wins; light/dark force it regardless of OS.
-// The accent only sets a single base hue (--accent-base); the CSS derives
-// primary + its container/on-colours from it via color-mix.
+// Theme: a light/dark/system mode, plus two orthogonal colour axes —
+//   • accent (--accent-base / role hues), and
+//   • style (data-style): how much that accent washes into surfaces.
+// All stored in localStorage and applied to <html> as data-theme / data-accent /
+// data-style attributes the CSS reads. System mode removes data-theme so the OS
+// preference (the prefers-color-scheme media query) wins; light/dark force it.
+// The picker presents accent×style as a handful of "approach groups" (Classic,
+// Tinted, Inbox, Palettes) — see THEME_GROUPS below.
 
 export type ThemeMode = 'light' | 'dark' | 'system' | 'daynight';
 export type Accent =
   | 'teal' | 'blue' | 'indigo' | 'pink' | 'amber' | 'green'
   | 'ocean' | 'sunset' | 'forest' | 'plum' | 'slate';
+// How strongly the accent tints the surfaces: classic = none (white/grey),
+// tinted = the accent washes through, inbox = white content under a bold accent
+// app bar. Drives the data-style attribute.
+export type ThemeStyle = 'classic' | 'tinted' | 'inbox';
 
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
+const STYLE_KEY = 'wm:theme-style';
 const LOC_KEY = 'wm:geo'; // cached {lat,lon} so day/night doesn't re-prompt
 
 // ── Sunrise/sunset (SunCalc core, trimmed to the two times we need) ──────────
@@ -123,8 +130,21 @@ export const PALETTES: { key: Accent; label: string; colors: [string, string, st
   { key: 'slate', label: 'Slate', colors: ['#455a64', '#5c6bc0', '#00acc1'] },
 ];
 
-// Every selectable theme key (accents + palettes) — used to validate stored prefs.
+// Every selectable accent key (accents + palettes) — used to validate stored prefs.
 const ALL_THEME_KEYS: Accent[] = [...ACCENTS.map((a) => a.key), ...PALETTES.map((p) => p.key)];
+
+// The picker's "approach groups": each bundles a style with the accents it
+// offers, so a single click sets both axes. `swatches[].colors` is just for the
+// preview dots (primary first). Order = display order in Settings.
+export interface ThemeSwatch { accent: Accent; label: string; colors: string[] }
+export interface ThemeGroup { id: string; label: string; hint: string; style: ThemeStyle; swatches: ThemeSwatch[] }
+const ACCENT_SWATCHES: ThemeSwatch[] = ACCENTS.map((a) => ({ accent: a.key, label: a.label, colors: [a.color] }));
+export const THEME_GROUPS: ThemeGroup[] = [
+  { id: 'classic', label: 'Classic', hint: 'White surfaces, colour on controls', style: 'classic', swatches: ACCENT_SWATCHES },
+  { id: 'tinted', label: 'Tinted', hint: 'Accent washes through every surface', style: 'tinted', swatches: ACCENT_SWATCHES },
+  { id: 'inbox', label: 'Inbox', hint: 'White content under a bold colour bar', style: 'inbox', swatches: ACCENT_SWATCHES },
+  { id: 'palettes', label: 'Palettes', hint: 'Coordinated multi-colour schemes', style: 'tinted', swatches: PALETTES.map((p) => ({ accent: p.key, label: p.label, colors: p.colors })) },
+];
 
 export function getThemeMode(): ThemeMode {
   try {
@@ -142,6 +162,14 @@ export function getAccent(): Accent {
   return 'teal';
 }
 
+export function getStyle(): ThemeStyle {
+  try {
+    const v = localStorage.getItem(STYLE_KEY);
+    if (v === 'classic' || v === 'tinted' || v === 'inbox') return v;
+  } catch { /* storage blocked */ }
+  return 'tinted';
+}
+
 export function applyTheme(): void {
   const root = document.documentElement;
   const mode = getThemeMode();
@@ -149,10 +177,20 @@ export function applyTheme(): void {
   else if (mode === 'daynight') root.setAttribute('data-theme', isNightNow() ? 'dark' : 'light');
   else root.setAttribute('data-theme', mode);
   root.setAttribute('data-accent', getAccent());
+  root.setAttribute('data-style', getStyle());
 }
 
 export function setThemeMode(mode: ThemeMode): void {
   try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ }
+  applyTheme();
+}
+
+// Set both axes at once — the picker selects an (accent, style) pair from a group.
+export function setTheme(accent: Accent, style: ThemeStyle): void {
+  try {
+    localStorage.setItem(ACCENT_KEY, accent);
+    localStorage.setItem(STYLE_KEY, style);
+  } catch { /* ignore */ }
   applyTheme();
 }
 
