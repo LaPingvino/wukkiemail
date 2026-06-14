@@ -2000,6 +2000,136 @@ function Inbox({
     );
   };
 
+  // Settings & accounts ("config bundle"). Rendered two ways from one source:
+  // as a normal stream row (inStream=true) when it lives in the inbox, or as a
+  // standalone fixed overlay (inStream=false) when relocated to the top bar.
+  // Only the in-stream form participates in keyboard list nav (data-idx/data-nav);
+  // the overlay is reached via the top-bar gear, so it must NOT, or it would be a
+  // phantom nav target — and it must render independently of the stream so a
+  // search filtering the inbox can't make the top-bar settings disappear.
+  const renderConfigBundle = (inStream: boolean) => (
+    <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''} ${settingsInTopBar ? 'config-topbar' : ''} ${settingsInTopBar && settingsOverlayOpen ? 'config-overlay-open' : ''}`}>
+      <button type="button" data-idx={inStream ? 0 : undefined} data-nav={inStream ? '' : undefined} data-bundle-key={inStream ? '__config__' : undefined} className={`bundle-head ${inStream && cursor === 0 ? 'cursor' : ''}`} onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen} aria-selected={inStream && cursor === 0}
+        aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
+        <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">
+          {configOpen ? 'expand_more' : 'chevron_right'}
+        </span>
+        <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>settings</span>
+        <span className="bundle-label">Settings &amp; accounts</span>
+        {cryptoStatus !== 'verified' && hasEncRoom && (
+          <span className="bundle-count" style={{ color: 'var(--md-sys-color-primary)' }}>encryption ●</span>
+        )}
+      </button>
+      {configOpen && (
+        <div className="bundle-body config-body" role="group">
+          <ThemeControls />
+          <button type="button" className="config-btn" onClick={toggleSettingsInTopBar}>
+            <span aria-hidden="true" className="material-symbols-outlined">
+              {settingsInTopBar ? 'check_box' : 'check_box_outline_blank'}
+            </span>
+            Settings in the top bar
+          </button>
+          {matrixSrc && cryptoStatus !== 'verified' && (
+            <div className="encryption-block">
+              <div className="encryption-block-head">
+                <span aria-hidden="true" className="material-symbols-outlined">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
+                <strong>{cryptoStatus === 'none' ? 'Set up encryption' : 'Verify this device'}</strong>
+              </div>
+              <p className="encryption-block-sub">
+                {hasEncRoom
+                  ? 'You have encrypted chats this device can’t read yet. Verify to decrypt history.'
+                  : 'Verify this device for end-to-end encrypted chats.'}
+              </p>
+              {!cryptoPersistent && (
+                <p className="encryption-block-sub" style={{ fontWeight: 600 }}>
+                  ⚠ This device can’t store keys (IndexedDB unavailable), so you’ll need to verify again
+                  each reload. Try turning on Lite storage below — it keeps the small key store while
+                  skipping the big sync database.
+                </p>
+              )}
+              <EncryptionSetup matrix={matrixSrc} />
+            </div>
+          )}
+          <div className="accounts">
+            {slots.map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                className={`config-account ${slot === activeSlot ? 'active' : ''}`}
+                onClick={() => { if (slot !== activeSlot) { setActiveSlot(slot); window.location.reload(); } }}
+              >
+                <span className="src matrix" style={{ marginRight: 6 }} />
+                {slot}
+              </button>
+            ))}
+            <button type="button" className="config-btn" onClick={() => setAddAccountOpen(true)}>+ Add account</button>
+          </div>
+          {matrixSrc && <button type="button" className="config-btn" onClick={() => setEncryptionOpen(true)}>Encryption &amp; key backup…</button>}
+          {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
+          <button type="button" className="config-btn" onClick={() => {
+            const v = window.prompt('Call URL template. {roomId} and {roomName} are substituted. Default is the Wally Conference guest page (standalone LiveKit, no login).', getCallTemplate());
+            if (v !== null) { setCallTemplate(v); }
+          }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Wally Conference (default)' : 'custom'}</button>
+          <button type="button" className="config-btn" onClick={() => {
+            const v = window.prompt('Call SFU — lk-jwt-service URL for in-app calls (only needed if your homeserver doesn’t advertise rtc_foci in .well-known). e.g. https://livekit-jwt.example.com', getSfuServiceUrl());
+            if (v !== null) { setSfuServiceUrl(v); }
+          }}>Call SFU: {getSfuServiceUrl() ? 'set' : 'auto-discover'}</button>
+          <button type="button" className="config-btn" onClick={() => { const v = !ringtoneOn; setRingtoneEnabled(v); setRingtoneOn(v); }}>
+            Incoming-call ringtone: {ringtoneOn ? 'on' : 'off'}
+          </button>
+          <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
+          <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
+          {jmapSrc
+            ? <button type="button" className="config-btn" onClick={() => { if (confirm('Disconnect this mail account?')) { clearJmapCreds(); window.location.reload(); } }}>Mail: {jmapEmail} — disconnect</button>
+            : <button type="button" className="config-btn" onClick={() => setJmapLoginOpen(true)}>Connect mail (JMAP)…</button>}
+          {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
+            <button
+              type="button"
+              className="config-btn"
+              disabled={notifPerm === 'granted'}
+              onClick={async () => { if (matrixSrc) setNotifPerm(await matrixSrc.requestNotificationPermission()); }}
+            >
+              {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="config-btn"
+            title="Keep the large sync data in memory instead of the local database, while still persisting the small encryption key store. Helps on devices where the local database is broken or fills up; tradeoff is a fuller resync on each load."
+            onClick={() => { setLiteStorage(!isLiteStorage()); window.location.reload(); }}
+          >
+            Lite storage: {isLiteStorage() ? 'on' : 'off'}
+            {matrixSrc && (cryptoStatus !== 'none')
+              ? ` · keys ${cryptoPersistent ? 'persist ✓' : 'in-memory ✗'}`
+              : ''}
+          </button>
+          <button
+            type="button"
+            className="config-btn"
+            title="Sliding sync streams a growing window of rooms (scales to huge accounts). Classic /sync downloads everything at once (can hang on very large accounts). Switch to Classic only if sliding sync misbehaves."
+            onClick={() => { setClassicSync(!isClassicSync()); window.location.reload(); }}
+          >
+            Sync: {isClassicSync() ? 'classic /sync' : 'sliding (auto)'}
+          </button>
+          <button
+            type="button"
+            className="config-btn"
+            title="Clear the local cache and re-download all rooms from the server. Use this if rooms are missing from the inbox."
+            onClick={() => {
+              if (!confirm('Force a full resync? This clears the local cache and re-downloads all your rooms from the server. Use this if rooms are missing.')) return;
+              const p = new URLSearchParams(window.location.search);
+              p.set('reset', '1');
+              window.location.search = p.toString();
+            }}
+          >
+            Force full resync (fix missing rooms)
+          </button>
+          <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="app no-sidebar">
       <main className="main">
@@ -2140,132 +2270,12 @@ function Inbox({
 
               if (isBundled) {
                 // Config bundle at the very top — folds open to settings +
-                // accounts (the sidebar's non-space controls live here now).
-                rendered.push(
-                  <div key="b-config" className={`bundle-row config-bundle ${configOpen ? 'open' : ''} ${settingsInTopBar ? 'config-topbar' : ''} ${settingsInTopBar && settingsOverlayOpen ? 'config-overlay-open' : ''}`}>
-                    <button type="button" data-idx={0} data-nav data-bundle-key="__config__" className={`bundle-head ${cursor === 0 ? 'cursor' : ''}`} onClick={() => setConfigOpen((o) => !o)} role="treeitem" aria-level={1} aria-expanded={configOpen} aria-selected={cursor === 0}
-                      aria-label={`Settings and accounts${cryptoStatus !== 'verified' && hasEncRoom ? ', encryption needs attention' : ''}`}>
-                      <span aria-hidden="true" className="material-symbols-outlined bundle-chevron">
-                        {configOpen ? 'expand_more' : 'chevron_right'}
-                      </span>
-                      <span aria-hidden="true" className="material-symbols-outlined" style={{ color: 'var(--muted)' }}>settings</span>
-                      <span className="bundle-label">Settings &amp; accounts</span>
-                      {cryptoStatus !== 'verified' && hasEncRoom && (
-                        <span className="bundle-count" style={{ color: 'var(--md-sys-color-primary)' }}>encryption ●</span>
-                      )}
-                    </button>
-                    {configOpen && (
-                      <div className="bundle-body config-body" role="group">
-                        <ThemeControls />
-                        <button type="button" className="config-btn" onClick={toggleSettingsInTopBar}>
-                          <span aria-hidden="true" className="material-symbols-outlined">
-                            {settingsInTopBar ? 'check_box' : 'check_box_outline_blank'}
-                          </span>
-                          Settings in the top bar
-                        </button>
-                        {matrixSrc && cryptoStatus !== 'verified' && (
-                          <div className="encryption-block">
-                            <div className="encryption-block-head">
-                              <span aria-hidden="true" className="material-symbols-outlined">{cryptoStatus === 'none' ? 'lock' : 'lock_open'}</span>
-                              <strong>{cryptoStatus === 'none' ? 'Set up encryption' : 'Verify this device'}</strong>
-                            </div>
-                            <p className="encryption-block-sub">
-                              {hasEncRoom
-                                ? 'You have encrypted chats this device can’t read yet. Verify to decrypt history.'
-                                : 'Verify this device for end-to-end encrypted chats.'}
-                            </p>
-                            {!cryptoPersistent && (
-                              <p className="encryption-block-sub" style={{ fontWeight: 600 }}>
-                                ⚠ This device can’t store keys (IndexedDB unavailable), so you’ll need to verify again
-                                each reload. Try turning on Lite storage below — it keeps the small key store while
-                                skipping the big sync database.
-                              </p>
-                            )}
-                            <EncryptionSetup matrix={matrixSrc} />
-                          </div>
-                        )}
-                        <div className="accounts">
-                          {slots.map((slot) => (
-                            <button
-                              key={slot}
-                              type="button"
-                              className={`config-account ${slot === activeSlot ? 'active' : ''}`}
-                              onClick={() => { if (slot !== activeSlot) { setActiveSlot(slot); window.location.reload(); } }}
-                            >
-                              <span className="src matrix" style={{ marginRight: 6 }} />
-                              {slot}
-                            </button>
-                          ))}
-                          <button type="button" className="config-btn" onClick={() => setAddAccountOpen(true)}>+ Add account</button>
-                        </div>
-                        {matrixSrc && <button type="button" className="config-btn" onClick={() => setEncryptionOpen(true)}>Encryption &amp; key backup…</button>}
-                        {matrixSrc && <button type="button" className="config-btn" onClick={() => setDevicesOpen(true)}>Devices…</button>}
-                        <button type="button" className="config-btn" onClick={() => {
-                          const v = window.prompt('Call URL template. {roomId} and {roomName} are substituted. Default is the Wally Conference guest page (standalone LiveKit, no login).', getCallTemplate());
-                          if (v !== null) { setCallTemplate(v); }
-                        }}>Call link: {getCallTemplate() === DEFAULT_CALL_TEMPLATE ? 'Wally Conference (default)' : 'custom'}</button>
-                        <button type="button" className="config-btn" onClick={() => {
-                          const v = window.prompt('Call SFU — lk-jwt-service URL for in-app calls (only needed if your homeserver doesn’t advertise rtc_foci in .well-known). e.g. https://livekit-jwt.example.com', getSfuServiceUrl());
-                          if (v !== null) { setSfuServiceUrl(v); }
-                        }}>Call SFU: {getSfuServiceUrl() ? 'set' : 'auto-discover'}</button>
-                        <button type="button" className="config-btn" onClick={() => { const v = !ringtoneOn; setRingtoneEnabled(v); setRingtoneOn(v); }}>
-                          Incoming-call ringtone: {ringtoneOn ? 'on' : 'off'}
-                        </button>
-                        <button type="button" className="config-btn" onClick={() => setSettingsOpen(true)}>Priority tuning…</button>
-                        <button type="button" className="config-btn" onClick={() => setDoneValuesOpen(true)}>Task "done" statuses…</button>
-                        {jmapSrc
-                          ? <button type="button" className="config-btn" onClick={() => { if (confirm('Disconnect this mail account?')) { clearJmapCreds(); window.location.reload(); } }}>Mail: {jmapEmail} — disconnect</button>
-                          : <button type="button" className="config-btn" onClick={() => setJmapLoginOpen(true)}>Connect mail (JMAP)…</button>}
-                        {matrixSrc && notifPerm !== 'unsupported' && notifPerm !== 'denied' && (
-                          <button
-                            type="button"
-                            className="config-btn"
-                            disabled={notifPerm === 'granted'}
-                            onClick={async () => { if (matrixSrc) setNotifPerm(await matrixSrc.requestNotificationPermission()); }}
-                          >
-                            {notifPerm === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="config-btn"
-                          title="Keep the large sync data in memory instead of the local database, while still persisting the small encryption key store. Helps on devices where the local database is broken or fills up; tradeoff is a fuller resync on each load."
-                          onClick={() => { setLiteStorage(!isLiteStorage()); window.location.reload(); }}
-                        >
-                          Lite storage: {isLiteStorage() ? 'on' : 'off'}
-                          {matrixSrc && (cryptoStatus !== 'none')
-                            ? ` · keys ${cryptoPersistent ? 'persist ✓' : 'in-memory ✗'}`
-                            : ''}
-                        </button>
-                        <button
-                          type="button"
-                          className="config-btn"
-                          title="Sliding sync streams a growing window of rooms (scales to huge accounts). Classic /sync downloads everything at once (can hang on very large accounts). Switch to Classic only if sliding sync misbehaves."
-                          onClick={() => { setClassicSync(!isClassicSync()); window.location.reload(); }}
-                        >
-                          Sync: {isClassicSync() ? 'classic /sync' : 'sliding (auto)'}
-                        </button>
-                        <button
-                          type="button"
-                          className="config-btn"
-                          title="Clear the local cache and re-download all rooms from the server. Use this if rooms are missing from the inbox."
-                          onClick={() => {
-                            if (!confirm('Force a full resync? This clears the local cache and re-downloads all your rooms from the server. Use this if rooms are missing.')) return;
-                            const p = new URLSearchParams(window.location.search);
-                            p.set('reset', '1');
-                            window.location.search = p.toString();
-                          }}
-                        >
-                          Force full resync (fix missing rooms)
-                        </button>
-                        <button type="button" className="config-btn" onClick={onSignOut}>Sign out</button>
-                      </div>
-                    )}
-                  </div>,
-                );
-                // Index 0 is the config-bundle header pushed above; entries +
-                // bundle headers continue from 1 so the cursor walks them all.
-                const counter = { n: 1 };
+                // accounts. Only when it lives in the stream (not relocated to the
+                // top bar); in top-bar mode it's rendered as an overlay below.
+                if (!settingsInTopBar) rendered.push(renderConfigBundle(true));
+                // When the config row is in the stream it owns nav index 0 and the
+                // rest continue from 1; in top-bar mode it's gone, so they start at 0.
+                const counter = { n: settingsInTopBar ? 0 : 1 };
                 // "Top section" manual bundles: their items render directly at
                 // the top (like Pinned). The bundle row still appears below in
                 // the group list, so they also show as part of the bundle.
@@ -2595,6 +2605,10 @@ function Inbox({
       {selectedEmail && jmapSrc && (
         <EmailView jmap={jmapSrc} emailId={selectedEmail} onClose={() => setSelectedEmail(null)} />
       )}
+      {/* Top-bar settings: rendered here (not in the stream) so it stays reachable
+          even while a search filters the inbox or the stream is empty. Hidden via
+          CSS until the gear opens it. */}
+      {settingsInTopBar && renderConfigBundle(false)}
       {settingsInTopBar && settingsOverlayOpen && (
         <button type="button" className="config-overlay-close" aria-label="Close settings" onClick={() => setSettingsOverlayOpen(false)}>
           <span aria-hidden="true" className="material-symbols-outlined">close</span>
