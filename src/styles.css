@@ -1048,6 +1048,53 @@ body {
   outline-offset: -2px;
   border-radius: 8px;
 }
+/* Permalink jump target — a brief highlight that fades out so the eye lands on
+   the right message after scrolling to it. */
+.comment-list > li.msg-flash {
+  border-radius: 8px;
+  animation: wm-msg-flash 2.2s ease-out;
+}
+@keyframes wm-msg-flash {
+  0%, 30% { background: var(--md-sys-color-primary-container); outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+  100% { background: transparent; outline: 2px solid transparent; outline-offset: -2px; }
+}
+/* Permalink-jump status: sticky at the top of the timeline while we paginate to
+   a target event, and the "keep looking" prompt when it's deeper than one pass. */
+.focus-seek-banner {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  background: var(--md-sys-color-secondary-container, var(--surface-2, #2a2a2a));
+  color: var(--md-sys-color-on-secondary-container, inherit);
+}
+.focus-seek-banner button {
+  background: none;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.focus-seek-banner .focus-seek-dismiss { border-color: transparent; opacity: 0.7; }
+.wm-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: wm-spin 0.7s linear infinite;
+}
 .item.unread .from { font-weight: 600; }
 .item.unread .subj strong { font-weight: 600; }
 .item.dim { opacity: 0.6; }

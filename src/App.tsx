@@ -28,6 +28,7 @@ import { ACCENTS, getAccent, getThemeMode, setAccent, setThemeMode, requestLocat
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
+import { parseMatrixToLink, type MatrixLinkTarget } from './matrixToLink';
 import type { InboxItem } from './sources/types';
 
 // Per-source state. Matrix-only for now; the multi-source design stays
@@ -516,6 +517,15 @@ function Inbox({
   const [jmapLoginOpen, setJmapLoginOpen] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<{ userId: string; roomId?: string } | null>(null);
+  // When a permalink (matrix.to / matrix:) points at a specific event, the
+  // target room is opened and this carries the event id down to RoomPanel so it
+  // paginates to and highlights that message. The nonce makes re-clicking the
+  // same permalink (even for the already-open room) re-trigger the jump.
+  const [focusEvent, setFocusEvent] = useState<{ eventId: string; nonce: number } | null>(null);
+  const focusNonceRef = useRef(0);
+  // Confirmation before joining a room reached via a permalink the user isn't a
+  // member of — they can join+open, open the raw link in a browser, or cancel.
+  const [joinPrompt, setJoinPrompt] = useState<{ label: string; idOrAlias: string; via: string[]; eventId?: string; href: string } | null>(null);
   const [roomSettings, setRoomSettings] = useState<string | null>(null);
   const [membersRoom, setMembersRoom] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -833,6 +843,73 @@ function Inbox({
     if (desired) window.location.hash = desired;
     else if (current && current !== '#') history.replaceState(null, '', window.location.pathname + window.location.search);
   }, [selectedRoom, selectedIssue, selectedEmail]);
+
+  // ── In-app Matrix permalink navigation ──────────────────────────────
+  //
+  // Open a known room (optionally jumping to an event). The event id rides a
+  // bumping nonce so the same permalink re-jumps even when the room is already
+  // open. Clears any issue/email panel so the chat is what's shown.
+  const openRoomAtEvent = useCallback((roomId: string, eventId?: string) => {
+    setSelectedIssue(null); setSelectedEmail(null);
+    setSelectedRoom(roomId);
+    if (eventId) {
+      focusNonceRef.current += 1;
+      setFocusEvent({ eventId, nonce: focusNonceRef.current });
+    } else {
+      setFocusEvent(null);
+    }
+  }, []);
+
+  // Route a parsed permalink target. Users open a profile; rooms/aliases open
+  // in-app when we're already a member, otherwise we ask before joining. Falls
+  // back to the raw link (passed through) when resolution fails.
+  const handleMatrixLink = useCallback(async (target: MatrixLinkTarget, href: string) => {
+    if (!matrixSrc) { window.open(href, '_blank', 'noopener,noreferrer'); return; }
+    if (target.kind === 'user') {
+      setSelectedProfile({ userId: target.userId, roomId: selectedRoom ?? undefined });
+      return;
+    }
+    // Resolve aliases to a room id up front so the membership check and the
+    // confirm dialog both work on a concrete room.
+    let roomId = target.kind === 'room' ? target.roomId : null;
+    if (target.kind === 'alias') roomId = await matrixSrc.resolveAlias(target.alias);
+    if (roomId) {
+      let membership = matrixSrc.getRoomMembership(roomId);
+      if (!membership) {
+        // Under sliding sync a joined room can be outside the window, so getRoom
+        // (and thus membership) is null until we subscribe. Pull it in and give
+        // sync a moment before concluding we're not a member.
+        matrixSrc.subscribeRoom(roomId);
+        await new Promise((r) => { setTimeout(r, 700); });
+        membership = matrixSrc.getRoomMembership(roomId);
+      }
+      if (membership === 'join') { openRoomAtEvent(roomId, target.eventId); return; }
+    }
+    // Not a member (or alias didn't resolve) — ask before joining. Join by the
+    // alias when we have one (the homeserver can route it even if we never saw
+    // the room id), else by the room id with the permalink's via-servers.
+    const idOrAlias = target.kind === 'alias' ? target.alias : (roomId ?? target.roomId);
+    setJoinPrompt({ label: idOrAlias, idOrAlias, via: target.via, eventId: target.eventId, href });
+  }, [matrixSrc, selectedRoom, openRoomAtEvent]);
+
+  // Global capture for clicks on any Matrix permalink anchor, wherever it was
+  // rendered (sanitised formatted_body HTML, plain-text URL autolinks, mention
+  // pills). One delegated listener generalises the behaviour instead of wiring
+  // each render site. Plain left-click only — modified clicks / middle-click
+  // keep the browser default (open in a new tab via the anchor's target).
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a) return;
+      const target = parseMatrixToLink(a.getAttribute('href') || '');
+      if (!target) return;
+      e.preventDefault();
+      void handleMatrixLink(target, a.href);
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [handleMatrixLink]);
 
   // Tab title gets a (N) prefix when there are unread items, so the
   // user can see backlog from another tab without switching. Restore
@@ -2354,6 +2431,8 @@ function Inbox({
           <RoomPanel
             matrix={matrixSrc}
             roomId={selectedRoom}
+            focusEventId={focusEvent && focusEvent.eventId ? focusEvent.eventId : undefined}
+            focusNonce={focusEvent ? focusEvent.nonce : undefined}
             onClose={() => setSelectedRoom(null)}
             onBack={backRoom ? goBackChat : undefined}
             backLabel={backItem?.subject}
@@ -2547,6 +2626,37 @@ function Inbox({
           onClose={() => setSelectedProfile(null)}
           onOpenRoom={(rid) => { setSelectedProfile(null); setSelectedRoom(rid); }}
         />
+      )}
+      {joinPrompt && matrixSrc && (
+        <div className="sheet-scrim" onClick={() => setJoinPrompt(null)}>
+          <div className="action-sheet" role="dialog" aria-modal="true" aria-label="Open link" onClick={(e) => e.stopPropagation()}>
+            <div className="action-sheet-title">Join {joinPrompt.label}?</div>
+            <p style={{ margin: '0 12px 8px', color: 'var(--muted)', fontSize: 13 }}>
+              You're not in this room. Join to open it here, or open the link in your browser instead.
+            </p>
+            <button onClick={async () => {
+              const p = joinPrompt;
+              setJoinPrompt(null);
+              try {
+                const rid = await matrixSrc.joinRoomByIdOrAlias(p.idOrAlias, p.via);
+                openRoomAtEvent(rid, p.eventId);
+              } catch {
+                window.open(p.href, '_blank', 'noopener,noreferrer');
+              }
+            }}>
+              <span aria-hidden="true" className="material-symbols-outlined">login</span>
+              Join &amp; open
+            </button>
+            <button onClick={() => { window.open(joinPrompt.href, '_blank', 'noopener,noreferrer'); setJoinPrompt(null); }}>
+              <span aria-hidden="true" className="material-symbols-outlined">open_in_new</span>
+              Open in browser
+            </button>
+            <button onClick={() => setJoinPrompt(null)}>
+              <span aria-hidden="true" className="material-symbols-outlined">close</span>
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
       {roomSettings && matrixSrc && (
         <RoomSettings

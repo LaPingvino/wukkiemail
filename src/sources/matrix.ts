@@ -2044,6 +2044,37 @@ export class MatrixSource implements Source {
     this.notify();
   }
 
+  // ── matrix.to / matrix: permalink navigation support ────────────────
+  //
+  // Our membership in a room: 'join' | 'invite' | 'leave' | 'ban' | null.
+  // null = the room is entirely unknown to this client (never synced).
+  getRoomMembership(roomId: string): string | null {
+    return this.client?.getRoom(roomId)?.getMyMembership?.() ?? null;
+  }
+
+  // Resolve a room alias (#room:server) to its room id. Returns null if the
+  // alias can't be resolved (unknown alias / server unreachable) so callers can
+  // fall back to opening the link externally.
+  async resolveAlias(alias: string): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const res = await this.client.getRoomIdForAlias(alias);
+      return res?.room_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Join a room by id or alias, optionally via the servers carried in a
+  // permalink (?via=…), and return the resulting room id. Used when a user
+  // clicks a permalink to a room they haven't joined yet.
+  async joinRoomByIdOrAlias(idOrAlias: string, via?: string[]): Promise<string> {
+    if (!this.client) throw new Error('client not started');
+    const room = await this.client.joinRoom(idOrAlias, via && via.length ? { viaServers: via } : undefined);
+    this.notify();
+    return room.roomId;
+  }
+
   // Create a persistent voice/video call room (Element-style "video room":
   // m.room.create type org.matrix.msc3417.call). The call-membership state
   // events must be sendable by everyone, so we lower their power level to 0 in

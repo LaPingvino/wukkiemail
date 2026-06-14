@@ -2,7 +2,7 @@
 // Subscribes to the source's change events so new messages appear as
 // they arrive. No compose/reply yet — this is the read-side preview.
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MatrixSource } from './sources/matrix';
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
@@ -124,6 +124,8 @@ function EncryptedFileLink({ matrix, file, name, mimetype, size, fmtBytes }: {
 export function RoomPanel({
   matrix,
   roomId,
+  focusEventId,
+  focusNonce,
   onClose,
   onBack,
   backLabel,
@@ -141,6 +143,10 @@ export function RoomPanel({
 }: {
   matrix: MatrixSource;
   roomId: string;
+  // When set, paginate to this event id and highlight it (permalink jump). The
+  // nonce changes each navigation so re-clicking the same permalink re-jumps.
+  focusEventId?: string;
+  focusNonce?: number;
   onClose: () => void;
   onBack?: () => void;
   backLabel?: string;
@@ -167,6 +173,10 @@ export function RoomPanel({
   // (the pinned quick-access bar). Yields space first — see .header-pinned-bar.
   headerExtra?: ReactNode;
 }) {
+  // Rendered timeline window. Normally 200 most-recent messages; the permalink
+  // focus effect grows this so an older target event renders and can be scrolled
+  // to. Reset per room so navigating away drops back to the cheap window.
+  const [limit, setLimit] = useState(200);
   const [snap, setSnap] = useState<RoomTimelineSnapshot | null>(() => matrix.getRoomTimeline(roomId, 200, threadRootId));
   const [composeText, setComposeText] = useState('');
   const [sending, setSending] = useState(false);
@@ -337,11 +347,17 @@ export function RoomPanel({
     // full timeline loads (no-op on classic sync).
     matrix.subscribeRoom(roomId);
     const unsub = matrix.subscribe(() => {
-      setSnap(matrix.getRoomTimeline(roomId, 200, threadRootId));
+      setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     });
     void matrix.markRoomRead(roomId);
+    // Re-snap immediately when the window grows (focus jump), not just on the
+    // next sync notification.
+    setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     return unsub;
-  }, [matrix, roomId, threadRootId]);
+  }, [matrix, roomId, threadRootId, limit]);
+
+  // Drop back to the cheap window when switching rooms.
+  useEffect(() => { setLimit(200); }, [roomId, threadRootId]);
 
   // Auto-scroll: on initial open jump to the bottom; on subsequent
   // updates, stay glued to the bottom only if we were already there.
@@ -421,6 +437,67 @@ export function RoomPanel({
     return () => el.removeEventListener('scroll', onScroll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingOlder, hasMore]);
+
+  // Permalink jump. seekToEvent back-paginates until the target event is loaded,
+  // grows the rendered window so it shows, then scrolls to and flashes it. Each
+  // pass spends a bounded number of pagination rounds so the auto-jump stays
+  // snappy; if it runs out before reaching the event (deep history), we surface a
+  // "keep looking" affordance rather than silently giving up, and a deeper pass
+  // adds more rounds. A token ref invalidates an in-flight search when the user
+  // navigates elsewhere.
+  const seekTokenRef = useRef(0);
+  const focusEventIdRef = useRef<string | undefined>(undefined);
+  focusEventIdRef.current = focusEventId;
+  const [focusStatus, setFocusStatus] = useState<'searching' | 'stuck' | null>(null);
+  const AUTO_SEEK_ROUNDS = 14;   // ~2k events back before we pause and ask
+  const DEEPER_SEEK_ROUNDS = 30; // each "keep looking" press digs this much more
+
+  const seekToEvent = useCallback(async (rounds: number) => {
+    const evId = focusEventIdRef.current;
+    if (!evId || threadRootId) return;
+    const token = (seekTokenRef.current += 1); // cancel any prior search
+    stuckRef.current = false;                  // don't let bottom-stick yank us away
+    setFocusStatus('searching');
+    const cssEscape = (s: string) => (window.CSS?.escape ? window.CSS.escape(s) : s);
+    const tryScroll = async (): Promise<boolean> => {
+      // Wait two frames so a freshly-grown window has rendered before we query.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+      if (token !== seekTokenRef.current) return true;
+      const el = panelRootRef.current?.querySelector(`li[data-event-id="${cssEscape(evId)}"]`);
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('msg-flash');
+      setTimeout(() => el.classList.remove('msg-flash'), 2200);
+      return true;
+    };
+    for (let i = 0; i < rounds; i += 1) {
+      if (token !== seekTokenRef.current) return; // superseded
+      const probe = matrix.getRoomTimeline(roomId, 20000, threadRootId);
+      const idx = probe ? probe.messages.findIndex((m) => m.id === evId) : -1;
+      if (idx >= 0) {
+        // Grow the window to include the event (its distance from the newest msg).
+        const want = probe!.messages.length - idx + 20;
+        setLimit((l) => (l >= want ? l : want));
+        // eslint-disable-next-line no-await-in-loop
+        if (await tryScroll()) { if (token === seekTokenRef.current) setFocusStatus(null); return; }
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const res = await matrix.loadOlder(roomId, 150);
+      if (!res.more) break; // genuinely reached the start of the room
+    }
+    if (token === seekTokenRef.current) setFocusStatus('stuck');
+  }, [matrix, roomId, threadRootId]);
+
+  // Kick off the auto-jump on each navigation (nonce changes even for the same
+  // room/event so re-clicking a permalink re-jumps).
+  useEffect(() => {
+    if (focusNonce === undefined) return;
+    setFocusStatus(null);
+    void seekToEvent(AUTO_SEEK_ROUNDS);
+    // Cancel the search if we unmount / navigate away mid-flight.
+    return () => { seekTokenRef.current += 1; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce, roomId]);
 
   const send = async () => {
     const body = composeText.trim();
@@ -628,6 +705,19 @@ export function RoomPanel({
           if (f) void onFileSelected(f);
         }}
       >
+        {focusStatus && (
+          <div className="focus-seek-banner" role="status">
+            {focusStatus === 'searching' ? (
+              <span><span className="wm-spinner" aria-hidden="true" /> Jumping to message…</span>
+            ) : (
+              <>
+                <span>Couldn’t reach that message yet — it’s further back.</span>
+                <button type="button" onClick={() => void seekToEvent(DEEPER_SEEK_ROUNDS)}>Keep looking</button>
+                <button type="button" className="focus-seek-dismiss" onClick={() => { seekTokenRef.current += 1; setFocusStatus(null); }}>Dismiss</button>
+              </>
+            )}
+          </div>
+        )}
         {pinned.length > 0 && (
           <details className="pinned-banner">
             <summary>
@@ -732,6 +822,7 @@ export function RoomPanel({
               {dateSep}
               <li
                 data-msg-idx={i}
+                data-event-id={m.id}
                 className={[i === msgCursor ? 'msg-cursor' : '', m.pending ? 'msg-pending' : '', grouped ? 'msg-grouped' : ''].filter(Boolean).join(' ') || undefined}
                 style={m.pending ? { opacity: 0.55 } : undefined}
               >
