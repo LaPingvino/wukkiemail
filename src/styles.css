@@ -16,19 +16,24 @@
   font-family: 'Google Sans Text', 'Roboto', system-ui, -apple-system, Segoe UI, sans-serif, NotoColorEmojiBahai;
   /* A single base hue drives the accent. primary + its container/on-colours are
      derived from it via color-mix against the current surface, so switching
-     accent only changes --accent-base, and accents adapt to light/dark for free. */
+     accent only changes --accent-base, and accents adapt to light/dark for free.
+     The surfaces themselves are also tinted with the accent (small color-mix
+     percentages below) so a chosen accent washes through the whole UI — not just
+     buttons — without us having to define a full palette per accent. Bump the
+     percentages for a stronger wash; zero them for neutral grey. */
   --accent-base: #0d9488;
   --md-sys-color-primary: var(--accent-base);
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
   --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 80%, var(--md-sys-color-on-surface));
   --md-sys-color-secondary: #5f6368;
-  --md-sys-color-surface: #ffffff;
-  --md-sys-color-surface-container: #f1f3f4;
-  --md-sys-color-surface-container-low: #f8f9fa;
+  --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 6%, #ffffff);
+  --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 10%, #eceff1);
+  --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 12%, #f1f3f4);
+  --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 9%, #f8f9fa);
   --md-sys-color-on-surface: #1f1f1f;
   --md-sys-color-on-surface-variant: #5f6368;
-  --md-sys-color-outline-variant: #dadce0;
+  --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 16%, #dadce0);
   --md-sys-color-error: #b3261e;
   --bg: var(--md-sys-color-surface-container-low);
   --fg: var(--md-sys-color-on-surface);
@@ -53,23 +58,25 @@
 :root[data-theme="dark"] {
   --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
   --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
-  --md-sys-color-surface: #131314;
-  --md-sys-color-surface-container: #1f2024;
-  --md-sys-color-surface-container-low: #1a1a1c;
+  --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
+  --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
+  --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
+  --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 14%, #1a1a1c);
   --md-sys-color-on-surface: #e3e3e3;
   --md-sys-color-on-surface-variant: #c4c7c5;
-  --md-sys-color-outline-variant: #444746;
+  --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 22%, #444746);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --md-sys-color-primary: color-mix(in srgb, var(--accent-base), white 42%);
     --md-sys-color-on-primary: color-mix(in srgb, var(--accent-base), black 55%);
-    --md-sys-color-surface: #131314;
-    --md-sys-color-surface-container: #1f2024;
-    --md-sys-color-surface-container-low: #1a1a1c;
+    --md-sys-color-surface: color-mix(in srgb, var(--accent-base) 12%, #131314);
+    --md-sys-color-surface-variant: color-mix(in srgb, var(--accent-base) 16%, #2a2b2f);
+    --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) 16%, #1f2024);
+    --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) 14%, #1a1a1c);
     --md-sys-color-on-surface: #e3e3e3;
     --md-sys-color-on-surface-variant: #c4c7c5;
-    --md-sys-color-outline-variant: #444746;
+    --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) 22%, #444746);
   }
 }
 
