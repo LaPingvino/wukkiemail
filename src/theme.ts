@@ -131,6 +131,13 @@ export function startThemeWatcher(): void {
       if (getThemeMode() === 'system') applyTheme();
     });
   }
+  // Background tabs throttle/suspend setInterval, so the 5-min day/night poll can
+  // miss a sunrise/sunset while the tab is hidden — leaving Strong's auto
+  // black/white text (and the light/dark surfaces) stale until reload. Re-derive
+  // whenever the tab regains focus/visibility so it catches up immediately.
+  const recheck = () => { const m = getThemeMode(); if (m === 'daynight' || m === 'system') applyTheme(); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) recheck(); });
+  window.addEventListener('focus', recheck);
 }
 
 export const ACCENTS: { key: Accent; label: string; color: string }[] = [
