@@ -124,6 +124,13 @@ export function startThemeWatcher(): void {
   if (watcherStarted) return;
   watcherStarted = true;
   setInterval(() => { if (getThemeMode() === 'daynight') applyTheme(); }, 5 * 60 * 1000);
+  // In System mode the CSS reacts to the OS theme on its own, but Strong's palette
+  // is computed in JS — so re-derive it when the OS preference flips.
+  if (typeof matchMedia === 'function') {
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getThemeMode() === 'system') applyTheme();
+    });
+  }
 }
 
 export const ACCENTS: { key: Accent; label: string; color: string }[] = [
@@ -159,7 +166,7 @@ const ACCENT_SWATCHES: ThemeSwatch[] = ACCENTS.map((a) => ({ accent: a.key, labe
 export const THEME_GROUPS: ThemeGroup[] = [
   { id: 'classic', label: 'Classic', hint: 'White surfaces, colour on controls', style: 'classic', swatches: ACCENT_SWATCHES },
   { id: 'tinted', label: 'Tinted', hint: 'Accent washes through every surface', style: 'tinted', swatches: ACCENT_SWATCHES },
-  { id: 'strong', label: 'Strong', hint: 'Bold accent colour across the whole UI', style: 'strong', swatches: ACCENT_SWATCHES },
+  { id: 'strong', label: 'Strong', hint: 'The colour itself everywhere; black or white text auto-picked', style: 'strong', swatches: ACCENT_SWATCHES },
   { id: 'palettes', label: 'Palettes', hint: 'Coordinated multi-colour schemes', style: 'tinted', swatches: PALETTES.map((p) => ({ accent: p.key, label: p.label, colors: p.colors })) },
 ];
 
@@ -214,23 +221,38 @@ export function applyTheme(): void {
   else if (mode === 'daynight') root.setAttribute('data-theme', isNightNow() ? 'dark' : 'light');
   else root.setAttribute('data-theme', mode);
   const accent = getAccent();
+  const style = getStyle();
   root.setAttribute('data-accent', accent);
-  root.setAttribute('data-style', getStyle());
-  // Custom themes drive the role base vars inline (the presets do it via CSS
-  // rules keyed on data-accent). Clear the inline vars for presets so their CSS
-  // wins; for custom, an absent secondary/tertiary falls back to --accent-base
-  // in :root, i.e. a monochrome scheme derived from the one base colour.
-  if (accent === 'custom') {
-    const c = getCustom();
-    root.style.setProperty('--accent-base', c.base);
-    if (c.secondary) root.style.setProperty('--secondary-base', c.secondary);
-    else root.style.removeProperty('--secondary-base');
-    if (c.tertiary) root.style.setProperty('--tertiary-base', c.tertiary);
-    else root.style.removeProperty('--tertiary-base');
+  root.setAttribute('data-style', style);
+
+  const setBase = () => {
+    // Custom themes drive the role base vars inline (presets do it via CSS rules
+    // keyed on data-accent). An absent secondary/tertiary falls back to
+    // --accent-base, i.e. a monochrome scheme from the one base colour.
+    if (accent === 'custom') {
+      const c = getCustom();
+      root.style.setProperty('--accent-base', c.base);
+      if (c.secondary) root.style.setProperty('--secondary-base', c.secondary); else root.style.removeProperty('--secondary-base');
+      if (c.tertiary) root.style.setProperty('--tertiary-base', c.tertiary); else root.style.removeProperty('--tertiary-base');
+    } else {
+      root.style.removeProperty('--accent-base');
+      root.style.removeProperty('--secondary-base');
+      root.style.removeProperty('--tertiary-base');
+    }
+  };
+
+  if (style === 'strong') {
+    // Bold: build the whole palette from the colour in JS and apply it inline,
+    // overriding the CSS tint-based surfaces. (Black/white text by luminance can't
+    // be done in plain CSS.) The base-hue vars aren't needed here.
+    for (const k of ['--accent-base', '--secondary-base', '--tertiary-base']) root.style.removeProperty(k);
+    const base = accent === 'custom' ? getCustom().base : hexForAccent(accent);
+    const tokens = deriveStrong(base, isDarkNow());
+    for (const k of STRONG_KEYS) root.style.setProperty(k, tokens[k]);
   } else {
-    root.style.removeProperty('--accent-base');
-    root.style.removeProperty('--secondary-base');
-    root.style.removeProperty('--tertiary-base');
+    // Classic/Tinted: clear any Strong inline tokens so the CSS takes over again.
+    for (const k of STRONG_KEYS) root.style.removeProperty(k);
+    setBase();
   }
 }
 
@@ -308,4 +330,111 @@ function hslToHex(h: number, s: number, l: number): string {
   else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
   const to = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
   return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+function rgbOf(hex: string): [number, number, number] {
+  let v = hex.replace('#', '');
+  if (v.length === 3) v = v.split('').map((c) => c + c).join('');
+  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+}
+function relLum(hex: string): number {
+  const f = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const [r, g, b] = rgbOf(hex);
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrast(a: string, b: string): number {
+  const l1 = relLum(a); const l2 = relLum(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+function mixHex(a: string, b: string, fa: number): string {
+  const [ar, ag, ab] = rgbOf(a); const [br, bg, bb] = rgbOf(b);
+  const to = (x: number, y: number) => Math.round(x * fa + y * (1 - fa)).toString(16).padStart(2, '0');
+  return `#${to(ar, br)}${to(ag, bg)}${to(ab, bb)}`;
+}
+
+// ── Strong (bold) theme derivation ───────────────────────────────────
+// The Strong style makes the surfaces the accent COLOUR itself — a tight tonal
+// ramp around it — and picks black or white text from the colour's luminance,
+// softening the surface lightness only as much as needed to clear contrast (we
+// keep it near the base; we move it only if neither black nor white reads at the
+// base's own lightness). Roles collapse to that one colour (bold monochrome):
+// buttons invert to a text-coloured block, accent text/links use the on-colour.
+// Returns a flat map of the tokens, applied inline; the contrast test imports
+// this so it checks the real output. Mode only biases the polarity preference.
+const INK = '#121316';
+const AA = 4.6; // aim a touch above 4.5 so layered tones keep margin
+export type StrongTokens = Record<string, string>;
+export function deriveStrong(base: string, dark: boolean): StrongTokens {
+  const [h, s0, l0] = hexToHsl(base);
+  const s = Math.min(0.85, Math.max(s0, 0.45)); // ensure it reads as a bold colour
+  const surfAt = (l: number) => hslToHex(h, s, Math.min(0.97, Math.max(0.04, l)));
+  // The ramp spans SPREAD lightness; the tone CLOSEST to the text colour is the
+  // hardest, so anchor on that one. We slide the whole ramp AWAY from the text
+  // colour (darker for white text, lighter for ink) until that worst tone clears
+  // AA — that's the "soften only as much as needed" step.
+  const SPREAD = 0.12;
+  const reach = (text: string) => {
+    const danger = text === '#ffffff' ? +SPREAD : -SPREAD; // worst tone sits this far toward the text
+    const step = text === '#ffffff' ? -0.02 : 0.02;        // …so move the ramp the other way
+    let l = l0;
+    for (let i = 0; i < 60; i += 1) {
+      if (contrast(text, surfAt(l + danger)) >= AA) return { ok: true, l };
+      l += step; if (l < 0.05 || l > 0.95) break;
+    }
+    return { ok: contrast(text, surfAt(l + danger)) >= AA, l };
+  };
+  const pw = reach('#ffffff'); const pi = reach(INK);
+  let onSurface: string; let ls: number;
+  if (dark && pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
+  else if (!dark && pi.ok) { onSurface = INK; ls = pi.l; }
+  else if (pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
+  else if (pi.ok) { onSurface = INK; ls = pi.l; }
+  else { const w = contrast('#ffffff', surfAt(l0)) >= contrast(INK, surfAt(l0)); onSurface = w ? '#ffffff' : INK; ls = w ? 0.20 : 0.88; }
+
+  // sgn points TOWARD the text colour; raised tones lean that way, recessed away.
+  const sgn = onSurface === '#ffffff' ? +1 : -1;
+  const surface = surfAt(ls);
+  const bg = surfAt(ls - sgn * 0.05);          // app background, recessed (away from text)
+  const container = surfAt(ls + sgn * 0.06);   // raised (hover/active), toward text
+  const variant = surfAt(ls + sgn * 0.10);     // the worst tone reach() anchored on
+  const onVar = mixHex(onSurface, surface, 0.78); // muted: mostly the on-colour, lightly dimmed
+  const outline = mixHex(onSurface, surface, 0.45);
+  return {
+    '--md-sys-color-surface': surface,
+    '--md-sys-color-surface-variant': variant,
+    '--md-sys-color-surface-container': container,
+    '--md-sys-color-surface-container-low': bg,
+    '--md-sys-color-on-surface': onSurface,
+    '--md-sys-color-on-surface-variant': onVar,
+    '--md-sys-color-outline-variant': outline,
+    '--md-sys-color-primary': onSurface,          // buttons invert: a block in the text colour…
+    '--md-sys-color-on-primary': surface,         // …labelled in the surface colour
+    '--md-sys-color-primary-container': container,
+    '--md-sys-color-on-primary-container': onSurface,
+    '--md-sys-color-secondary': onSurface,
+    '--md-sys-color-secondary-container': variant,
+    '--md-sys-color-on-secondary-container': onSurface,
+    '--md-sys-color-tertiary': onSurface,
+    '--md-sys-color-tertiary-container': container,
+    '--md-sys-color-on-tertiary-container': onSurface,
+    '--accent-text': onSurface,
+    '--link-color': onSurface,
+  };
+}
+// The full set of vars Strong drives inline, so non-Strong styles can clear them.
+export const STRONG_KEYS = Object.keys(deriveStrong('#888888', false));
+
+// Resolve a preset/palette accent key to its primary hex (Strong builds from it).
+function hexForAccent(key: Accent): string {
+  const a = ACCENTS.find((x) => x.key === key); if (a) return a.color;
+  const p = PALETTES.find((x) => x.key === key); if (p) return p.colors[0];
+  return '#1a73e8';
+}
+// Is the resolved appearance dark right now (for Strong's polarity bias)?
+function isDarkNow(): boolean {
+  const m = getThemeMode();
+  if (m === 'dark') return true;
+  if (m === 'light') return false;
+  if (m === 'daynight') return isNightNow();
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
 }

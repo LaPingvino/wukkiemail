@@ -124,25 +124,13 @@
 
 /* ── Style axis (data-style) — how much the accent washes into surfaces ──────
    Placed AFTER the dark blocks so the tint override wins in both light & dark
-   (equal specificity → source order). "tinted" is the default in :root above.
-   Each style only changes the --tint-* amounts; the surface formula and neutral
-   bases are untouched, so no per-element recolouring (and no white-on-white
-   hover traps). classic = none, tinted = subtle wash, strong = colour
-   everywhere. */
+   (equal specificity → source order). "tinted" is the default in :root above;
+   "classic" zeroes the wash for neutral white/grey. "strong" is NOT here — it's
+   computed in JS (theme.ts deriveStrong) and applied inline on <html>, because a
+   bold colour surface with black-or-white text by luminance can't be expressed
+   in plain CSS. */
 :root[data-style="classic"] {
   --tint-0: 0%; --tint-var: 0%; --tint-1: 0%; --tint-low: 0%; --tint-outline: 0%;
-}
-:root[data-style="strong"] {
-  --tint-0: 26%; --tint-var: 34%; --tint-1: 34%; --tint-low: 28%; --tint-outline: 44%;
-}
-/* Dark needs a heavier mix for the colour to read against near-black neutrals. */
-:root[data-style="strong"][data-theme="dark"] {
-  --tint-0: 30%; --tint-var: 38%; --tint-1: 38%; --tint-low: 28%; --tint-outline: 50%;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-style="strong"]:not([data-theme]) {
-    --tint-0: 30%; --tint-var: 38%; --tint-1: 38%; --tint-low: 28%; --tint-outline: 50%;
-  }
 }
 
 * { box-sizing: border-box; }

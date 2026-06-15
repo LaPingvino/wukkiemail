@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { deriveStrong } from '../src/theme.ts'; // Strong is JS-derived; test the real output
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(root, 'src/styles.css'), 'utf8');
@@ -67,8 +68,6 @@ function contrast(a, b) {
 const rootP = props(blockBody(':root'));
 const darkP = props(blockBody(':root[data-theme="dark"]'));
 const classicP = props(blockBody(':root[data-style="classic"]'));
-const strongP = props(blockBody(':root[data-style="strong"]'));
-const strongDarkP = props(blockBody(':root[data-style="strong"][data-theme="dark"]'));
 
 // Parse the derivation percentages out of the CSS formulas so the test tracks
 // them rather than hard-coding (keeps it honest if a mix ratio is tuned).
@@ -114,15 +113,28 @@ function hsl(h, s, l) {
 
 // ── derive the resolved token colours for one combination ────────────
 function tints(mode, style) {
-  // Base = :root (light) or dark block; a style then overrides the amounts.
+  // classic/tinted only — strong is handled by deriveStrong, not the tint vars.
   const base = mode === 'dark' ? darkP : rootP;
-  let src = base;
-  if (style === 'classic') src = classicP;
-  else if (style === 'strong') src = mode === 'dark' ? strongDarkP : strongP;
+  const src = style === 'classic' ? classicP : base;
   const t = (k) => pct((src[k] ?? base[k]));
   return { t0: t('--tint-0'), tVar: t('--tint-var'), t1: t('--tint-1'), tLow: t('--tint-low'), tOut: t('--tint-outline') };
 }
 function tokens(theme, mode, style) {
+  if (style === 'strong') {
+    // Bold style is built in JS from the primary hue; check that real output.
+    const t = deriveStrong(theme.accent, mode === 'dark');
+    const g = (k) => parseHex(t[k]);
+    return {
+      fg: g('--md-sys-color-on-surface'), muted: g('--md-sys-color-on-surface-variant'),
+      bg: g('--md-sys-color-surface-container-low'), card: g('--md-sys-color-surface'),
+      container: g('--md-sys-color-surface-container'),
+      primary: g('--md-sys-color-primary'), onPrimary: g('--md-sys-color-on-primary'),
+      primaryContainer: g('--md-sys-color-primary-container'), onPrimaryContainer: g('--md-sys-color-on-primary-container'),
+      secondaryContainer: g('--md-sys-color-secondary-container'), onSecondaryContainer: g('--md-sys-color-on-secondary-container'),
+      tertiaryContainer: g('--md-sys-color-tertiary-container'), onTertiaryContainer: g('--md-sys-color-on-tertiary-container'),
+      linkColor: g('--link-color'), accentText: g('--accent-text'),
+    };
+  }
   const src = mode === 'dark' ? darkP : rootP;
   const surf0 = parseHex(src['--surf-0']); const surfVar = parseHex(src['--surf-var']);
   const surf1 = parseHex(src['--surf-1']); const surfLow = parseHex(src['--surf-low']);
@@ -190,7 +202,10 @@ for (const theme of THEMES) {
     for (const style of STYLES) {
       const tk = tokens(theme, mode, style);
       for (const p of PAIRS) {
-        if (custom && !p.safe) continue; // free-form picks: only the derivation-safe pairs
+        // Free-form custom picks: in tint-based styles only the derivation-safe
+        // pairs are guaranteed (accent-on-accent is the user's call). Strong is
+        // built with auto black/white text, so it's fully checked for any hue.
+        if (custom && !p.safe && style !== 'strong') continue;
         checks += 1;
         const ratio = contrast(tk[p.fg], tk[p.bg]);
         if (ratio < p.min) {
