@@ -78,6 +78,7 @@ const ON_PRIM = num(/--md-sys-color-on-primary-container:\s*color-mix\(in srgb, 
 const ON_SEC = num(/--md-sys-color-on-secondary-container:\s*color-mix\(in srgb, var\(--md-sys-color-secondary\) (\d+)%/, 'on-secondary-container %');
 const ON_TER = num(/--md-sys-color-on-tertiary-container:\s*color-mix\(in srgb, var\(--md-sys-color-tertiary\) (\d+)%/, 'on-tertiary-container %');
 const LINK = num(/--link-color:\s*color-mix\(in srgb, var\(--md-sys-color-tertiary\) (\d+)%/, 'link blend %');
+const ACC_TEXT = num(/--accent-text:\s*color-mix\(in srgb, var\(--md-sys-color-primary\) (\d+)%/, 'accent-text blend %');
 const DK_LIGHTEN = 1 - num(/--md-sys-color-primary:\s*color-mix\(in srgb, var\(--accent-base\), white (\d+)%\)/, 'dark role lighten %');
 const DK_ONPRIM = 1 - num(/--md-sys-color-on-primary:\s*color-mix\(in srgb, var\(--accent-base\), black (\d+)%\)/, 'dark on-primary %');
 
@@ -149,6 +150,7 @@ function tokens(theme, mode, style) {
     secondaryContainer: mix(secondary, surface, FILL), onSecondaryContainer: mix(secondary, onSurface, ON_SEC),
     tertiaryContainer: mix(tertiary, surface, FILL), onTertiaryContainer: mix(tertiary, onSurface, ON_TER),
     linkColor: mix(tertiary, onSurface, LINK),
+    accentText: mix(primary, onSurface, ACC_TEXT),
   };
 }
 
@@ -156,24 +158,26 @@ function tokens(theme, mode, style) {
 // Honest, usage-aware WCAG: 4.5 (AA normal text) for the reading surfaces that
 // MUST stay legible regardless of theme; 3.0 (AA large-text / UI components) for
 // accent-coloured UI — buttons, tonal chips, icons.
-// `safe: true` = contrast-guaranteed by our derivation for ANY base hue (the
-// foreground blends toward the fixed body-text colour), so it's enforced for
-// free-form custom colours too. The rest pit the raw accent hue against itself
-// (e.g. white text on the chosen button colour): curated presets must pass them,
-// but a custom pick is the user's own call — we don't fail the build for, say, a
-// neon-yellow custom base.
+// `safe: true` = the hard floor we guarantee for ANY base hue, including a
+// free-form custom pick: body text uses the fixed on-surface colour against a
+// light/dark surface, so it stays readable no matter the hue. Everything else
+// (muted/links/accent text/buttons/tonal chips) is held to the curated PRESETS —
+// those are chosen to pass AA — but NOT enforced for arbitrary custom colours,
+// since a neon-yellow or near-white custom base making its own accent text soft
+// is the user's call, exactly like the button colour.
 const PAIRS = [
   { name: 'body on bg', fg: 'fg', bg: 'bg', min: 4.5, safe: true },
   { name: 'body on card', fg: 'fg', bg: 'card', min: 4.5, safe: true },
   { name: 'body on container', fg: 'fg', bg: 'container', min: 4.5, safe: true },
-  { name: 'muted on bg', fg: 'muted', bg: 'bg', min: 4.5, safe: true },
-  { name: 'link on card', fg: 'linkColor', bg: 'card', min: 4.5, safe: true },
-  { name: 'link on bg', fg: 'linkColor', bg: 'bg', min: 4.5, safe: true },
+  { name: 'muted on bg', fg: 'muted', bg: 'bg', min: 4.5 },
+  { name: 'link on card', fg: 'linkColor', bg: 'card', min: 4.5 },
+  { name: 'link on bg', fg: 'linkColor', bg: 'bg', min: 4.5 },
   { name: 'button text', fg: 'onPrimary', bg: 'primary', min: 3.0 },
   { name: 'primary-container text', fg: 'onPrimaryContainer', bg: 'primaryContainer', min: 3.0 },
   { name: 'chip/pill text (secondary)', fg: 'onSecondaryContainer', bg: 'secondaryContainer', min: 3.0 },
   { name: 'count chip text (tertiary)', fg: 'onTertiaryContainer', bg: 'tertiaryContainer', min: 3.0 },
-  { name: 'accent icon on card', fg: 'primary', bg: 'card', min: 3.0 },
+  { name: 'accent text/icon on card', fg: 'accentText', bg: 'card', min: 4.5 },
+  { name: 'accent text/icon on bg', fg: 'accentText', bg: 'bg', min: 4.5 },
 ];
 
 const MODES = ['light', 'dark'];

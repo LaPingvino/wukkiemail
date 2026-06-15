@@ -29,7 +29,7 @@
   --md-sys-color-primary: var(--accent-base);
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 62%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 52%, var(--md-sys-color-on-surface));
   /* Secondary + tertiary roles. Simple accents leave these defaulting to the
      primary hue (so they stay monochrome); the richer palettes below set all
      three to coordinated hues. */
@@ -37,10 +37,10 @@
   --tertiary-base: var(--accent-base);
   --md-sys-color-secondary: var(--secondary-base);
   --md-sys-color-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 62%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 52%, var(--md-sys-color-on-surface));
   --md-sys-color-tertiary: var(--tertiary-base);
   --md-sys-color-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 62%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 52%, var(--md-sys-color-on-surface));
   /* Neutral surface bases (light) and the per-style tint amounts (default =
      "tinted"). Dark mode and the style overrides only touch these inputs. */
   --surf-0: #ffffff;   --tint-0: 6%;
@@ -55,10 +55,13 @@
   --md-sys-color-on-surface: #1f1f1f;
   --md-sys-color-on-surface-variant: #494c50;
   --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) var(--tint-outline), var(--outline-0));
-  /* Contrast-safe accent for text/links on a surface: the raw role hue is often
-     too light to read as text (bright tertiaries especially), so blend it toward
-     the body-text colour. Used for inline links. */
-  --link-color: color-mix(in srgb, var(--md-sys-color-tertiary) 40%, var(--md-sys-color-on-surface));
+  /* Contrast-safe accents for text/icons ON a surface: the raw role hue is often
+     too light to read as text (and a Strong-tinted card shrinks the gap further),
+     so blend toward the body-text colour. --link-color (tertiary) for inline
+     links; --accent-text (primary) for accent labels/counts/icons. Both adapt to
+     light/dark for free since primary/tertiary/on-surface all flip. */
+  --link-color: color-mix(in srgb, var(--md-sys-color-tertiary) 34%, var(--md-sys-color-on-surface));
+  --accent-text: color-mix(in srgb, var(--md-sys-color-primary) 48%, var(--md-sys-color-on-surface));
   --md-sys-color-error: #b3261e;
   --bg: var(--md-sys-color-surface-container-low);
   --fg: var(--md-sys-color-on-surface);
@@ -130,15 +133,15 @@
   --tint-0: 0%; --tint-var: 0%; --tint-1: 0%; --tint-low: 0%; --tint-outline: 0%;
 }
 :root[data-style="strong"] {
-  --tint-0: 14%; --tint-var: 22%; --tint-1: 22%; --tint-low: 18%; --tint-outline: 30%;
+  --tint-0: 26%; --tint-var: 34%; --tint-1: 34%; --tint-low: 28%; --tint-outline: 44%;
 }
 /* Dark needs a heavier mix for the colour to read against near-black neutrals. */
 :root[data-style="strong"][data-theme="dark"] {
-  --tint-0: 24%; --tint-var: 30%; --tint-1: 30%; --tint-low: 26%; --tint-outline: 42%;
+  --tint-0: 30%; --tint-var: 38%; --tint-1: 38%; --tint-low: 28%; --tint-outline: 50%;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-style="strong"]:not([data-theme]) {
-    --tint-0: 24%; --tint-var: 30%; --tint-1: 30%; --tint-low: 26%; --tint-outline: 42%;
+    --tint-0: 30%; --tint-var: 38%; --tint-1: 38%; --tint-low: 28%; --tint-outline: 50%;
   }
 }
 
@@ -623,7 +626,7 @@ body {
 }
 .bundle.active .count { color: var(--md-sys-color-on-primary-container); }
 .bundle.has-unread { font-weight: 500; }
-.bundle.has-unread .count strong { color: var(--md-sys-color-primary); font-weight: 600; }
+.bundle.has-unread .count strong { color: var(--accent-text); font-weight: 600; }
 .bundle.active.has-unread .count strong { color: var(--md-sys-color-on-primary-container); }
 
 .main {
@@ -1907,7 +1910,7 @@ body {
   border-radius: 4px 8px 8px 4px;
 }
 .reply-chip-inner { flex: 1; min-width: 0; }
-.reply-chip-label { font-size: 11px; color: var(--md-sys-color-primary); font-weight: 600; }
+.reply-chip-label { font-size: 11px; color: var(--accent-text); font-weight: 600; }
 .reply-chip-body {
   font-size: 12px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -2215,10 +2218,10 @@ md-outlined-text-field { width: 100%; }
 .item.unread .from, .item.unread .subj strong { font-weight: 700; }
 .bundle-label { font-weight: 600; }
 .bundle-headline:hover .bundle-head { background: var(--md-sys-color-primary-container); }
-.bundle-count { color: var(--md-sys-color-tertiary); font-weight: 600; }
+.bundle-count { color: var(--accent-text); font-weight: 600; }
 .fab { border-radius: 18px; box-shadow: 0 6px 18px color-mix(in srgb, var(--md-sys-color-primary) 42%, transparent); }
 .fab:hover { transform: translateY(-3px); box-shadow: 0 10px 28px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent); }
-.section-header-label { font-weight: 700; letter-spacing: 0.3px; color: var(--md-sys-color-primary); }
+.section-header-label { font-weight: 700; letter-spacing: 0.3px; color: var(--accent-text); }
 
 /* "Settings in the top bar": the config bundle is CSS-relocated into a FULL-SCREEN
    overlay opened by the toolbar gear, instead of sitting in the inbox stream. */
@@ -2270,7 +2273,7 @@ md-outlined-text-field { width: 100%; }
   color: var(--md-sys-color-on-primary-container);
   border: 1px dashed color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent);
 }
-.pinned-chip-picker .pinned-chip-label { color: var(--md-sys-color-primary); }
+.pinned-chip-picker .pinned-chip-label { color: var(--accent-text); }
 /* Spotlight = the highest-priority UNREAD that isn't pinned, shown as the first
    chip. Distinguished from pinned-unread chips by a secondary-colour ring + label
    so it reads as "attention", not "pinned". */
@@ -2322,7 +2325,7 @@ md-outlined-text-field { width: 100%; }
 .contact-row-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .contact-row-name { font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contact-row-id { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.contact-fav { font-size: 14px; color: var(--md-sys-color-primary); }
+.contact-fav { font-size: 14px; color: var(--accent-text); }
 .contact-spin { color: var(--muted); animation: contact-spin 0.9s linear infinite; }
 @keyframes contact-spin { to { transform: rotate(360deg); } }
 
