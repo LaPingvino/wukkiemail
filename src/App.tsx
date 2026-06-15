@@ -232,7 +232,7 @@ const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const STYLE_OPTS: { key: ThemeStyle; label: string }[] = [
   { key: 'classic', label: 'Classic' },
   { key: 'tinted', label: 'Tinted' },
-  { key: 'inbox', label: 'Inbox' },
+  { key: 'strong', label: 'Strong' },
 ];
 // Native <input type="color"> only accepts #rrggbb; expand #rgb and fall back.
 const toColorInput = (hex: string) => {

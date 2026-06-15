@@ -29,7 +29,7 @@
   --md-sys-color-primary: var(--accent-base);
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 80%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-primary-container: color-mix(in srgb, var(--md-sys-color-primary) 62%, var(--md-sys-color-on-surface));
   /* Secondary + tertiary roles. Simple accents leave these defaulting to the
      primary hue (so they stay monochrome); the richer palettes below set all
      three to coordinated hues. */
@@ -37,10 +37,10 @@
   --tertiary-base: var(--accent-base);
   --md-sys-color-secondary: var(--secondary-base);
   --md-sys-color-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 82%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-secondary-container: color-mix(in srgb, var(--md-sys-color-secondary) 62%, var(--md-sys-color-on-surface));
   --md-sys-color-tertiary: var(--tertiary-base);
   --md-sys-color-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 16%, var(--md-sys-color-surface));
-  --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 82%, var(--md-sys-color-on-surface));
+  --md-sys-color-on-tertiary-container: color-mix(in srgb, var(--md-sys-color-tertiary) 62%, var(--md-sys-color-on-surface));
   /* Neutral surface bases (light) and the per-style tint amounts (default =
      "tinted"). Dark mode and the style overrides only touch these inputs. */
   --surf-0: #ffffff;   --tint-0: 6%;
@@ -53,8 +53,12 @@
   --md-sys-color-surface-container: color-mix(in srgb, var(--accent-base) var(--tint-1), var(--surf-1));
   --md-sys-color-surface-container-low: color-mix(in srgb, var(--accent-base) var(--tint-low), var(--surf-low));
   --md-sys-color-on-surface: #1f1f1f;
-  --md-sys-color-on-surface-variant: #5f6368;
+  --md-sys-color-on-surface-variant: #494c50;
   --md-sys-color-outline-variant: color-mix(in srgb, var(--accent-base) var(--tint-outline), var(--outline-0));
+  /* Contrast-safe accent for text/links on a surface: the raw role hue is often
+     too light to read as text (bright tertiaries especially), so blend it toward
+     the body-text colour. Used for inline links. */
+  --link-color: color-mix(in srgb, var(--md-sys-color-tertiary) 40%, var(--md-sys-color-on-surface));
   --md-sys-color-error: #b3261e;
   --bg: var(--md-sys-color-surface-container-low);
   --fg: var(--md-sys-color-on-surface);
@@ -69,8 +73,8 @@
 :root[data-accent="blue"]   { --accent-base: #1a73e8; }
 :root[data-accent="indigo"] { --accent-base: #4f46e5; }
 :root[data-accent="pink"]   { --accent-base: #d81b60; }
-:root[data-accent="amber"]  { --accent-base: #e8710a; }
-:root[data-accent="green"]  { --accent-base: #16a34a; }
+:root[data-accent="amber"]  { --accent-base: #c25f08; }
+:root[data-accent="green"]  { --accent-base: #157f3c; }
 
 /* Role-based palettes — set all three role hues for a coordinated, multi-hued
    look (primary = buttons/active, secondary = chips/pills, tertiary =
@@ -117,46 +121,25 @@
 
 /* ── Style axis (data-style) — how much the accent washes into surfaces ──────
    Placed AFTER the dark blocks so the tint override wins in both light & dark
-   (equal specificity → source order). "tinted" is the default in :root above. */
-:root[data-style="classic"],
-:root[data-style="inbox"] {
+   (equal specificity → source order). "tinted" is the default in :root above.
+   Each style only changes the --tint-* amounts; the surface formula and neutral
+   bases are untouched, so no per-element recolouring (and no white-on-white
+   hover traps). classic = none, tinted = subtle wash, strong = colour
+   everywhere. */
+:root[data-style="classic"] {
   --tint-0: 0%; --tint-var: 0%; --tint-1: 0%; --tint-low: 0%; --tint-outline: 0%;
 }
-/* Inbox: white content (tints zeroed above) + a cohesive bold accent header
-   ZONE — the top toolbar, the filter-chip row, the pinned quick-access bar and
-   the mobile bottom nav all share the saturated --accent-base with white
-   foreground, the way Google Inbox framed a white list under solid colour. Using
-   --accent-base (not the contrast-lightened primary) keeps it a true colour bar
-   in both light and dark. */
-:root[data-style="inbox"] .toolbar,
-:root[data-style="inbox"] .chip-bar,
-:root[data-style="inbox"] .pinned-bar,
-:root[data-style="inbox"] .bottom-nav { background: var(--accent-base); }
-:root[data-style="inbox"] .toolbar-brand,
-:root[data-style="inbox"] .toolbar .hamburger,
-:root[data-style="inbox"] .pinned-chip-label,
-:root[data-style="inbox"] .pinned-chip-picker .pinned-chip-label { color: #fff; }
-:root[data-style="inbox"] .pinned-bar { border-bottom-color: rgba(255, 255, 255, 0.25); }
-:root[data-style="inbox"] .toolbar .hamburger.on { background: rgba(255, 255, 255, 0.22); color: #fff; }
-:root[data-style="inbox"] .bottom-nav .tab { color: rgba(255, 255, 255, 0.7); }
-:root[data-style="inbox"] .bottom-nav .tab.active { color: #fff; }
-/* Search field — recoloured for the colour bar via Material Web's own tokens
-   (white outline/text/label/caret/placeholder). A gentle 12px container-shape is
-   as round as we can go: a full pill (999px) breaks the outlined field's
-   floating-label notch and throws the "Search" label off into the corner. */
-:root[data-style="inbox"] .toolbar md-outlined-text-field {
-  --md-outlined-text-field-container-shape: 12px;
-  --md-outlined-text-field-outline-color: rgba(255, 255, 255, 0.55);
-  --md-outlined-text-field-hover-outline-color: rgba(255, 255, 255, 0.85);
-  --md-outlined-text-field-focus-outline-color: #fff;
-  --md-outlined-text-field-input-text-color: #fff;
-  --md-outlined-text-field-focus-input-text-color: #fff;
-  --md-outlined-text-field-hover-input-text-color: #fff;
-  --md-outlined-text-field-label-text-color: rgba(255, 255, 255, 0.85);
-  --md-outlined-text-field-hover-label-text-color: #fff;
-  --md-outlined-text-field-focus-label-text-color: #fff;
-  --md-outlined-text-field-input-text-placeholder-color: rgba(255, 255, 255, 0.7);
-  --md-outlined-text-field-caret-color: #fff;
+:root[data-style="strong"] {
+  --tint-0: 14%; --tint-var: 22%; --tint-1: 22%; --tint-low: 18%; --tint-outline: 30%;
+}
+/* Dark needs a heavier mix for the colour to read against near-black neutrals. */
+:root[data-style="strong"][data-theme="dark"] {
+  --tint-0: 24%; --tint-var: 30%; --tint-1: 30%; --tint-low: 26%; --tint-outline: 42%;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-style="strong"]:not([data-theme]) {
+    --tint-0: 24%; --tint-var: 30%; --tint-1: 30%; --tint-low: 26%; --tint-outline: 42%;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -228,7 +211,7 @@ body {
 .next-btn-sub { font-size: 12px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Email body rendering in the JMAP viewer. */
 .email-html { line-height: 1.5; overflow-wrap: anywhere; }
-.email-html a { color: var(--md-sys-color-tertiary); }
+.email-html a { color: var(--link-color); }
 .email-html table { max-width: 100%; }
 .email-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
 .email-images-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 0 0 12px; border-radius: 8px; background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.05)); font-size: 13px; color: var(--muted); }
@@ -1576,7 +1559,7 @@ body {
   font-family: 'JetBrains Mono', Menlo, monospace;
   font-size: 0.9em;
 }
-.comment-body a { color: var(--md-sys-color-tertiary); }
+.comment-body a { color: var(--link-color); }
 .comment-body mx-reply {
   display: block;
   margin-bottom: 8px;

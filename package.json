@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsgo --noEmit && vite build",
+    "build": "tsgo --noEmit && node scripts/theme-contrast.mjs && vite build",
+    "test:theme": "node scripts/theme-contrast.mjs",
     "preview": "vite preview",
     "typecheck": "tsgo --noEmit",
     "typecheck:tsc": "tsc --noEmit",

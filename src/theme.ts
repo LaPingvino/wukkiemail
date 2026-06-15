@@ -5,7 +5,7 @@
 // data-style attributes the CSS reads. System mode removes data-theme so the OS
 // preference (the prefers-color-scheme media query) wins; light/dark force it.
 // The picker presents accent×style as a handful of "approach groups" (Classic,
-// Tinted, Inbox, Palettes) — see THEME_GROUPS below.
+// Tinted, Strong, Palettes) plus a live custom builder — see THEME_GROUPS below.
 
 export type ThemeMode = 'light' | 'dark' | 'system' | 'daynight';
 export type Accent =
@@ -18,9 +18,9 @@ export type Accent =
 // them for a multi-hue custom scheme. Stored as JSON under CUSTOM_KEY.
 export interface CustomTheme { base: string; secondary?: string; tertiary?: string }
 // How strongly the accent tints the surfaces: classic = none (white/grey),
-// tinted = the accent washes through, inbox = white content under a bold accent
-// app bar. Drives the data-style attribute.
-export type ThemeStyle = 'classic' | 'tinted' | 'inbox';
+// tinted = a subtle wash, strong = bold colour across the whole UI. Drives the
+// data-style attribute.
+export type ThemeStyle = 'classic' | 'tinted' | 'strong';
 
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
@@ -131,8 +131,8 @@ export const ACCENTS: { key: Accent; label: string; color: string }[] = [
   { key: 'blue', label: 'Blue', color: '#1a73e8' },
   { key: 'indigo', label: 'Indigo', color: '#4f46e5' },
   { key: 'pink', label: 'Pink', color: '#d81b60' },
-  { key: 'amber', label: 'Amber', color: '#e8710a' },
-  { key: 'green', label: 'Green', color: '#16a34a' },
+  { key: 'amber', label: 'Amber', color: '#c25f08' },
+  { key: 'green', label: 'Green', color: '#157f3c' },
 ];
 
 // Richer role-based palettes (primary / secondary / tertiary). Stored in the
@@ -159,7 +159,7 @@ const ACCENT_SWATCHES: ThemeSwatch[] = ACCENTS.map((a) => ({ accent: a.key, labe
 export const THEME_GROUPS: ThemeGroup[] = [
   { id: 'classic', label: 'Classic', hint: 'White surfaces, colour on controls', style: 'classic', swatches: ACCENT_SWATCHES },
   { id: 'tinted', label: 'Tinted', hint: 'Accent washes through every surface', style: 'tinted', swatches: ACCENT_SWATCHES },
-  { id: 'inbox', label: 'Inbox', hint: 'White content under a bold colour bar', style: 'inbox', swatches: ACCENT_SWATCHES },
+  { id: 'strong', label: 'Strong', hint: 'Bold accent colour across the whole UI', style: 'strong', swatches: ACCENT_SWATCHES },
   { id: 'palettes', label: 'Palettes', hint: 'Coordinated multi-colour schemes', style: 'tinted', swatches: PALETTES.map((p) => ({ accent: p.key, label: p.label, colors: p.colors })) },
 ];
 
@@ -182,7 +182,8 @@ export function getAccent(): Accent {
 export function getStyle(): ThemeStyle {
   try {
     const v = localStorage.getItem(STYLE_KEY);
-    if (v === 'classic' || v === 'tinted' || v === 'inbox') return v;
+    if (v === 'classic' || v === 'tinted' || v === 'strong') return v;
+    if (v === 'inbox') return 'strong'; // migrate the old 'inbox' style name
   } catch { /* storage blocked */ }
   return 'tinted';
 }
