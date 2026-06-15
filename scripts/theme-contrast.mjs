@@ -101,6 +101,8 @@ while ((am = accentRe.exec(css))) {
 for (let h = 0; h < 360; h += 30) THEMES.push({ key: `custom-h${h}`, ...hsl(h, 0.7, 0.45) });
 THEMES.push({ key: 'custom-pale', ...hsl(210, 0.9, 0.82) });
 THEMES.push({ key: 'custom-dark', ...hsl(210, 0.9, 0.18) });
+// Achromatic bases (no hue) — Strong must keep these neutral grey, not invent a hue.
+for (const c of ['#000000', '#ffffff', '#808080']) THEMES.push({ key: `custom-${c}`, accent: c, secondary: c, tertiary: c });
 function hsl(h, s, l) {
   const c = (1 - Math.abs(2 * l - 1)) * s; const x = c * (1 - Math.abs(((h / 60) % 2) - 1)); const m = l - c / 2;
   let r = 0; let g = 0; let b = 0;

@@ -373,22 +373,32 @@ const AA = 4.6; // aim a touch above 4.5 so layered tones keep margin
 export type StrongTokens = Record<string, string>;
 export function deriveStrong(base: string, dark: boolean): StrongTokens {
   const [h, s0, l0] = hexToHsl(base);
-  const s = Math.min(0.85, Math.max(s0, 0.45)); // ensure it reads as a bold colour
+  // Achromatic bases (black / white / grey) have no hue — keep them grey rather
+  // than fabricating one. Only coloured bases get the saturation floor that makes
+  // Strong read as bold; otherwise #000/#fff would turn into a red/pink theme.
+  const s = s0 < 0.06 ? 0 : Math.min(0.85, Math.max(s0, 0.45));
   const surfAt = (l: number) => hslToHex(h, s, Math.min(0.97, Math.max(0.04, l)));
   // The ramp spans SPREAD lightness; the tone CLOSEST to the text colour is the
   // hardest, so anchor on that one. We slide the whole ramp AWAY from the text
   // colour (darker for white text, lighter for ink) until that worst tone clears
   // AA — that's the "soften only as much as needed" step.
   const SPREAD = 0.12;
+  const clampL = (l: number) => Math.min(0.97, Math.max(0.04, l));
   const reach = (text: string) => {
     const danger = text === '#ffffff' ? +SPREAD : -SPREAD; // worst tone sits this far toward the text
     const step = text === '#ffffff' ? -0.02 : 0.02;        // …so move the ramp the other way
     let l = l0;
-    for (let i = 0; i < 60; i += 1) {
-      if (contrast(text, surfAt(l + danger)) >= AA) return { ok: true, l };
-      l += step; if (l < 0.05 || l > 0.95) break;
+    // Walk the whole 0..1 range in the slide direction (clamped for the check), so
+    // an extreme base — pure black slides UP toward ink, pure white slides DOWN
+    // toward white — actually gets explored. Break only once fully past the range,
+    // not the instant a near-0/near-1 start steps over the clamp edge.
+    for (let i = 0; i < 70; i += 1) {
+      const lc = clampL(l);
+      if (contrast(text, surfAt(lc + danger)) >= AA) return { ok: true, l: lc };
+      l += step; if (l > 1.05 || l < -0.05) break;
     }
-    return { ok: contrast(text, surfAt(l + danger)) >= AA, l };
+    const lc = clampL(l);
+    return { ok: contrast(text, surfAt(lc + danger)) >= AA, l: lc };
   };
   const pw = reach('#ffffff'); const pi = reach(INK);
   let onSurface: string; let ls: number;
