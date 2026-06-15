@@ -13,18 +13,26 @@ export type Accent =
   | 'ocean' | 'sunset' | 'forest' | 'plum' | 'slate'
   | 'custom'; // user-built theme — colours come from CUSTOM_KEY, applied inline
 
-// A hand-built theme: a base hue plus optional secondary/tertiary role hues.
-// When only `base` is set, secondary/tertiary derive from it (monochrome); set
-// them for a multi-hue custom scheme. Stored as JSON under CUSTOM_KEY.
-export interface CustomTheme { base: string; secondary?: string; tertiary?: string }
+// A hand-built theme: a base hue plus optional secondary/tertiary role hues, and
+// an optional explicit `night` colour for Strong. When only `base` is set,
+// secondary/tertiary derive from it (monochrome) and Strong's night is derived by
+// the chosen algorithm; set `night` to pin the dark-time colour yourself. Stored
+// as JSON under CUSTOM_KEY.
+export interface CustomTheme { base: string; secondary?: string; tertiary?: string; night?: string }
 // How strongly the accent tints the surfaces: classic = none (white/grey),
 // tinted = a subtle wash, strong = bold colour across the whole UI. Drives the
 // data-style attribute.
 export type ThemeStyle = 'classic' | 'tinted' | 'strong';
+// How Strong derives its day vs night look from one colour:
+//  - anchored: keep the colour's lightness, flip only the text (colour identity stays)
+//  - invert:   day = light surface, night = dark surface (the colour is hue-only)
+// Ignored when a custom theme pins an explicit `night` colour (both ends given).
+export type StrongAlgo = 'anchored' | 'invert';
 
 const MODE_KEY = 'wm:theme-mode';
 const ACCENT_KEY = 'wm:accent';
 const STYLE_KEY = 'wm:theme-style';
+const STRONG_ALGO_KEY = 'wm:strong-algo'; // 'anchored' | 'invert'
 const CUSTOM_KEY = 'wm:custom'; // JSON CustomTheme for the 'custom' accent
 const LOC_KEY = 'wm:geo'; // cached {lat,lon} so day/night doesn't re-prompt
 
@@ -214,11 +222,25 @@ export function getCustom(): CustomTheme {
           base: v.base,
           secondary: typeof v.secondary === 'string' ? v.secondary : undefined,
           tertiary: typeof v.tertiary === 'string' ? v.tertiary : undefined,
+          night: typeof v.night === 'string' ? v.night : undefined,
         };
       }
     }
   } catch { /* storage blocked / bad json */ }
   return DEFAULT_CUSTOM;
+}
+
+export function getStrongAlgo(): StrongAlgo {
+  try {
+    const v = localStorage.getItem(STRONG_ALGO_KEY);
+    if (v === 'anchored' || v === 'invert') return v;
+  } catch { /* storage blocked */ }
+  return 'anchored';
+}
+
+export function setStrongAlgo(algo: StrongAlgo): void {
+  try { localStorage.setItem(STRONG_ALGO_KEY, algo); } catch { /* ignore */ }
+  applyTheme();
 }
 
 export function applyTheme(): void {
@@ -253,8 +275,23 @@ export function applyTheme(): void {
     // overriding the CSS tint-based surfaces. (Black/white text by luminance can't
     // be done in plain CSS.) The base-hue vars aren't needed here.
     for (const k of ['--accent-base', '--secondary-base', '--tertiary-base']) root.style.removeProperty(k);
-    const base = accent === 'custom' ? getCustom().base : hexForAccent(accent);
-    const tokens = deriveStrong(base, isDarkNow());
+    const dark = isDarkNow();
+    let base: string;
+    let algo = getStrongAlgo();
+    if (accent === 'custom') {
+      const c = getCustom();
+      if (c.night) {
+        // Manual day/night pair: use the explicit colour for each end, as-is
+        // (anchored keeps the chosen colour as the surface). Algorithm n/a.
+        base = dark ? c.night : c.base;
+        algo = 'anchored';
+      } else {
+        base = c.base; // single colour → derive the other end via the algorithm
+      }
+    } else {
+      base = hexForAccent(accent);
+    }
+    const tokens = deriveStrong(base, dark, algo);
     for (const k of STRONG_KEYS) root.style.setProperty(k, tokens[k]);
   } else {
     // Classic/Tinted: clear any Strong inline tokens so the CSS takes over again.
@@ -288,6 +325,7 @@ export function setCustomTheme(custom: CustomTheme, style: ThemeStyle): void {
   const clean: CustomTheme = { base: custom.base };
   if (custom.secondary) clean.secondary = custom.secondary;
   if (custom.tertiary) clean.tertiary = custom.tertiary;
+  if (custom.night) clean.night = custom.night;
   try {
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(clean));
     localStorage.setItem(ACCENT_KEY, 'custom');
@@ -371,7 +409,7 @@ function mixHex(a: string, b: string, fa: number): string {
 const INK = '#121316';
 const AA = 4.6; // aim a touch above 4.5 so layered tones keep margin
 export type StrongTokens = Record<string, string>;
-export function deriveStrong(base: string, dark: boolean): StrongTokens {
+export function deriveStrong(base: string, dark: boolean, algo: StrongAlgo = 'anchored'): StrongTokens {
   const [h, s0, l0] = hexToHsl(base);
   // Achromatic bases (black / white / grey) have no hue — keep them grey rather
   // than fabricating one. Only coloured bases get the saturation floor that makes
@@ -379,19 +417,18 @@ export function deriveStrong(base: string, dark: boolean): StrongTokens {
   const s = s0 < 0.06 ? 0 : Math.min(0.85, Math.max(s0, 0.45));
   const surfAt = (l: number) => hslToHex(h, s, Math.min(0.97, Math.max(0.04, l)));
   // The ramp spans SPREAD lightness; the tone CLOSEST to the text colour is the
-  // hardest, so anchor on that one. We slide the whole ramp AWAY from the text
-  // colour (darker for white text, lighter for ink) until that worst tone clears
-  // AA — that's the "soften only as much as needed" step.
+  // hardest, so anchor on that one. reach() slides the ramp AWAY from the text
+  // colour (darker for white text, lighter for ink) from a start lightness until
+  // that worst tone clears AA — "soften only as much as needed".
   const SPREAD = 0.12;
   const clampL = (l: number) => Math.min(0.97, Math.max(0.04, l));
-  const reach = (text: string) => {
-    const danger = text === '#ffffff' ? +SPREAD : -SPREAD; // worst tone sits this far toward the text
-    const step = text === '#ffffff' ? -0.02 : 0.02;        // …so move the ramp the other way
-    let l = l0;
+  const reach = (text: string, startL: number) => {
+    const danger = text === '#ffffff' ? +SPREAD : -SPREAD;
+    const step = text === '#ffffff' ? -0.02 : 0.02;
+    let l = startL;
     // Walk the whole 0..1 range in the slide direction (clamped for the check), so
     // an extreme base — pure black slides UP toward ink, pure white slides DOWN
-    // toward white — actually gets explored. Break only once fully past the range,
-    // not the instant a near-0/near-1 start steps over the clamp edge.
+    // toward white — actually gets explored. Break only once fully past the range.
     for (let i = 0; i < 70; i += 1) {
       const lc = clampL(l);
       if (contrast(text, surfAt(lc + danger)) >= AA) return { ok: true, l: lc };
@@ -400,13 +437,23 @@ export function deriveStrong(base: string, dark: boolean): StrongTokens {
     const lc = clampL(l);
     return { ok: contrast(text, surfAt(lc + danger)) >= AA, l: lc };
   };
-  const pw = reach('#ffffff'); const pi = reach(INK);
   let onSurface: string; let ls: number;
-  if (dark && pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
-  else if (!dark && pi.ok) { onSurface = INK; ls = pi.l; }
-  else if (pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
-  else if (pi.ok) { onSurface = INK; ls = pi.l; }
-  else { const w = contrast('#ffffff', surfAt(l0)) >= contrast(INK, surfAt(l0)); onSurface = w ? '#ffffff' : INK; ls = w ? 0.20 : 0.88; }
+  if (algo === 'invert') {
+    // Conventional light/dark, tinted by the hue: day = light surface + ink text,
+    // night = dark surface + white text. The base sets only hue/saturation, so
+    // #fff and #000 become each other's day/night (both neutral grey).
+    onSurface = dark ? '#ffffff' : INK;
+    ls = reach(onSurface, dark ? 0.20 : 0.88).l;
+  } else {
+    // anchored: keep the colour's own lightness; flip only the text, nudging the
+    // surface just enough for contrast — the colour's identity stays put.
+    const pw = reach('#ffffff', l0); const pi = reach(INK, l0);
+    if (dark && pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
+    else if (!dark && pi.ok) { onSurface = INK; ls = pi.l; }
+    else if (pw.ok) { onSurface = '#ffffff'; ls = pw.l; }
+    else if (pi.ok) { onSurface = INK; ls = pi.l; }
+    else { const w = contrast('#ffffff', surfAt(l0)) >= contrast(INK, surfAt(l0)); onSurface = w ? '#ffffff' : INK; ls = w ? 0.20 : 0.88; }
+  }
 
   // sgn points TOWARD the text colour; raised tones lean that way, recessed away.
   const sgn = onSurface === '#ffffff' ? +1 : -1;

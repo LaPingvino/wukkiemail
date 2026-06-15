@@ -24,7 +24,7 @@ import { EmailView } from './EmailView';
 import { ProfilePage } from './ProfilePage';
 import { RoomSettings } from './RoomSettings';
 import { MembersPage } from './MembersPage';
-import { THEME_GROUPS, PALETTE_GRID, getAccent, getCustom, getStyle, getThemeMode, setCustomTheme, setTheme, setThemeMode, deriveRoles, requestLocation, type ThemeMode, type Accent, type ThemeStyle } from './theme';
+import { THEME_GROUPS, PALETTE_GRID, getAccent, getCustom, getStyle, getStrongAlgo, getThemeMode, setCustomTheme, setStrongAlgo, setTheme, setThemeMode, deriveRoles, requestLocation, type ThemeMode, type Accent, type ThemeStyle, type StrongAlgo } from './theme';
 import { ComposeSheet } from './ComposeSheet';
 import { JmapSource, loadJmapCreds, clearJmapCreds } from './sources/jmap';
 import type { ManualBundle, SpaceNode, IncomingCall } from './sources/matrix';
@@ -159,6 +159,11 @@ function ThemeControls() {
   const [mode, setModeState] = useState<ThemeMode>(() => getThemeMode());
   const [accent, setAccentState] = useState<Accent>(() => getAccent());
   const [style, setStyleState] = useState<ThemeStyle>(() => getStyle());
+  const [strongAlgo, setStrongAlgoState] = useState<StrongAlgo>(() => getStrongAlgo());
+  const algos: { key: StrongAlgo; label: string; icon: string; title: string }[] = [
+    { key: 'anchored', label: 'Anchored', icon: 'palette', title: 'Keep the colour by day and night; only the text flips black/white' },
+    { key: 'invert', label: 'Invert', icon: 'invert_colors', title: 'Day = light surface, night = dark surface (the colour sets the hue)' },
+  ];
   const modes: { key: ThemeMode; label: string; icon: string; title?: string }[] = [
     { key: 'light', label: 'Light', icon: 'light_mode' },
     { key: 'dark', label: 'Dark', icon: 'dark_mode' },
@@ -184,6 +189,24 @@ function ThemeControls() {
               }}
             >
               <span aria-hidden="true" className="material-symbols-outlined">{m.icon}</span>{m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="theme-row-label">Strong day/night</div>
+        <div className="theme-row-hint">How a Strong theme changes between day and night.</div>
+        <div className="theme-seg" role="group" aria-label="Strong day/night algorithm">
+          {algos.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              className={strongAlgo === a.key ? 'on' : undefined}
+              aria-pressed={strongAlgo === a.key}
+              title={a.title}
+              onClick={() => { setStrongAlgo(a.key); setStrongAlgoState(a.key); }}
+            >
+              <span aria-hidden="true" className="material-symbols-outlined">{a.icon}</span>{a.label}
             </button>
           ))}
         </div>
@@ -251,16 +274,19 @@ function CustomThemeBuilder({ active, onApplied }: { active: boolean; onApplied:
   const derived = deriveRoles(init.base);
   const [secondary, setSecondary] = useState(init.secondary ?? derived.secondary);
   const [tertiary, setTertiary] = useState(init.tertiary ?? derived.tertiary);
+  const [night, setNight] = useState<string | null>(init.night ?? null);
   const [style, setStyle] = useState<ThemeStyle>(() => getStyle());
 
   // Single funnel: merge the changed field over current state, persist + apply.
-  const apply = (next: Partial<{ base: string; secondary: string; tertiary: string; multi: boolean; style: ThemeStyle }>) => {
+  // `night: null` clears the manual night colour (back to algorithm-derived).
+  const apply = (next: Partial<{ base: string; secondary: string; tertiary: string; multi: boolean; style: ThemeStyle; night: string | null }>) => {
     const b = next.base ?? base;
     const m = next.multi ?? multi;
     const sec = next.secondary ?? secondary;
     const ter = next.tertiary ?? tertiary;
     const st = next.style ?? style;
-    setCustomTheme({ base: b, secondary: m ? sec : undefined, tertiary: m ? ter : undefined }, st);
+    const ni = next.night !== undefined ? next.night : night;
+    setCustomTheme({ base: b, secondary: m ? sec : undefined, tertiary: m ? ter : undefined, night: ni ?? undefined }, st);
     onApplied(st);
   };
   // Picking a base also refreshes the auto-derived roles (the multi pickers keep
@@ -352,6 +378,22 @@ function CustomThemeBuilder({ active, onApplied }: { active: boolean; onApplied:
             <span aria-hidden="true" className="material-symbols-outlined">auto_awesome</span>
             Auto from base
           </button>
+        </div>
+      )}
+      <button
+        type="button"
+        className="config-btn"
+        title="Strong only: use the base colour by day and this colour at night, instead of deriving night automatically"
+        onClick={() => { if (night) { setNight(null); apply({ night: null }); } else { const n = '#101317'; setNight(n); apply({ night: n }); } }}
+      >
+        <span aria-hidden="true" className="material-symbols-outlined">{night ? 'check_box' : 'check_box_outline_blank'}</span>
+        Separate night colour (Strong)
+      </button>
+      {night && (
+        <div className="theme-custom-row">
+          <span className="theme-role-label">Night</span>
+          <input type="color" className="theme-color-input" aria-label="Night colour" value={toColorInput(night)} onChange={(e) => { setNight(e.target.value); apply({ night: e.target.value }); }} />
+          <input type="text" className="theme-hex-input" aria-label="Night colour hex" spellCheck={false} placeholder="#101317" value={night} onChange={(e) => { const v = e.target.value; setNight(v); if (HEX_RE.test(v)) apply({ night: v }); }} />
         </div>
       )}
     </div>

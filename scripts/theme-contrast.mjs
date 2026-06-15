@@ -122,9 +122,10 @@ function tints(mode, style) {
   return { t0: t('--tint-0'), tVar: t('--tint-var'), t1: t('--tint-1'), tLow: t('--tint-low'), tOut: t('--tint-outline') };
 }
 function tokens(theme, mode, style) {
-  if (style === 'strong') {
-    // Bold style is built in JS from the primary hue; check that real output.
-    const t = deriveStrong(theme.accent, mode === 'dark');
+  if (style === 'strong' || style === 'strong-invert') {
+    // Bold style is built in JS from the primary hue; check that real output for
+    // both day/night algorithms (anchored = keep colour, invert = light/dark).
+    const t = deriveStrong(theme.accent, mode === 'dark', style === 'strong-invert' ? 'invert' : 'anchored');
     const g = (k) => parseHex(t[k]);
     return {
       fg: g('--md-sys-color-on-surface'), muted: g('--md-sys-color-on-surface-variant'),
@@ -195,7 +196,7 @@ const PAIRS = [
 ];
 
 const MODES = ['light', 'dark'];
-const STYLES = ['classic', 'tinted', 'strong'];
+const STYLES = ['classic', 'tinted', 'strong', 'strong-invert'];
 const failures = [];
 let checks = 0;
 for (const theme of THEMES) {
@@ -207,7 +208,7 @@ for (const theme of THEMES) {
         // Free-form custom picks: in tint-based styles only the derivation-safe
         // pairs are guaranteed (accent-on-accent is the user's call). Strong is
         // built with auto black/white text, so it's fully checked for any hue.
-        if (custom && !p.safe && style !== 'strong') continue;
+        if (custom && !p.safe && !style.startsWith('strong')) continue;
         checks += 1;
         const ratio = contrast(tk[p.fg], tk[p.bg]);
         if (ratio < p.min) {
