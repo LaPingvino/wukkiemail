@@ -2899,13 +2899,18 @@ export class MatrixSource implements Source {
     if (!this.client) return;
     const room = this.client.getRoom(roomId);
     if (!room) return;
-    let cleared = false;
+    let cleared = 0;
     for (const ev of room.getPendingEvents?.() ?? []) {
       if ((ev as unknown as { status?: string }).status === 'not_sent') {
-        try { this.client.cancelPendingEvent(ev); cleared = true; } catch { /* already gone */ }
+        try { this.client.cancelPendingEvent(ev); cleared += 1; } catch { /* already gone */ }
       }
     }
-    if (cleared) this.notify();
+    if (cleared > 0) {
+      // Leave a trail: this is the path that silently drops a failed message
+      // echo, so if a user reports "my message vanished" this explains why.
+      console.warn(`[wukkiemail] clearStuckSends: dropped ${cleared} failed (NOT_SENT) echo(es) in ${roomId}`);
+      this.notify();
+    }
   }
 
   // Run a send, surviving the "Event blocked by other events not yet sent" wedge.
@@ -2920,13 +2925,18 @@ export class MatrixSource implements Source {
       const blocked = e instanceof Error && e.message.includes('blocked by other events');
       this.clearStuckSends(roomId);
       if (blocked) {
+        console.warn(`[wukkiemail] safeSend: send blocked by a stuck event in ${roomId}; cleared queue, retrying once`);
         try {
           return await fn();
         } catch (e2) {
+          console.warn(`[wukkiemail] safeSend: retry after unblocking still failed in ${roomId}`, e2);
           this.clearStuckSends(roomId);
           throw e2;
         }
       }
+      // Non-blocked failure: the caller surfaces it to the user, but log here too
+      // so EVERY failed send (incl. fire-and-forget reactions/stickers) leaves a trail.
+      console.warn(`[wukkiemail] safeSend: send failed in ${roomId}`, e);
       throw e;
     }
   }
