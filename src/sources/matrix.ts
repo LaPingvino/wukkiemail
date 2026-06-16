@@ -428,12 +428,12 @@ export class MatrixSource implements Source {
   async addWidget(roomId: string, url: string, name: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
     const id = `wm-widget-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    await this.client.sendStateEvent(roomId, 'im.vector.modular.widgets' as never, { type: 'm.custom', url, name, id } as never, id);
+    await this.safeSend(roomId, () => this.client!.sendStateEvent(roomId, 'im.vector.modular.widgets' as never, { type: 'm.custom', url, name, id } as never, id));
   }
 
   async removeWidget(roomId: string, widgetId: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.sendStateEvent(roomId, 'im.vector.modular.widgets' as never, {} as never, widgetId);
+    await this.safeSend(roomId, () => this.client!.sendStateEvent(roomId, 'im.vector.modular.widgets' as never, {} as never, widgetId));
   }
 
   // ── Incoming calls ──
@@ -602,11 +602,11 @@ export class MatrixSource implements Source {
   // shortcode (the textual fallback non-sticker clients show).
   async sendSticker(roomId: string, body: string, mxcUrl: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.sendEvent(roomId, 'm.sticker' as never, {
+    await this.safeSend(roomId, () => this.client!.sendEvent(roomId, 'm.sticker' as never, {
       body,
       url: mxcUrl,
       info: {},
-    } as never);
+    } as never));
     this.notify();
   }
 
@@ -1698,12 +1698,12 @@ export class MatrixSource implements Source {
     if (!this.client) throw new Error('client not started');
     const existing = this.selfReactionIds.get(reactionKey(targetEventId, key));
     if (existing) {
-      await this.client.redactEvent(roomId, existing);
+      await this.safeSend(roomId, () => this.client!.redactEvent(roomId, existing));
       this.selfReactionIds.delete(reactionKey(targetEventId, key));
     } else {
-      const res = await this.client.sendEvent(roomId, 'm.reaction' as never, {
+      const res = await this.safeSend(roomId, () => this.client!.sendEvent(roomId, 'm.reaction' as never, {
         'm.relates_to': { rel_type: 'm.annotation', event_id: targetEventId, key },
-      } as never);
+      } as never));
       const newId = (res as { event_id?: string }).event_id;
       if (newId) this.selfReactionIds.set(reactionKey(targetEventId, key), newId);
     }
@@ -1725,7 +1725,7 @@ export class MatrixSource implements Source {
       content.format = 'org.matrix.custom.html';
       content.formatted_body = html;
     }
-    await this.client.sendMessage(roomId, content as never);
+    await this.safeSend(roomId, () => this.client!.sendMessage(roomId, content as never));
     this.notify();
   }
 
@@ -1755,7 +1755,7 @@ export class MatrixSource implements Source {
     const ev = room.currentState.getStateEvents(ISSUE_EVENT, issueId);
     const current = (ev?.getContent() ?? {}) as Record<string, unknown>;
     const next = { ...current, ...patch };
-    await this.client.sendStateEvent(roomId, ISSUE_EVENT as never, next as never, issueId);
+    await this.safeSend(roomId, () => this.client!.sendStateEvent(roomId, ISSUE_EVENT as never, next as never, issueId));
     this.notify();
   }
 
@@ -2121,12 +2121,12 @@ export class MatrixSource implements Source {
       const schemaEv = room.currentState.getStateEvents(ISSUE_SCHEMA_EVENT, '');
       const hasSchema = (schemaEv?.getContent() as { fields?: unknown[] } | undefined)?.fields?.length;
       if (!hasSchema) {
-        await this.client.sendStateEvent(roomId, ISSUE_SCHEMA_EVENT as never, DEFAULT_SCHEMA as never, '');
+        await this.safeSend(roomId, () => this.client!.sendStateEvent(roomId, ISSUE_SCHEMA_EVENT as never, DEFAULT_SCHEMA as never, ''));
       }
     }
     const stateKey = crypto.randomUUID();
     const content = { title, status: 'To Do', ...extra };
-    await this.client.sendStateEvent(roomId, ISSUE_EVENT as never, content as never, stateKey);
+    await this.safeSend(roomId, () => this.client!.sendStateEvent(roomId, ISSUE_EVENT as never, content as never, stateKey));
     this.notify();
     return stateKey;
   }
@@ -2867,7 +2867,7 @@ export class MatrixSource implements Source {
       const dims = await readImageDimensions(file);
       if (dims) (content.info as Record<string, unknown>).w = dims.w, (content.info as Record<string, unknown>).h = dims.h;
     }
-    await this.client.sendMessage(roomId, content as never);
+    await this.safeSend(roomId, () => this.client!.sendMessage(roomId, content as never));
   }
 
   // Drop any failed local echoes from a room: removes the phantom "sent"
@@ -2885,6 +2885,50 @@ export class MatrixSource implements Source {
       }
     }
     this.notify();
+  }
+
+  // Clear ONLY genuinely-failed (NOT_SENT) local echoes in a room. Unlike
+  // cancelFailedEvents this leaves QUEUED (in-flight, waiting-their-turn) sends
+  // alone, so it's safe to call when merely opening a room — it won't drop a
+  // send that's still on its way out. A single NOT_SENT event wedges EVERY
+  // subsequent send in that room (the SDK marks new events NOT_SENT too), so
+  // draining them on room open keeps the room sendable. Failed echoes are hidden
+  // from the timeline anyway, so there's no UI to retry them — clearing is the
+  // only way they ever leave the queue.
+  clearStuckSends(roomId: string): void {
+    if (!this.client) return;
+    const room = this.client.getRoom(roomId);
+    if (!room) return;
+    let cleared = false;
+    for (const ev of room.getPendingEvents?.() ?? []) {
+      if ((ev as unknown as { status?: string }).status === 'not_sent') {
+        try { this.client.cancelPendingEvent(ev); cleared = true; } catch { /* already gone */ }
+      }
+    }
+    if (cleared) this.notify();
+  }
+
+  // Run a send, surviving the "Event blocked by other events not yet sent" wedge.
+  // That error means an earlier failed send is stuck NOT_SENT in this room's queue,
+  // blocking us. We drain the stuck event(s) and retry once on the now-clear queue.
+  // On any OTHER failure we still drain our own failed echo (so it doesn't wedge
+  // the NEXT send) and rethrow so the caller can surface the error.
+  private async safeSend<T>(roomId: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      const blocked = e instanceof Error && e.message.includes('blocked by other events');
+      this.clearStuckSends(roomId);
+      if (blocked) {
+        try {
+          return await fn();
+        } catch (e2) {
+          this.clearStuckSends(roomId);
+          throw e2;
+        }
+      }
+      throw e;
+    }
   }
 
   // Send our own typing state. The SDK debounces and resends so a
@@ -3004,7 +3048,7 @@ export class MatrixSource implements Source {
   // fail until we wire crypto — caller surfaces the error.
   async redactMessage(roomId: string, eventId: string, reason?: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined);
+    await this.safeSend(roomId, () => this.client!.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined));
   }
 
   // Do we have the power level to redact OTHER people's messages here?
@@ -3033,7 +3077,7 @@ export class MatrixSource implements Source {
       content.format = 'org.matrix.custom.html';
       content.formatted_body = `* ${html}`;
     }
-    await this.client.sendMessage(roomId, content as never);
+    await this.safeSend(roomId, () => this.client!.sendMessage(roomId, content as never));
   }
 
   // Prior versions of an edited message: the original plus every m.replace, in
@@ -3106,7 +3150,7 @@ export class MatrixSource implements Source {
         'm.in_reply_to': { event_id: this.latestThreadEventId(roomId, threadRootId) },
       };
     }
-    await this.client.sendMessage(roomId, content as never);
+    await this.safeSend(roomId, () => this.client!.sendMessage(roomId, content as never));
   }
 
   // Newest event in a thread (the root if it has no replies yet) — the target

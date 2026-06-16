@@ -346,6 +346,11 @@ export function RoomPanel({
     // Under sliding sync the room may be outside the window — subscribe so its
     // full timeline loads (no-op on classic sync).
     matrix.subscribeRoom(roomId);
+    // Preventive: drain any stale failed (NOT_SENT) echoes left over from a
+    // previous session/crash before the user types. A single stuck event wedges
+    // every send in this room ("Event blocked by other events not yet sent"),
+    // and there's no UI to retry them — so opening the room is where we clear them.
+    matrix.clearStuckSends(roomId);
     const unsub = matrix.subscribe(() => {
       setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     });
