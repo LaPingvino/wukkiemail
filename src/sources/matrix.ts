@@ -23,6 +23,7 @@ import {
 import { buildClient, loadCreds, isClassicSync, type MatrixCreds } from '../auth/matrix';
 import { storePrivateKey } from '../auth/secretStorageKeys';
 import { flavorForRoomMembers } from './bridges';
+import { startSyncWakeHeartbeat } from './slidingSyncHealth';
 import { SearchIndex, type MessageDoc, type MessageHit } from '../search';
 import { decryptAttachment, type EncryptedFile } from '../media';
 import type { BundleSpec, InboxItem, Source } from './types';
@@ -298,6 +299,10 @@ export class MatrixSource implements Source {
   // Set once we've wired the visibility/online listeners that poke the sliding
   // sync to resend the moment the tab is foregrounded (see start()).
   private pokeWired = false;
+  // Stop handle for the sliding-sync wake heartbeat (see slidingSyncHealth.ts):
+  // an unconsumed classic /sync long-poll that pokes the sliding connection the
+  // instant anything changes, so updates don't wait out Continuwuity's ~3s poll.
+  private syncHeartbeatStop?: () => void;
   // Room ids we've ever observed as joined this session. getRoomSummary on some
   // servers reports a joined space child with a non-'join' membership, which
   // would surface it as a fake "Join" row whenever the room momentarily isn't in
@@ -1098,6 +1103,13 @@ export class MatrixSource implements Source {
         window.addEventListener('online', poke);
         window.addEventListener('focus', poke);
       }
+      // Continuwuity's sliding long-poll doesn't wake on data, so a foreground tab
+      // would otherwise wait out the full ~3s timeout for every update. Run the
+      // wake heartbeat (a fast classic /sync that pokes the sliding connection on
+      // activity) so messages / inbox reordering / unread land near-instantly.
+      if (this.slidingSync && !this.syncHeartbeatStop) {
+        this.syncHeartbeatStop = startSyncWakeHeartbeat(client);
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[wukkiemail] startClient threw', e);
@@ -1136,6 +1148,8 @@ export class MatrixSource implements Source {
   }
 
   async stop(): Promise<void> {
+    this.syncHeartbeatStop?.();
+    this.syncHeartbeatStop = undefined;
     this.client?.stopClient();
     this.started = false;
   }
