@@ -2913,6 +2913,31 @@ export class MatrixSource implements Source {
     }
   }
 
+  // Priority-fetch the state a send needs but doesn't have yet. Under sliding sync room state arrives
+  // incrementally, so hitting Enter right after opening a room can race ahead of m.room.encryption or
+  // the full member roster ("state wasn't up to date"). Rather than wait for the slow long-poll, pull
+  // it ASAP: subscribe the room (heavier required_state), force the member roster, and wait only as
+  // long as the encryption state takes to land — then the SDK registers the encryptor on the retry.
+  private async ensureSendReady(roomId: string): Promise<void> {
+    if (!this.client) return;
+    const room = this.client.getRoom(roomId);
+    if (!room) return;
+    this.subscribeRoom(roomId); // pulls power_levels + encryption + fuller required_state
+    const forceable = room as unknown as { forceLoadMembers?: () => Promise<unknown> };
+    try {
+      await (this.slidingSync && forceable.forceLoadMembers
+        ? forceable.forceLoadMembers()
+        : room.loadMembersIfNeeded());
+    } catch { /* proceed with what we have */ }
+    if (!room.hasEncryptionStateEvent()) {
+      const deadline = Date.now() + 4000;
+      while (Date.now() < deadline && !room.hasEncryptionStateEvent()) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => { setTimeout(r, 150); });
+      }
+    }
+  }
+
   // Run a send, surviving the "Event blocked by other events not yet sent" wedge.
   // That error means an earlier failed send is stuck NOT_SENT in this room's queue,
   // blocking us. We drain the stuck event(s) and retry once on the now-clear queue.
@@ -2930,6 +2955,24 @@ export class MatrixSource implements Source {
           return await fn();
         } catch (e2) {
           console.warn(`[wukkiemail] safeSend: retry after unblocking still failed in ${roomId}`, e2);
+          this.clearStuckSends(roomId);
+          throw e2;
+        }
+      }
+      // Not-ready failure: the room's encryption/member state hadn't synced yet. Priority-fetch it
+      // and retry once — the partial-state window should be invisible, not a failed send.
+      const notReady = e instanceof Error && (
+        e.message.includes('unconfigured room') ||
+        e.message.includes('m.room.encryption') ||
+        e.message.includes('Unknown device')
+      );
+      if (notReady) {
+        console.warn(`[wukkiemail] safeSend: room ${roomId} not ready to encrypt (state still syncing); priority-loading state + members, retrying once`);
+        try { await this.ensureSendReady(roomId); } catch { /* best effort */ }
+        try {
+          return await fn();
+        } catch (e2) {
+          console.warn(`[wukkiemail] safeSend: retry after ensureSendReady still failed in ${roomId}`, e2);
           this.clearStuckSends(roomId);
           throw e2;
         }
