@@ -14,31 +14,157 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
     />
+    <!-- Prepaint shell styles. The app's real styles.css ships INSIDE the JS
+         bundle, so during the ~hundreds-of-ms the 1.96MB bundle is parsing it
+         isn't applied yet — the prepaint (below, in body) therefore carries its
+         own minimal inline CSS. Rendered at .55 opacity so it reads as a
+         provisional/cached ghost; React's first paint replaces it at full
+         strength. Colours come from --wmp-* vars the prepaint script sets from
+         the palette the app persisted last run (see main.tsx). -->
+    <style id="wm-prepaint-style">
+      #wm-prepaint { opacity: .55; height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; font: 14px/1.4 system-ui, -apple-system, sans-serif; color: var(--wmp-fg, #e6e6e6); }
+      #wm-prepaint .wmp-bar { padding: 14px 16px; font-weight: 600; font-size: 18px;
+        border-bottom: 1px solid var(--wmp-border, #2a3038); }
+      #wm-prepaint .wmp-list { flex: 1; overflow: hidden; }
+      #wm-prepaint .wmp-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+        border-bottom: 1px solid var(--wmp-border, #2a3038); }
+      #wm-prepaint .wmp-av { width: 40px; height: 40px; border-radius: 50%; flex: none; display: flex;
+        align-items: center; justify-content: center; background: var(--wmp-accent, #14b8a6);
+        color: #fff; font-weight: 600; font-size: 14px; }
+      #wm-prepaint .wmp-main { min-width: 0; flex: 1; }
+      #wm-prepaint .wmp-top { display: flex; justify-content: space-between; gap: 8px; }
+      #wm-prepaint .wmp-subj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #wm-prepaint .wmp-ts { color: var(--wmp-muted, #9aa0a6); font-size: 12px; flex: none; }
+      #wm-prepaint .wmp-snip { color: var(--wmp-muted, #9aa0a6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #wm-prepaint .wmp-snip strong { color: var(--wmp-fg, #e6e6e6); font-weight: 600; }
+      #wm-prepaint .wmp-unread .wmp-subj { font-weight: 700; }
+      #wm-prepaint .wmp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wmp-accent, #14b8a6); flex: none; }
+      #wm-prepaint .wmp-skel .wmp-av { background: var(--wmp-border, #2a3038); }
+      #wm-prepaint .wmp-ph { display: inline-block; height: .7em; background: var(--wmp-border, #2a3038); border-radius: 4px; }
+      #wm-prepaint .wmp-skel .wmp-subj.wmp-ph { width: 40%; }
+      #wm-prepaint .wmp-skel .wmp-snip.wmp-ph { width: 70%; margin-top: 6px; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Prepaint. Before the 1.96MB JS bundle parses, paint the cached inbox
+         (or a skeleton) straight into #root from localStorage, so a reload shows
+         real content instantly instead of a blank/white screen. React's
+         createRoot().render() replaces #root's children on its first paint, which
+         removes the #wm-prepaint sentinel — that's exactly what the boot watchdog
+         below uses to tell "React mounted" from "still cached ghost / failed".
+         Best-effort and fully guarded: it must never throw and block boot. -->
+    <script>
+      (function () {
+        try {
+          var root = document.getElementById('root');
+          if (!root) return;
+          // 1) Resolve theme colours. The app persists its computed palette each
+          //    run (main.tsx persistPrepaintColors); first-ever load falls back to
+          //    a dark/light default from the saved mode so we still skip the white flash.
+          var colors = null;
+          try { colors = JSON.parse(localStorage.getItem('wm:prepaint-theme') || 'null'); } catch (e) {}
+          if (!colors || !colors.bg) {
+            var mode = '';
+            try { mode = localStorage.getItem('wm:theme-mode') || ''; } catch (e2) {}
+            var dark = mode === 'dark' || ((mode === '' || mode === 'system' || mode === 'daynight') &&
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            colors = dark
+              ? { bg: '#111417', fg: '#e6e6e6', card: '#1a1f24', muted: '#9aa0a6', accent: '#14b8a6', border: '#2a3038' }
+              : { bg: '#f4f5f7', fg: '#1a1a1a', card: '#ffffff', muted: '#5f6368', accent: '#0d9488', border: '#e0e0e0' };
+          }
+          // Page background first — kills the white flash even if the list is empty.
+          document.documentElement.style.background = colors.bg;
+          document.body.style.background = colors.bg;
+          root.style.setProperty('--wmp-bg', colors.bg);
+          root.style.setProperty('--wmp-fg', colors.fg);
+          root.style.setProperty('--wmp-card', colors.card);
+          root.style.setProperty('--wmp-muted', colors.muted);
+          root.style.setProperty('--wmp-accent', colors.accent);
+          root.style.setProperty('--wmp-border', colors.border);
+          // 2) Read the cached inbox items for the active account (same key/shape
+          //    as App.tsx loadCachedItems).
+          var items = [];
+          try {
+            var slot = localStorage.getItem('wukkiemail.matrix.activeSlot') || '';
+            var raw = localStorage.getItem('wukkiemail.items.cache.v1.' + slot);
+            var arr = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(arr)) items = arr;
+          } catch (e3) {}
+          // 3) Build the DOM.
+          var esc = function (s) {
+            return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+              return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+            });
+          };
+          var initials = function (name) {
+            var n = String(name || '?').trim(); if (!n) return '?';
+            var p = n.split(/\s+/);
+            return ((p[0][0] || '') + (p.length > 1 ? (p[p.length - 1][0] || '') : '')).toUpperCase();
+          };
+          var relTime = function (ts) {
+            if (!ts) return '';
+            var m = Math.floor((Date.now() - ts) / 60000);
+            if (m < 1) return 'now'; if (m < 60) return m + 'm';
+            var h = Math.floor(m / 60); if (h < 24) return h + 'h';
+            var d = Math.floor(h / 24); if (d < 7) return d + 'd';
+            return Math.floor(d / 7) + 'w';
+          };
+          var rows = '';
+          var N = Math.min(items.length, 40);
+          for (var i = 0; i < N; i++) {
+            var it = items[i] || {};
+            rows += '<div class="wmp-item' + (it.unread ? ' wmp-unread' : '') + '">' +
+              '<div class="wmp-av">' + esc(initials(it.from)) + '</div>' +
+              '<div class="wmp-main"><div class="wmp-top">' +
+                '<span class="wmp-subj">' + esc(it.subject || it.from || '') + '</span>' +
+                '<span class="wmp-ts">' + esc(relTime(it.ts)) + '</span></div>' +
+                '<div class="wmp-snip"><strong>' + esc(it.from || '') + '</strong> ' + esc(it.snippet || '') + '</div>' +
+              '</div>' + (it.unread ? '<span class="wmp-dot"></span>' : '') + '</div>';
+          }
+          if (!rows) {
+            for (var s = 0; s < 8; s++) {
+              rows += '<div class="wmp-item wmp-skel"><div class="wmp-av"></div>' +
+                '<div class="wmp-main"><div class="wmp-top"><span class="wmp-subj wmp-ph"></span></div>' +
+                '<div class="wmp-snip wmp-ph"></div></div></div>';
+            }
+          }
+          root.innerHTML = '<div id="wm-prepaint" aria-hidden="true">' +
+            '<div class="wmp-bar">WukkieMail</div><div class="wmp-list">' + rows + '</div></div>';
+        } catch (e) { /* prepaint is best-effort — never block boot */ }
+      })();
+    </script>
     <!-- Boot watchdog. Chrome's Memory/Data Saver discards a backgrounded tab;
          on return it force-reloads, and the entry bundle's fetch can hard-fail
          (503 from the SW) while the network is still cold on restore — leaving
-         #root empty = a blank white screen with no recovery. This self-heals
-         with ONE automatic reload (network is usually warm a beat later), then
-         falls back to a visible retry instead of white. Inline on purpose: an
-         external script would fail under the exact condition it guards against.
-         The flag is cleared by main.tsx once React mounts (requestAnimationFrame). -->
+         React unmounted = no recovery. This self-heals with ONE automatic reload
+         (network is usually warm a beat later), then falls back to a visible retry.
+         Inline on purpose: an external script would fail under the exact condition
+         it guards against. The flag is cleared by main.tsx once React mounts.
+
+         NOTE: the prepaint above fills #root before the bundle, so "did React
+         mount?" can't be "#root empty" any more — we check whether the
+         #wm-prepaint sentinel is STILL there (React's render replaces it). -->
     <script>
       (function () {
         var KEY = 'wm:boot-retry';
         var GRACE = 10000; // allow a genuinely slow boot (crypto wasm on mobile) before acting
-        function rootEmpty() {
+        function reactNotMounted() {
+          // The prepaint put a #wm-prepaint sentinel inside #root; React's
+          // createRoot().render() replaces #root's children on first paint, so a
+          // still-present sentinel — or a genuinely empty #root, if the prepaint
+          // itself failed — means React never mounted.
           var r = document.getElementById('root');
-          return !r || r.childElementCount === 0;
+          if (!r || r.childElementCount === 0) return true;
+          return !!document.getElementById('wm-prepaint');
         }
         function tried() {
           try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; }
         }
         window.addEventListener('load', function () {
           setTimeout(function () {
-            if (!rootEmpty()) return; // booted fine; main.tsx clears the flag
+            if (!reactNotMounted()) return; // booted fine; main.tsx clears the flag
             if (!tried()) {
               try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
               location.reload();
