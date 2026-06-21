@@ -419,9 +419,12 @@ export class MatrixSource implements Source {
     if (!this.client) return false;
     const room = this.client.getRoom(roomId);
     if (!room) return false;
+    const plEvent = room.currentState.getStateEvents('m.room.power_levels', '');
+    // Optimistic while power_levels hasn't synced under sliding sync — otherwise a check on the default
+    // state_default (50) hides widget management for admins until the next poll. The send is the gate.
+    if (!plEvent) return true;
     const myPL = room.getMember(this.client.getUserId() ?? '')?.powerLevel ?? 0;
-    const plc = room.currentState.getStateEvents('m.room.power_levels', '')?.getContent() as Record<string, unknown> | undefined;
-    const stateDefault = (plc?.state_default as number | undefined) ?? 50;
+    const stateDefault = (plEvent.getContent()?.state_default as number | undefined) ?? 50;
     return myPL >= stateDefault;
   }
 
@@ -1428,8 +1431,12 @@ export class MatrixSource implements Source {
       const pl = r.currentState.getStateEvents('m.room.power_levels', '');
       const plContent = (pl?.getContent() ?? {}) as { events?: Record<string, number>; state_default?: number };
       const myLevel = r.getMember(selfId)?.powerLevel ?? 0;
-      const canPostIssue = myLevel >= (plContent.events?.[ISSUE_EVENT] ?? plContent.state_default ?? 50);
-      const canPostSchema = myLevel >= (plContent.events?.[ISSUE_SCHEMA_EVENT] ?? plContent.state_default ?? 50);
+      // Optimistic while power_levels hasn't synced under sliding sync: do NOT silently drop a room you
+      // may well be able to post in — the room reappears correctly once power_levels lands, and a
+      // wrong-optimistic include just fails the post rather than hiding the room from the picker.
+      const plLoaded = !!pl;
+      const canPostIssue = !plLoaded || myLevel >= (plContent.events?.[ISSUE_EVENT] ?? plContent.state_default ?? 50);
+      const canPostSchema = !plLoaded || myLevel >= (plContent.events?.[ISSUE_SCHEMA_EVENT] ?? plContent.state_default ?? 50);
       const schemaEv = r.currentState.getStateEvents(ISSUE_SCHEMA_EVENT, '');
       const schemaFields = (schemaEv?.getContent() as { fields?: unknown[] } | undefined)?.fields;
       const hasSchema = Array.isArray(schemaFields) && schemaFields.length > 0;
