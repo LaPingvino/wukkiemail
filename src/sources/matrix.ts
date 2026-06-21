@@ -11,7 +11,7 @@
 // to be observable end-to-end before we add caching layers.
 
 import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { ClientEvent, MatrixEvent, MatrixEventEvent, NotificationCountType, PendingEventOrdering, RoomEvent } from 'matrix-js-sdk';
+import { ClientEvent, EventType, MatrixEvent, MatrixEventEvent, NotificationCountType, PendingEventOrdering, RoomEvent } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent.js';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager.js';
 import { MatrixRTCSessionEvent, type MatrixRTCSession } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession.js';
@@ -1605,6 +1605,18 @@ export class MatrixSource implements Source {
   // Find an existing 1:1 DM room with this user (membership join/invite), if any.
   findDirectMessage(userId: string): string | null {
     if (!this.client) return null;
+    // Authoritative first: m.direct tags the DM regardless of which members are currently loaded. Under
+    // sliding sync the live roster is $LAZY-only, so a partner who hasn't spoken recently is absent from
+    // getJoinedMembers() and the heuristic below misses → a duplicate DM gets created.
+    const direct = this.client.getAccountData(EventType.Direct)?.getContent() as
+      | Record<string, string[]>
+      | undefined;
+    for (const roomId of direct?.[userId] ?? []) {
+      const room = this.client.getRoom(roomId);
+      const membership = room?.getMyMembership();
+      if (room && !isSpace(room) && (membership === 'join' || membership === 'invite')) return roomId;
+    }
+    // Fallback: the original roster heuristic (unchanged) for DMs not (yet) recorded in m.direct.
     const dm = this.client.getRooms().find((r) => {
       if (isSpace(r)) return false;
       const members = r.getJoinedMembers();
