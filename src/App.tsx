@@ -1779,23 +1779,33 @@ function Inbox({
     return [...pins].sort((a, b) => rank(a) - rank(b) || b.ts - a.ts);
   }, [items]);
 
-  // The single highest-priority unread conversation that ISN'T pinned — surfaced
-  // as the FIRST chip in the quick-access bar so the most important thing waiting
-  // is always one tap away, even when you haven't pinned it. The only non-pinned
-  // entry in the bar (invites/snoozed excluded — invites already float to the top
-  // of the list with their own Accept/Decline UI).
-  const topUnread = useMemo(() => {
-    const cands = items.filter((it) =>
-      it.unread && !it.invite && !it.snoozedUntil && !it.bundles.includes('pinned'));
-    if (cands.length === 0) return null;
-    return [...cands].sort((a, b) => b.priority - a.priority || b.ts - a.ts)[0];
+  // The highest-priority unread conversations that AREN'T pinned — surfaced ahead of
+  // the pinned chips so the important things waiting are one tap away even when you
+  // haven't pinned them. DMs come first (a person waiting on you outranks a busy
+  // group), then by priority/recency, capped so the bar stays a quick-access strip
+  // rather than a second inbox. (invites/snoozed excluded — invites float to the top
+  // of the list with their own Accept/Decline UI.)
+  const MAX_PRIORITY_CHIPS = 5;
+  const topUnreadItems = useMemo(() => {
+    const isDm = (it: InboxItem) => it.bundles.includes('dm');
+    return items
+      .filter(
+        (it) => it.unread && !it.invite && !it.snoozedUntil && !it.bundles.includes('pinned')
+      )
+      .sort(
+        (a, b) =>
+          (isDm(b) ? 1 : 0) - (isDm(a) ? 1 : 0) || b.priority - a.priority || b.ts - a.ts
+      )
+      .slice(0, MAX_PRIORITY_CHIPS);
   }, [items]);
 
-  // What the quick-access bar actually renders: the spotlight unread (if any)
-  // ahead of the pinned chips.
+  // The #1 of those gets the spotlight ring (the single most important thing waiting).
+  const topUnread = topUnreadItems[0] ?? null;
+
+  // What the quick-access bar renders: the priority unread chips ahead of the pinned chips.
   const barItems = useMemo(
-    () => (topUnread ? [topUnread, ...pinnedBar] : pinnedBar),
-    [topUnread, pinnedBar],
+    () => [...topUnreadItems, ...pinnedBar],
+    [topUnreadItems, pinnedBar]
   );
 
   // One inbox row. Shared by the flat list, the loose section, and the
