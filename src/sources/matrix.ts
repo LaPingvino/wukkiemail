@@ -11,7 +11,7 @@
 // to be observable end-to-end before we add caching layers.
 
 import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { ClientEvent, EventType, MatrixEvent, MatrixEventEvent, NotificationCountType, PendingEventOrdering, RoomEvent } from 'matrix-js-sdk';
+import { ClientEvent, EventType, MatrixEvent, MatrixEventEvent, NotificationCountType, PendingEventOrdering, ReceiptType, RoomEvent } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent.js';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager.js';
 import { MatrixRTCSessionEvent, type MatrixRTCSession } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession.js';
@@ -3987,50 +3987,53 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // affects the SNIPPET (see meaningfulFound above), NOT unread: gating unread on
   // meaningfulFound wrongly marked genuinely-unread rooms read until their
   // message loaded, then flipped them back on open (read-receipt race).
-  const notifs = room.getUnreadNotificationCount?.() ?? 0;
+  // Unread is computed CLIENT-SIDE from the read receipt, mirroring Wally's
+  // getUnreadInfo. We do NOT gate on the server's getUnreadNotificationCount:
+  // Continuwuity UNDER-reports it under sliding sync, so trusting it made WukkieMail
+  // show far fewer unreads than Wally (the reported discrepancy). Count renderable,
+  // other-sender messages after the read marker; highlights still come from the
+  // server count (mentions report reliably) and are OR'd in.
   const highlights = room.getUnreadNotificationCount?.('highlight' as never) ?? 0;
-  // Verify the server's unread count against the loaded timeline. Scan back from
-  // the newest event, stopping AT this user's read marker — so every event seen
-  // before the stop is strictly NEWER than the marker (genuinely unread). We
-  // learn two independent facts:
-  //   markerLoaded   — the read marker is in the loaded window (the count is
-  //                    verifiable; timelines load contiguously so we then know
-  //                    the whole unread window).
-  //   textAfterMarker— at least one renderable message sits after the marker
-  //                    (the room really does have unread content to show).
+  let unreadTotal = 0;
   let markerLoaded = false;
-  let textAfterMarker = false;
-  const readUpTo = notifs > 0 && selfId ? room.getEventReadUpTo(selfId) : null;
-  if (notifs > 0) {
-    for (let i = live.length - 1; i >= 0; i -= 1) {
-      const ev = live[i];
-      if (readUpTo && ev.getId() === readUpTo) { markerLoaded = true; break; }
-      if (rendersInRoomView(ev)) textAfterMarker = true;
+  let anyAfterMarker = false;
+  if (selfId && live.length > 0) {
+    const markerId = room.getEventReadUpTo(selfId, false); // null when the marker isn't loaded
+    const markerIdx = markerId ? live.findIndex((e) => e.getId() === markerId) : -1;
+    if (markerIdx >= 0) {
+      // Marker loaded → count by position (exact).
+      markerLoaded = true;
+      for (let i = live.length - 1; i > markerIdx; i -= 1) {
+        anyAfterMarker = true;
+        if (rendersInRoomView(live[i]) && live[i].getSender() !== selfId) unreadTotal += 1;
+      }
+    } else {
+      // Marker not loaded → decide read by the RAW receipt id (receipt at the last
+      // event ⇒ read, no ts, no server count — same as Wally's id-based check). When
+      // unread, count events NEWER than the receipt timestamp: a lower bound that
+      // skips the already-read tail (Wally's countAfterTs — avoids recounting read
+      // posts in churned/rehydrated timelines).
+      const lastId = live[live.length - 1].getId();
+      const rRead = room.getReadReceiptForUserId(selfId, true, ReceiptType.Read);
+      const rPriv = room.getReadReceiptForUserId(selfId, true, ReceiptType.ReadPrivate);
+      const atHead = rRead?.eventId === lastId || rPriv?.eventId === lastId;
+      if (!atHead) {
+        const receiptTs = Math.max(rRead?.data?.ts ?? 0, rPriv?.data?.ts ?? 0);
+        for (let i = live.length - 1; i >= 0; i -= 1) {
+          const ev = live[i];
+          if (receiptTs > 0 && ev.getTs() <= receiptTs) continue; // at/older than marker → read
+          if (rendersInRoomView(ev) && ev.getSender() !== selfId) unreadTotal += 1;
+        }
+      }
     }
   }
-  // Unread decision. Show unread ONLY when verified: a mention, or the marker is
-  // loaded AND there's renderable text after it. When the marker is NOT loaded the
-  // count is UNVERIFIABLE — default to READ, never unread. This direction matters:
-  //   • read→unread self-heals. An active room you've read has its marker at the
-  //     tail (loaded), so new messages are correctly seen as after-marker → unread;
-  //     or the marker-backfill pass loads a recent, REACHABLE marker and the row
-  //     settles to unread a beat later.
-  //   • unread→read does NOT self-heal. A barely-active room whose marker points at
-  //     an event that can't be reached (redacted / gap / never returned by the
-  //     server) never loads its marker, so ANY "stay unread when unverifiable" rule
-  //     pins it unread FOREVER — re-surfacing every session with no way to clear it
-  //     (the original stuck-unread bug). Biasing the unverifiable case to read is
-  //     the only thing that releases those rooms; a genuinely-unread room is still
-  //     surfaced the instant backfill loads its (reachable) marker.
-  const msgUnread = notifs > 0 && (highlights > 0 || (markerLoaded && textAfterMarker));
-  // "Only updates": confirmed (marker loaded) that the unread window is purely
-  // non-rendering events — routed to the Updates bundle, kept out of the badge
-  // counts. Unverifiable rooms aren't classed here; they just render as read.
-  const unreadOnlyFiltered = notifs > 0 && highlights === 0 && markerLoaded && !textAfterMarker;
-  // Drives the "skip empty rooms in Next-unread" guard. markerLoaded → the real
-  // post-marker signal; an unverifiable mention → undefined (still worth visiting);
-  // otherwise (read) → false.
-  const unreadHasText = markerLoaded ? textAfterMarker : (msgUnread ? undefined : false);
+  const msgUnread = unreadTotal > 0 || highlights > 0;
+  // "Only updates": marker loaded, no renderable unread, no mention — but there ARE
+  // non-rendering events after the marker (state/reactions) → Updates fold.
+  const unreadOnlyFiltered = markerLoaded && unreadTotal === 0 && highlights === 0 && anyAfterMarker;
+  // Next-unread nav guard: marker loaded → real post-marker signal; an unverifiable
+  // mention → undefined (still worth visiting); otherwise (read) → false.
+  const unreadHasText = markerLoaded ? unreadTotal > 0 : (msgUnread ? undefined : false);
   const presenceRaw = client?.getUser(senderId)?.presence;
   const senderPresence = (presenceRaw === 'online' || presenceRaw === 'unavailable' || presenceRaw === 'offline')
     ? presenceRaw : undefined;
@@ -4061,9 +4064,10 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     // Invites are always "unread" so they surface in the default view, and get
     // a big priority bump to float to the top.
     unread: isInvite || msgUnread,
-    // Only badge a count when we actually show the room unread — an
-    // optimistically-read (marker not yet loaded) or noise-only room shows none.
-    unreadCount: msgUnread ? notifs : 0,
+    // Badge the CLIENT-computed unread count (renderable messages after the marker),
+    // or the highlight count when it's a mention with no countable body. Never the
+    // server count, which under-reports under sliding sync.
+    unreadCount: msgUnread ? Math.max(unreadTotal, highlights) : 0,
     unreadHasText,
     onlyUpdates: unreadOnlyFiltered || undefined,
     invite: isInvite || undefined,
