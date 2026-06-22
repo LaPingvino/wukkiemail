@@ -303,6 +303,9 @@ export class MatrixSource implements Source {
   // an unconsumed classic /sync long-poll that pokes the sliding connection the
   // instant anything changes, so updates don't wait out Continuwuity's ~3s poll.
   private syncHeartbeatStop?: () => void;
+  // Belt-and-suspenders 2s sync-state poller (started in start()); cleared in
+  // stop() so it doesn't leak + keep firing notify() across account switches.
+  private syncStatePollTimer?: ReturnType<typeof setInterval>;
   // Room ids we've ever observed as joined this session. getRoomSummary on some
   // servers reports a joined space child with a non-'join' membership, which
   // would surface it as a fake "Join" row whenever the room momentarily isn't in
@@ -932,7 +935,9 @@ export class MatrixSource implements Source {
     });
     // Belt-and-suspenders: poll the SDK's getSyncState() every 2s in case
     // our listener is the part that's broken — at least the UI updates.
-    setInterval(() => {
+    // Cleared in stop() (account switch) so it doesn't leak/double up.
+    if (this.syncStatePollTimer) clearInterval(this.syncStatePollTimer);
+    this.syncStatePollTimer = setInterval(() => {
       const s = client.getSyncState();
       if (s !== this.syncState) {
         // eslint-disable-next-line no-console
@@ -1150,6 +1155,8 @@ export class MatrixSource implements Source {
   async stop(): Promise<void> {
     this.syncHeartbeatStop?.();
     this.syncHeartbeatStop = undefined;
+    if (this.syncStatePollTimer) clearInterval(this.syncStatePollTimer);
+    this.syncStatePollTimer = undefined;
     this.client?.stopClient();
     this.started = false;
   }
