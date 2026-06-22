@@ -1,5 +1,6 @@
 // Full-screen room member list, styled like the other panels. Each row opens
 // that member's profile.
+import { useEffect, useState } from 'react';
 import type { MatrixSource } from './sources/matrix';
 
 function powerLabel(pl: number): string | null {
@@ -19,6 +20,24 @@ export function MembersPage({
   onClose: () => void;
   onOpenProfile: (userId: string) => void;
 }) {
+  // Under sliding sync the roster is $LAZY, so getRoomMemberList alone shows a
+  // partial list (bridged Signal/WhatsApp group members as bare mxids). Force the
+  // full roster on open (same forceLoadMembers path RoomPanel's drawer uses), then
+  // re-render with the complete list.
+  const [, bumpLoaded] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void matrix
+      .loadRoomMembers(roomId)
+      .then(() => {
+        if (live) bumpLoaded((n) => n + 1);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [matrix, roomId]);
+
   const members = matrix.getRoomMemberList(roomId);
   return (
     <div className="issue-panel room-panel" role="region" aria-label="Room members">
