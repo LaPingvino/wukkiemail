@@ -358,6 +358,10 @@ export function RoomPanel({
     // and there's no UI to retry them — so opening the room is where we clear them.
     matrix.clearStuckSends(roomId);
     void matrix.markRoomRead(roomId);
+    // Mark this as the open chat so the catch-up poller keeps it converged while
+    // we're viewing it; clear on unmount / room switch.
+    matrix.setActiveRoom(roomId);
+    return () => matrix.setActiveRoom(null);
   }, [matrix, roomId, threadRootId]);
 
   // Live timeline subscription + re-snap. Keyed on `limit` too so a permalink

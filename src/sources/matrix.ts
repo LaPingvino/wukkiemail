@@ -267,6 +267,10 @@ const describeVerificationCancel = (e: unknown): string => {
 // renders as read (roomToItem biases the unverifiable case to read) — which is
 // exactly the desired release for a stuck phantom-marker room. See markerUnverified.
 const MARKER_MAX_TRIES = 6;
+// Backstop cadence for the open-chat catch-up poller (see setActiveRoom). Slow
+// enough to be cheap while you sit in a chat, fast enough that a straggler bridged
+// message converges quickly. The wake heartbeat still delivers the instant case.
+const CATCHUP_MS = 1500;
 
 export class MatrixSource implements Source {
   readonly kind = 'matrix' as const;
@@ -299,6 +303,10 @@ export class MatrixSource implements Source {
   // Set once we've wired the visibility/online listeners that poke the sliding
   // sync to resend the moment the tab is foregrounded (see start()).
   private pokeWired = false;
+  // The chat currently open in RoomPanel (null when none). Drives the catch-up
+  // poller below so the open conversation stays converged while you're chatting.
+  private activeRoomId: string | null = null;
+  private catchupTimer?: ReturnType<typeof setInterval>;
   // Stop handle for the sliding-sync wake heartbeat (see slidingSyncHealth.ts):
   // an unconsumed classic /sync long-poll that pokes the sliding connection the
   // instant anything changes, so updates don't wait out Continuwuity's ~3s poll.
@@ -364,6 +372,37 @@ export class MatrixSource implements Source {
     if (!this.slidingSync || this.roomSubs.has(roomId)) return;
     this.roomSubs.add(roomId);
     try { this.slidingSync.modifyRoomSubscriptions(new Set(this.roomSubs)); } catch { /* ignore */ }
+  }
+
+  // RoomPanel calls this with the open chat's id on mount and null on unmount.
+  // Drives the catch-up poller: while a chat is open AND the tab is focused, poke
+  // the sliding connection on a slow backstop cadence so the open conversation
+  // converges within ~CATCHUP_MS even when one wake-poke returned before a just-
+  // arrived (esp. bridged, multi-hop) message had settled server-side — Continuwuity
+  // computes each response at request time, so such a message only lands on a later
+  // poll. The wake heartbeat handles the instant case; this catches the stragglers
+  // ("double-check the open chat"). No permanent fast-poll: it runs only while a
+  // chat is open and visible, and stops otherwise.
+  setActiveRoom(roomId: string | null): void {
+    this.activeRoomId = roomId;
+    this.updateCatchup();
+  }
+
+  private updateCatchup(): void {
+    const shouldRun =
+      this.activeRoomId !== null &&
+      this.slidingSync != null &&
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'visible';
+    if (shouldRun && !this.catchupTimer) {
+      this.catchupTimer = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        try { (this.slidingSync as unknown as { poke?: () => void })?.poke?.(); } catch { /* ignore */ }
+      }, CATCHUP_MS);
+    } else if (!shouldRun && this.catchupTimer) {
+      clearInterval(this.catchupTimer);
+      this.catchupTimer = undefined;
+    }
   }
 
   // Subscribe to "something changed, re-render". Fires on every sync
@@ -1101,6 +1140,9 @@ export class MatrixSource implements Source {
       if (this.slidingSync && !this.pokeWired) {
         this.pokeWired = true;
         const poke = () => {
+          // Keep the open-chat catch-up poller in step with visibility (start it
+          // again on foreground, let it idle when hidden).
+          this.updateCatchup();
           if (document.visibilityState !== 'visible') return;
           try { this.slidingSync?.resend(); } catch { /* ignore */ }
         };
@@ -1155,6 +1197,9 @@ export class MatrixSource implements Source {
   async stop(): Promise<void> {
     this.syncHeartbeatStop?.();
     this.syncHeartbeatStop = undefined;
+    if (this.catchupTimer) clearInterval(this.catchupTimer);
+    this.catchupTimer = undefined;
+    this.activeRoomId = null;
     if (this.syncStatePollTimer) clearInterval(this.syncStatePollTimer);
     this.syncStatePollTimer = undefined;
     this.client?.stopClient();
