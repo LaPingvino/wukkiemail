@@ -496,6 +496,20 @@ function saveCachedItems(items: InboxItem[]): void {
   catch { /* quota / serialization — non-fatal */ }
 }
 
+// Fold a fresh (possibly PARTIAL) item list into what's already shown, instead of
+// replacing it. While the sliding sync is still hydrating, listItems() reflects only
+// the handful of rooms that have arrived so far — replacing with that collapsed the
+// inbox to "almost empty" right after it had painted the full cached list. Merge by
+// id: take the fresh version of every item it carries (newest data), and KEEP any
+// previously-shown item the fresh list doesn't mention yet (still hydrating). Once the
+// initial sync completes the caller replaces wholesale instead, so genuinely-gone
+// rooms are dropped.
+function mergeItems(prev: InboxItem[], fresh: InboxItem[]): InboxItem[] {
+  const freshIds = new Set(fresh.map((i) => i.id));
+  const kept = prev.filter((i) => !freshIds.has(i.id));
+  return [...fresh, ...kept].sort((a, b) => (b.priority - a.priority) || (b.ts - a.ts));
+}
+
 // A node in the bundled stream. Space bundles can nest (children); manual
 // and flavor/dm bundles are leaves. count/unread include descendants.
 interface BundleNode {
@@ -835,8 +849,16 @@ function Inbox({
           setLoading(false);
           return;
         }
-        setItems(sorted);
-        saveCachedItems(sorted);
+        // Until the initial sync is complete, MERGE the (partial) result into what's
+        // already shown so a semi-hydrated sliding-sync result doesn't collapse the
+        // inbox to almost-empty. Once complete, replace wholesale (authoritative —
+        // drops rooms that genuinely went away).
+        const complete = matrixSrc.isInitialSyncComplete();
+        setItems((prev) => {
+          const next = complete ? sorted : mergeItems(prev, sorted);
+          saveCachedItems(next);
+          return next;
+        });
         setLoading(false);
       })().catch((e) => {
         // eslint-disable-next-line no-console
