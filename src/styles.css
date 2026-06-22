@@ -2127,6 +2127,22 @@ md-outlined-text-field { width: 100%; }
 /* Consecutive same-sender messages: tighten the gap and drop the head */
 .comment-list > li.msg-grouped { margin-top: -8px; }
 
+/* The 30s-grace reorder (a settled message sliding from the bottom into its real
+   timestamp slot) is animated via the View Transitions API — each recent message row
+   carries a stable view-transition-name, so the browser FLIPs it to its new position.
+   Keep it gentle, and respect reduced-motion. */
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* Spoilers: hidden until clicked */
 .spoiler {
   background: var(--md-sys-color-on-surface, #888); color: transparent;

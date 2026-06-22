@@ -3,7 +3,12 @@
 // they arrive. No compose/reply yet — this is the read-side preview.
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import type { MatrixSource } from './sources/matrix';
+
+// Stable, CSS-ident-safe view-transition-name for a message row, so the browser can
+// FLIP-animate it when the 30s grace reorder moves it to its timestamp slot.
+const vtName = (id: string): string => `vt-${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 import type { RoomTimelineSnapshot } from './sources/matrix';
 import { renderInline, renderFormattedHtml, markdownToHtml } from './markdown';
 import { expandShortcodes } from './emoji';
@@ -360,16 +365,42 @@ export function RoomPanel({
     void matrix.markRoomRead(roomId);
   }, [matrix, roomId, threadRootId]);
 
+  // Previous message id order, to detect a pure reorder (same set, different
+  // sequence) — which is what the 30s grace produces when a pinned message settles
+  // into its timestamp slot. Only then do we run a view transition.
+  const snapOrderRef = useRef<string[]>([]);
+  const applySnap = useCallback((next: RoomTimelineSnapshot | null) => {
+    const prevIds = snapOrderRef.current;
+    const nextIds = next ? next.messages.map((m) => m.id) : [];
+    // Pure reorder: same length, same set, but a different sequence.
+    const reordered =
+      nextIds.length > 0 &&
+      prevIds.length === nextIds.length &&
+      new Set([...prevIds, ...nextIds]).size === prevIds.length &&
+      prevIds.some((id, idx) => id !== nextIds[idx]);
+    snapOrderRef.current = nextIds;
+    const startViewTransition = (
+      document as unknown as { startViewTransition?: (cb: () => void) => void }
+    ).startViewTransition;
+    if (reordered && typeof startViewTransition === 'function') {
+      // flushSync so the DOM change happens inside the transition the browser is
+      // capturing; named rows then FLIP from their old slot to the new one.
+      startViewTransition.call(document, () => flushSync(() => setSnap(next)));
+    } else {
+      setSnap(next);
+    }
+  }, []);
+
   // Live timeline subscription + re-snap. Keyed on `limit` too so a permalink
   // focus jump (which grows the window) re-renders the bigger window immediately,
   // not just on the next sync notification.
   useEffect(() => {
     const unsub = matrix.subscribe(() => {
-      setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
+      applySnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     });
-    setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
+    applySnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     return unsub;
-  }, [matrix, roomId, threadRootId, limit]);
+  }, [matrix, roomId, threadRootId, limit, applySnap]);
 
   // Drop back to the cheap window when switching rooms.
   useEffect(() => { setLimit(200); }, [roomId, threadRootId]);
@@ -839,7 +870,12 @@ export function RoomPanel({
                 data-msg-idx={i}
                 data-event-id={m.id}
                 className={[i === msgCursor ? 'msg-cursor' : '', m.pending ? 'msg-pending' : '', grouped ? 'msg-grouped' : ''].filter(Boolean).join(' ') || undefined}
-                style={m.pending ? { opacity: 0.55 } : undefined}
+                style={{
+                  // Name only the recent tail so a reorder FLIP stays cheap; deep
+                  // history (which doesn't move) is left to the root cross-fade.
+                  ...(i >= snap.messages.length - 80 ? { viewTransitionName: vtName(m.id) } : {}),
+                  ...(m.pending ? { opacity: 0.55 } : {}),
+                }}
               >
                 {!grouped && (
                 <div className="comment-head">
