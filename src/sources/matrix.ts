@@ -267,6 +267,9 @@ const describeVerificationCancel = (e: unknown): string => {
 // renders as read (roomToItem biases the unverifiable case to read) — which is
 // exactly the desired release for a stuck phantom-marker room. See markerUnverified.
 const MARKER_MAX_TRIES = 6;
+// How long a freshly-arrived message stays pinned at the bottom (visible) before it's
+// reordered into its correct origin_server_ts slot. See liveArrival / getRoomTimeline.
+const ORDER_GRACE_MS = 30000;
 
 export class MatrixSource implements Source {
   readonly kind = 'matrix' as const;
@@ -296,6 +299,15 @@ export class MatrixSource implements Source {
   // reachable history is eventually given up on (capped at MARKER_MAX_TRIES) and
   // doesn't spin forever. Cleared on TimelineReset so a resync re-enables it.
   private markerBackfillTries = new Map<string, number>();
+  // event id -> local clock when it arrived as a LIVE append (toStartOfTimeline=false).
+  // Drives bottom-first ordering: a freshly-arrived message (even a delayed/bridged one
+  // with an OLD origin_server_ts) stays pinned at the bottom — where you'll SEE it —
+  // for ORDER_GRACE_MS, then settles into its correct ts slot. Backfilled history has
+  // no entry here, so it's never wrongly dumped at the bottom. Pruned in getRoomTimeline.
+  private liveArrival = new Map<string, number>();
+  // Single timer that re-snaps the open room when the soonest just-arrived message
+  // crosses the grace threshold, so the reorder fires even in an otherwise-quiet room.
+  private reorderTimer?: ReturnType<typeof setTimeout>;
   // Set once we've wired the visibility/online listeners that poke the sliding
   // sync to resend the moment the tab is foregrounded (see start()).
   private pokeWired = false;
@@ -1142,6 +1154,13 @@ export class MatrixSource implements Source {
     // each status change (sending → sent / not_sent), not only when the server
     // echo arrives via sync — otherwise a just-sent message appears to vanish.
     client.on(RoomEvent.LocalEchoUpdated as never, (() => this.notify()) as never);
+    // Record genuinely-LIVE arrivals (appends at the tail) for bottom-first ordering.
+    // Skip backfill (toStartOfTimeline) so scrolled-in history is never bottom-pinned.
+    client.on(RoomEvent.Timeline as never, ((event: MatrixEvent, _room: Room | undefined, toStartOfTimeline?: boolean, _removed?: boolean, data?: { liveEvent?: boolean }) => {
+      if (toStartOfTimeline || !data?.liveEvent) return;
+      const id = event.getId();
+      if (id) this.liveArrival.set(id, Date.now());
+    }) as never);
     // A limited sync resets a room's timeline and can drop the read marker we'd
     // previously paginated to — so clear its backfill cap and re-arm the pass,
     // otherwise a now-stale unread badge would be stuck (we'd already given up).
@@ -1156,6 +1175,8 @@ export class MatrixSource implements Source {
   async stop(): Promise<void> {
     this.syncHeartbeatStop?.();
     this.syncHeartbeatStop = undefined;
+    if (this.reorderTimer) clearTimeout(this.reorderTimer);
+    this.reorderTimer = undefined;
     if (this.syncStatePollTimer) clearInterval(this.syncStatePollTimer);
     this.syncStatePollTimer = undefined;
     this.client?.stopClient();
@@ -3327,7 +3348,47 @@ export class MatrixSource implements Source {
     // until the real echo replaces it.
     const pending = room.getPendingEvents?.() ?? [];
     const liveIds = new Set(live.map((e) => e.getId()));
-    const all = pending.length ? [...live, ...pending.filter((e) => !liveIds.has(e.getId()))] : live;
+    const merged = pending.length ? [...live, ...pending.filter((e) => !liveIds.has(e.getId()))] : live;
+    // Bottom-first ordering with a settle grace. A message that arrived live in the
+    // last ORDER_GRACE_MS stays pinned at the bottom in arrival order — so a delayed
+    // or out-of-order arrival (incl. bridged bursts whose origin_server_ts is older
+    // than messages already shown) lands where you'll SEE it, instead of being slotted
+    // silently up into history. Once it's been visible past the grace it's trusted and
+    // sorted into its correct origin_server_ts slot (the reorderTimer below re-snaps so
+    // this happens even in a quiet room). Older/backfilled events (no recent liveArrival)
+    // are always "settled" → ts-sorted, never wrongly dumped at the bottom.
+    const nowMs = Date.now();
+    const settled: MatrixEvent[] = [];
+    const recent: MatrixEvent[] = [];
+    let soonestGraduation = Infinity;
+    for (const ev of merged) {
+      const id = ev.getId();
+      const arrived = id ? this.liveArrival.get(id) : undefined;
+      if (arrived !== undefined && nowMs - arrived < ORDER_GRACE_MS) {
+        recent.push(ev);
+        soonestGraduation = Math.min(soonestGraduation, arrived + ORDER_GRACE_MS);
+      } else {
+        settled.push(ev);
+      }
+    }
+    // ts-sort only the settled set; recent stays in arrival order at the tail.
+    settled.sort((a, b) => a.getTs() - b.getTs());
+    const all = recent.length ? [...settled, ...recent] : settled;
+    // Re-snap when the soonest pinned message graduates, so it reorders without needing
+    // other sync activity. One timer, reset each snapshot.
+    if (soonestGraduation !== Infinity) {
+      if (this.reorderTimer) clearTimeout(this.reorderTimer);
+      this.reorderTimer = setTimeout(() => {
+        this.reorderTimer = undefined;
+        this.notify();
+      }, Math.max(0, soonestGraduation - nowMs) + 50);
+    }
+    // Keep liveArrival small: drop entries well past the grace (settled forever).
+    if (this.liveArrival.size > 500) {
+      for (const [id, t] of this.liveArrival) {
+        if (nowMs - t > ORDER_GRACE_MS * 4) this.liveArrival.delete(id);
+      }
+    }
     const selfId = this.client.getUserId() ?? '';
 
     // Edits index: targetEventId -> latest replacement content. We pick
