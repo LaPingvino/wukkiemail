@@ -342,6 +342,12 @@ export function RoomPanel({
     setEmojiAc(null);
   };
 
+  // Open-once per room/thread: subscribe, drain stale stuck sends, mark read.
+  // Deliberately NOT keyed on `limit`. A permalink focus jump grows the window by
+  // loading OLDER history, which never changes the newest event — so re-running
+  // markRoomRead on a limit change only re-sent a redundant read receipt for the
+  // same event (and pointlessly re-subscribed / re-cleared). The re-snap that does
+  // need `limit` lives in the separate effect below.
   useEffect(() => {
     // Under sliding sync the room may be outside the window — subscribe so its
     // full timeline loads (no-op on classic sync).
@@ -351,12 +357,16 @@ export function RoomPanel({
     // every send in this room ("Event blocked by other events not yet sent"),
     // and there's no UI to retry them — so opening the room is where we clear them.
     matrix.clearStuckSends(roomId);
+    void matrix.markRoomRead(roomId);
+  }, [matrix, roomId, threadRootId]);
+
+  // Live timeline subscription + re-snap. Keyed on `limit` too so a permalink
+  // focus jump (which grows the window) re-renders the bigger window immediately,
+  // not just on the next sync notification.
+  useEffect(() => {
     const unsub = matrix.subscribe(() => {
       setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     });
-    void matrix.markRoomRead(roomId);
-    // Re-snap immediately when the window grows (focus jump), not just on the
-    // next sync notification.
     setSnap(matrix.getRoomTimeline(roomId, limit, threadRootId));
     return unsub;
   }, [matrix, roomId, threadRootId, limit]);
