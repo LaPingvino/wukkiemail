@@ -3605,6 +3605,24 @@ export class MatrixSource implements Source {
       if ((msg.image || msg.file) && content.filename && content.body && content.filename !== content.body) {
         msg.caption = content.body;
       }
+      // Bundled URL previews — mautrix WhatsApp Channel link posts arrive as m.text
+      // carrying these (the picture lives in og:image, an mxc). The SDK normalizes the
+      // key (MSC4095 m.url_previews / unstable com.beeper.linkpreviews) for us.
+      const previews = ev.getUrlPreviews?.() ?? [];
+      if (previews.length > 0) {
+        const cards = previews
+          .map((p) => {
+            const mxc = typeof p['og:image'] === 'string' ? (p['og:image'] as string) : undefined;
+            const image = mxc?.startsWith('mxc://') ? this.client!.mxcUrlToHttp(mxc, 400, 400, 'scale') : null;
+            return {
+              url: typeof p['matched_url'] === 'string' ? (p['matched_url'] as string) : undefined,
+              title: typeof p['og:title'] === 'string' ? (p['og:title'] as string) : undefined,
+              image: image ?? undefined,
+            };
+          })
+          .filter((p) => p.image || p.title);
+        if (cards.length > 0) msg.linkPreviews = cards;
+      }
       if (content.format === 'org.matrix.custom.html' && content.formatted_body) {
         // Drop the spec <mx-reply> fallback block — we render our own structured
         // reply preview (msg.replyTo), so keeping it would double the quote.
@@ -3836,6 +3854,9 @@ export interface TimelineMessage {
   image?: { url: string; alt: string; w?: number; h?: number; encrypted?: EncryptedFile; sticker?: boolean };
   file?: { url: string; name: string; mimetype?: string; size?: number; encrypted?: EncryptedFile };
   caption?: string; // MSC2530 media caption (body when a distinct filename is present) — shown under image/file
+  // Bundled URL previews (MSC4095 m.url_previews / com.beeper.linkpreviews) — the card
+  // shown under a link message (e.g. WhatsApp Channel posts). image = resolved https url.
+  linkPreviews?: { url?: string; title?: string; image?: string }[];
 
   reactions?: { key: string; count: number; selfReacted: boolean; reactors?: string[] }[];
   html?: string;  // formatted_body when format=org.matrix.custom.html

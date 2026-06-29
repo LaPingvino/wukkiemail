@@ -967,6 +967,18 @@ export function RoomPanel({
                     {renderInline(m.caption)}
                   </CollapsibleBody>
                 )}
+                {m.linkPreviews?.map((p, i) => (
+                  <a
+                    key={i}
+                    className="link-preview"
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {p.image && <img className="link-preview-img" src={p.image} alt="" loading="lazy" />}
+                    {p.title && <span className="link-preview-title">{p.title}</span>}
+                  </a>
+                ))}
                 {m.edited && (
                   <button
                     type="button"

@@ -2017,6 +2017,21 @@ md-outlined-text-field { width: 100%; }
 .reply-quote-sender { font-weight: 600; color: var(--md-sys-color-primary, #14b8a6); flex: 0 0 auto; }
 .reply-quote-body { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
+/* Bundled URL preview card (MSC4095 / com.beeper.linkpreviews) under a link message */
+.link-preview {
+  display: flex; align-items: center; gap: 8px; max-width: 360px;
+  margin: 4px 0 0; padding: 6px 8px; text-decoration: none; color: inherit;
+  border: 1px solid var(--md-sys-color-surface-variant, rgba(0,0,0,0.12));
+  border-left: 3px solid var(--md-sys-color-primary, #14b8a6);
+  border-radius: 0 8px 8px 0;
+}
+.link-preview:hover { background: var(--md-sys-color-surface-variant, rgba(0,0,0,0.06)); }
+.link-preview-img { width: 64px; height: 64px; flex: 0 0 auto; object-fit: cover; border-radius: 6px; }
+.link-preview-title {
+  font-size: 13px; line-height: 1.3; min-width: 0;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
 /* Undecryptable message placeholder */
 .msg-utd { display: flex; align-items: center; gap: 6px; color: var(--muted); font-style: italic; }
 .msg-utd .material-symbols-outlined { font-size: 16px; }
