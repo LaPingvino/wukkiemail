@@ -962,6 +962,11 @@ export function RoomPanel({
                     {renderInline(m.body)}
                   </CollapsibleBody>
                 )}
+                {m.caption && (m.image || m.file) && (
+                  <CollapsibleBody className="comment-body msg-caption">
+                    {renderInline(m.caption)}
+                  </CollapsibleBody>
+                )}
                 {m.edited && (
                   <button
                     type="button"

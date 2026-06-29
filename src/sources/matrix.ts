@@ -3417,26 +3417,11 @@ export class MatrixSource implements Source {
       }
     }
 
-    // Build a reactions index: target event_id -> key -> Set<senderId>.
-    // Also note our own reaction event ids so we can redact on toggle.
-    const reactionIdx = new Map<string, Map<string, Set<string>>>();
-    for (const ev of all) {
-      if (ev.getType() !== 'm.reaction') continue;
-      const c = ev.getContent() as { 'm.relates_to'?: { event_id?: string; key?: string; rel_type?: string } };
-      const r = c['m.relates_to'];
-      if (!r || r.rel_type !== 'm.annotation' || !r.event_id || !r.key) continue;
-      const sender = ev.getSender() ?? '';
-      const byTarget = reactionIdx.get(r.event_id) ?? new Map<string, Set<string>>();
-      const senders = byTarget.get(r.key) ?? new Set<string>();
-      senders.add(sender);
-      byTarget.set(r.key, senders);
-      reactionIdx.set(r.event_id, byTarget);
-      if (sender === selfId) {
-        // Cache our own reaction event id for redaction on toggle-off.
-        const evId = ev.getId();
-        if (evId) this.selfReactionIds.set(reactionKey(r.event_id, r.key), evId);
-      }
-    }
+    // Reactions come from the SDK's relation aggregation per message (see below), NOT a
+    // scan of the loaded window — the window-scan missed any reaction whose m.reaction
+    // event had scrolled out of the lean sliding-sync slice (the "missing reaction in
+    // WukkieMail, present in Wally" bug). The SDK keeps the full set keyed by target.
+    const reactionTimelineSet = room.getUnfilteredTimelineSet();
 
     // Thread index: rootEventId -> reply count + latest reply (for the "N
     // replies" affordance in the main timeline and for thread-aware sends).
@@ -3515,7 +3500,7 @@ export class MatrixSource implements Source {
         continue;
       }
       const content = ev.getContent() as {
-        body?: string; msgtype?: string;
+        body?: string; msgtype?: string; filename?: string;
         url?: string; file?: EncryptedFile; info?: { w?: number; h?: number; mimetype?: string; size?: number };
         format?: string; formatted_body?: string;
         'm.relates_to'?: { 'm.in_reply_to'?: { event_id?: string } };
@@ -3614,6 +3599,12 @@ export class MatrixSource implements Source {
           size: content.info?.size,
         };
       }
+      // MSC2530 media caption: when `filename` is present and differs from `body`, the
+      // body IS the caption (not the filename), so show it UNDER the media. Without this
+      // an image-with-caption rendered image-XOR-text (the caption was dropped).
+      if ((msg.image || msg.file) && content.filename && content.body && content.filename !== content.body) {
+        msg.caption = content.body;
+      }
       if (content.format === 'org.matrix.custom.html' && content.formatted_body) {
         // Drop the spec <mx-reply> fallback block — we render our own structured
         // reply preview (msg.replyTo), so keeping it would double the quote.
@@ -3646,16 +3637,33 @@ export class MatrixSource implements Source {
         msg.html = edit.html;
         msg.edited = true;
       }
-      const byKey = reactionIdx.get(msg.id);
-      if (byKey && byKey.size > 0) {
-        msg.reactions = [...byKey.entries()]
-          .map(([key, senders]) => ({
-            key,
-            count: senders.size,
-            selfReacted: senders.has(selfId),
-            // Names for the who-reacted tooltip (capped; the data was already here).
-            reactors: [...senders].slice(0, 8).map((s) => room.getMember(s)?.name ?? s),
-          }))
+      const byKey = reactionTimelineSet.relations
+        ?.getChildEventsForEvent(msg.id, 'm.annotation', 'm.reaction')
+        ?.getSortedAnnotationsByKey();
+      if (byKey && byKey.length > 0) {
+        msg.reactions = byKey
+          .map(([key, evs]) => {
+            // One reaction per sender per key; skip redacted. Cache our own reaction's
+            // event id so toggle-off can redact it (replaces the old window-scan cache).
+            const senders = new Set<string>();
+            for (const e of evs) {
+              if (e.isRedacted()) continue;
+              const s = e.getSender();
+              if (!s) continue;
+              senders.add(s);
+              if (s === selfId) {
+                const evId = e.getId();
+                if (evId) this.selfReactionIds.set(reactionKey(msg.id, key), evId);
+              }
+            }
+            return {
+              key,
+              count: senders.size,
+              selfReacted: senders.has(selfId),
+              reactors: [...senders].slice(0, 8).map((s) => room.getMember(s)?.name ?? s),
+            };
+          })
+          .filter((r) => r.count > 0)
           .sort((a, b) => b.count - a.count);
       }
       // In the main timeline, flag messages that have a thread hanging off them
@@ -3827,6 +3835,8 @@ export interface TimelineMessage {
   geoUri?: string;   // m.location geo: URI
   image?: { url: string; alt: string; w?: number; h?: number; encrypted?: EncryptedFile; sticker?: boolean };
   file?: { url: string; name: string; mimetype?: string; size?: number; encrypted?: EncryptedFile };
+  caption?: string; // MSC2530 media caption (body when a distinct filename is present) — shown under image/file
+
   reactions?: { key: string; count: number; selfReacted: boolean; reactors?: string[] }[];
   html?: string;  // formatted_body when format=org.matrix.custom.html
   edited?: boolean;
