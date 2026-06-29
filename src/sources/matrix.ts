@@ -1183,6 +1183,17 @@ export class MatrixSource implements Source {
     this.started = false;
   }
 
+  // Manual "catch up now" — invoked from a user click (a REAL activity signal, never a
+  // timer; blind/periodic pokes were reverted because resend aborts the in-flight load).
+  // Reissues the sliding-sync request so Continuwuity recomputes the room's latest state
+  // (a poll can return just before a message settles), then re-renders the open chat from
+  // the live timeline (which also fixes the case where the event arrived but a snapshot
+  // missed it). Cheap and safe to call on demand.
+  bumpSync(): void {
+    try { this.slidingSync?.resend(); } catch { /* ignore */ }
+    this.notify();
+  }
+
   async listBundles(): Promise<BundleSpec[]> {
     if (!this.client) return [];
     const spaces = this.client.getRooms().filter((r) => isSpace(r));

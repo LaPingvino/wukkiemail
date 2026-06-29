@@ -715,6 +715,7 @@ export function RoomPanel({
         backLabel={backLabel}
         onNext={threadRootId ? undefined : onNext}
         nextLabel={nextLabel}
+        onRefresh={() => matrix.bumpSync()}
         onStartCall={!threadRootId && onStartCall ? () => onStartCall(snap.roomName) : undefined}
         onOpenWidgets={!threadRootId && onOpenWidgets ? () => onOpenWidgets(snap.roomName) : undefined}
         onOpenThreads={!threadRootId && onOpenThread && snap.messages.some((m) => m.threadSummary) ? () => setThreadsOpen(true) : undefined}
@@ -1593,7 +1594,8 @@ function EditHistorySheet({ matrix, roomId, eventId, onClose }: {
   );
 }
 
-function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onStartCall, onOpenWidgets, onOpenThreads, onOpenSettings, incomingCall, onPickUp, headerExtra }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; onOpenSettings?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void; headerExtra?: ReactNode }) {
+function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel, onRefresh, onStartCall, onOpenWidgets, onOpenThreads, onOpenSettings, incomingCall, onPickUp, headerExtra }: { title: string; subtitle?: string; onClose: () => void; onBack?: () => void; backLabel?: string; onNext?: () => void; nextLabel?: string; onRefresh?: () => void; onStartCall?: () => void; onOpenWidgets?: () => void; onOpenThreads?: () => void; onOpenSettings?: () => void; incomingCall?: { roomId: string; roomName: string }; onPickUp?: (roomId: string, roomName: string) => void; headerExtra?: ReactNode }) {
+  const [refreshing, setRefreshing] = useState(false);
   return (
     <header className="issue-head">
       <md-icon-button onClick={onClose} aria-label="Close">
@@ -1604,6 +1606,17 @@ function Header({ title, subtitle, onClose, onBack, backLabel, onNext, nextLabel
         {subtitle && <div className="issue-subtitle">{subtitle}</div>}
       </div>
       {headerExtra}
+      {onRefresh && (
+        <button
+          type="button"
+          className="hamburger"
+          aria-label="Refresh chat"
+          title="Catch up now — fetch the latest"
+          onClick={() => { setRefreshing(true); onRefresh(); window.setTimeout(() => setRefreshing(false), 600); }}
+        >
+          <span aria-hidden="true" className={`material-symbols-outlined${refreshing ? ' spin' : ''}`}>refresh</span>
+        </button>
+      )}
       {incomingCall && onPickUp && (
         <button
           type="button"

@@ -642,6 +642,11 @@ function Inbox({
   // away from, which the Next button then prioritises so Back/Next round-trip.
   const [navHistory, setNavHistory] = useState<string[]>([]);
   const [forwardRoom, setForwardRoom] = useState<string | null>(null);
+  // The chat you most recently had open — surfaced as a quick-access chip so a peek at
+  // the full list doesn't lose your place. Persisted so it survives a reload.
+  const [lastVisitedRoomId, setLastVisitedRoomId] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('wm.lastVisitedRoom'); } catch { return null; }
+  });
   const prevSelectedRoomRef = useRef<string | null>(null);
   const backNavRef = useRef(false);
   // Track chat opens into the back-stack. Skip the push when we got here via the
@@ -650,6 +655,10 @@ function Inbox({
   useEffect(() => {
     const prev = prevSelectedRoomRef.current;
     prevSelectedRoomRef.current = selectedRoom;
+    if (selectedRoom) {
+      setLastVisitedRoomId(selectedRoom);
+      try { sessionStorage.setItem('wm.lastVisitedRoom', selectedRoom); } catch { /* ignore */ }
+    }
     if (backNavRef.current) { backNavRef.current = false; return; }
     if (selectedRoom && prev && prev !== selectedRoom) {
       setNavHistory((h) => (h[h.length - 1] === prev ? h : [...h, prev]));
@@ -1830,6 +1839,19 @@ function Inbox({
     [topUnreadItems, pinnedBar]
   );
 
+  // The last chat you had open, as a quick-return chip — unless it's the one you're in
+  // now, or it's already in the bar (pinned/priority-unread). So a quick peek at the full
+  // list still leaves a one-tap way back to where you were.
+  const recentItem = useMemo(() => {
+    if (!lastVisitedRoomId || lastVisitedRoomId === selectedRoom) return null;
+    if (barItems.some((it) => itemRoomId(it.id) === lastVisitedRoomId)) return null;
+    return items.find((it) => itemRoomId(it.id) === lastVisitedRoomId) ?? null;
+  }, [lastVisitedRoomId, selectedRoom, barItems, items]);
+  const fullBarItems = useMemo(
+    () => (recentItem ? [recentItem, ...barItems] : barItems),
+    [recentItem, barItems]
+  );
+
   // One inbox row. Shared by the flat list, the loose section, and the
   // contents of an opened bundle. `idx` drives keyboard-cursor highlight.
   // `level` is the 1-based ARIA tree depth (loose/top rows are level 1; rows
@@ -2424,16 +2446,17 @@ function Inbox({
               </span>
               <span className="pinned-chip-label">New chat</span>
             </button>
-            {barItems.map((it) => {
+            {fullBarItems.map((it) => {
               const spotlight = it.id === topUnread?.id;
+              const isRecent = it.id === recentItem?.id;
               return (
               <button
                 key={it.id}
                 type="button"
                 role="listitem"
-                className={`pinned-chip ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''}`}
-                title={it.subject || it.from}
-                aria-label={`Open ${it.subject || it.from}${spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
+                className={`pinned-chip ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''} ${isRecent ? 'recent' : ''}`}
+                title={isRecent ? `Recently viewed: ${it.subject || it.from}` : (it.subject || it.from)}
+                aria-label={`Open ${it.subject || it.from}${isRecent ? ', recently viewed' : spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
                 onClick={() => openItem(it)}
               >
                 <Avatar name={it.subject || it.from} flavor={it.flavor} presence={it.senderPresence} url={it.avatarUrl} />
@@ -2685,18 +2708,19 @@ function Inbox({
             onOpenSettings={() => setRoomSettings(selectedRoom)}
             incomingCall={incomingCalls[0]}
             onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
-            headerExtra={barItems.length > 0 ? (
+            headerExtra={fullBarItems.length > 0 ? (
               <div className="header-pinned-bar" role="list" aria-label="Pinned and priority conversations">
-                {barItems.map((it) => {
+                {fullBarItems.map((it) => {
                   const spotlight = it.id === topUnread?.id;
+                  const isRecent = it.id === recentItem?.id;
                   return (
                   <button
                     key={it.id}
                     type="button"
                     role="listitem"
-                    className={`header-pin ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''} ${itemRoomId(it.id) === selectedRoom ? 'current' : ''}`}
-                    title={it.subject || it.from}
-                    aria-label={`Open ${it.subject || it.from}${spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
+                    className={`header-pin ${it.unread ? 'unread' : ''} ${spotlight ? 'spotlight' : ''} ${isRecent ? 'recent' : ''} ${itemRoomId(it.id) === selectedRoom ? 'current' : ''}`}
+                    title={isRecent ? `Recently viewed: ${it.subject || it.from}` : (it.subject || it.from)}
+                    aria-label={`Open ${it.subject || it.from}${isRecent ? ', recently viewed' : spotlight ? ', priority unread' : it.unread ? ', unread' : ''}`}
                     onClick={() => openItem(it)}
                   >
                     <Avatar name={it.subject || it.from} flavor={it.flavor} url={it.avatarUrl} />

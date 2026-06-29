@@ -2032,6 +2032,17 @@ md-outlined-text-field { width: 100%; }
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 
+/* Brief spin feedback on the header "catch up now" refresh button */
+.material-symbols-outlined.spin { animation: wm-spin 0.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .material-symbols-outlined.spin { animation: none; } }
+
+/* "Recently viewed" quick-return chip — a subtle dashed ring so it reads as a
+   bookmark back to where you were, distinct from unread/spotlight chips. */
+.pinned-chip.recent, .header-pin.recent {
+  outline: 1.5px dashed var(--md-sys-color-outline, rgba(127,127,127,0.6));
+  outline-offset: 1px;
+}
+
 /* Undecryptable message placeholder */
 .msg-utd { display: flex; align-items: center; gap: 6px; color: var(--muted); font-style: italic; }
 .msg-utd .material-symbols-outlined { font-size: 16px; }
