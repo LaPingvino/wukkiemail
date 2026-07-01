@@ -2973,7 +2973,12 @@ export class MatrixSource implements Source {
     if (!this.client) return;
     const room = this.client.getRoom(roomId);
     if (!room) return;
-    const evs = room.getPendingEvents?.() ?? room.getLiveTimeline().getEvents();
+    // Snapshot: getPendingEvents() returns the LIVE pendingEventList, and
+    // cancelPendingEvent splices it synchronously — iterating the live array
+    // skips the element right after every removal. Two stuck events are the
+    // NORM here (the original blocker + our own just-rejected echo land
+    // adjacent), so without the copy this cleared only every other one.
+    const evs = [...(room.getPendingEvents?.() ?? room.getLiveTimeline().getEvents())];
     for (const ev of evs) {
       const st = (ev as unknown as { status?: string }).status;
       if (st === 'not_sent' || st === 'queued') {
@@ -2996,7 +3001,12 @@ export class MatrixSource implements Source {
     const room = this.client.getRoom(roomId);
     if (!room) return;
     let cleared = 0;
-    for (const ev of room.getPendingEvents?.() ?? []) {
+    // Snapshot (same reason as cancelFailedEvents): cancelPendingEvent splices
+    // the live list mid-iteration, skipping the next element — which left one
+    // NOT_SENT survivor whenever ≥2 were stuck, so safeSend's clear-and-retry
+    // re-wedged forever ("Send failed: Event blocked by other events not yet
+    // sent" on every attempt until a room re-open cleared the last one).
+    for (const ev of [...(room.getPendingEvents?.() ?? [])]) {
       if ((ev as unknown as { status?: string }).status === 'not_sent') {
         try { this.client.cancelPendingEvent(ev); cleared += 1; } catch { /* already gone */ }
       }
