@@ -767,6 +767,9 @@ export class MatrixSource implements Source {
   // device id but the old store lingers) without dropping to the hang-prone
   // in-memory backend. Names mirror the SDK: `<prefix>::matrix-sdk-crypto` and
   // `<prefix>::matrix-sdk-crypto-meta`.
+  // One-shot auto-retry guard for undecryptable events (see the msg.utd site).
+  private utdRetried = new Set<string>();
+
   // Coalesce a burst of decryption events (e.g. a backup restore decrypting
   // hundreds of messages at once) into a single refresh.
   private decryptedNotifyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1028,7 +1031,13 @@ export class MatrixSource implements Source {
         // so old messages decrypt automatically — no recovery key needed. A
         // no-op when the key isn't available (in-memory crypto / first run);
         // the user then restores via the encryption block.
-        void this.tryRestoreKeyBackup();
+        //
+        // Deferred until AFTER the first sync response: the restore drives the
+        // single non-reentrant OlmMachine with a bulk decrypt, and running it
+        // concurrently with startClient's inbound to-device key flood corrupted
+        // in-flight crypto (intermittent, self-healing UTDs — the same wasm
+        // reentrancy class as the SAS Promise.all race fixed in the SDK).
+        client.once(ClientEvent.Sync, () => { void this.tryRestoreKeyBackup(); });
       }
     }
 
@@ -3568,6 +3577,20 @@ export class MatrixSource implements Source {
       msg.emote = msgtype === 'm.emote' || undefined;
       msg.notice = msgtype === 'm.notice' || undefined;
       msg.utd = type === 'm.room.encrypted' || undefined; // decrypted events report their real type
+      if (msg.utd) {
+        // Auto-retry the decrypt once per event: a boot-time race can leave an
+        // event stuck as UTD even though its key IS in the store (decrypt ran
+        // before the key landed). attemptDecryption, NOT decryptEventIfNeeded —
+        // the latter silently no-ops on failed UTDs (clearEvent already set).
+        // On success MatrixEventEvent.Decrypted fires -> scheduleDecryptedNotify
+        // re-renders; on failure the SDK's own key-arrival retry stays armed.
+        const crypto = this.client.getCrypto?.();
+        if (crypto && !this.utdRetried.has(msg.id)) {
+          this.utdRetried.add(msg.id);
+          void ev.attemptDecryption(crypto as Parameters<MatrixEvent['attemptDecryption']>[0], { isRetry: true })
+            .catch(() => undefined);
+        }
+      }
       const senderMxc = senderMember?.getMxcAvatarUrl?.();
       if (senderMxc) {
         const u = this.client.mxcUrlToHttp(senderMxc, 64, 64, 'crop');
