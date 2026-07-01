@@ -23,7 +23,6 @@ import {
 import { buildClient, loadCreds, isClassicSync, type MatrixCreds } from '../auth/matrix';
 import { storePrivateKey } from '../auth/secretStorageKeys';
 import { flavorForRoomMembers } from './bridges';
-import { startSyncWakeHeartbeat } from './slidingSyncHealth';
 import { SearchIndex, type MessageDoc, type MessageHit } from '../search';
 import { decryptAttachment, type EncryptedFile } from '../media';
 import type { BundleSpec, InboxItem, Source } from './types';
@@ -311,10 +310,6 @@ export class MatrixSource implements Source {
   // Set once we've wired the visibility/online listeners that poke the sliding
   // sync to resend the moment the tab is foregrounded (see start()).
   private pokeWired = false;
-  // Stop handle for the sliding-sync wake heartbeat (see slidingSyncHealth.ts):
-  // an unconsumed classic /sync long-poll that pokes the sliding connection the
-  // instant anything changes, so updates don't wait out Continuwuity's ~3s poll.
-  private syncHeartbeatStop?: () => void;
   // Belt-and-suspenders 2s sync-state poller (started in start()); cleared in
   // stop() so it doesn't leak + keep firing notify() across account switches.
   private syncStatePollTimer?: ReturnType<typeof setInterval>;
@@ -374,8 +369,16 @@ export class MatrixSource implements Source {
   // it's outside the sliding window. No-op under classic sync.
   subscribeRoom(roomId: string): void {
     if (!this.slidingSync || this.roomSubs.has(roomId)) return;
-    this.roomSubs.add(roomId);
-    try { this.slidingSync.modifyRoomSubscriptions(new Set(this.roomSubs)); } catch { /* ignore */ }
+    // Mark subscribed only when the SDK accepted it: adding to roomSubs before a
+    // throwing modifyRoomSubscriptions latched the failure — the has() guard then
+    // blocked every retry, so the room never loaded for the whole session.
+    try {
+      this.slidingSync.modifyRoomSubscriptions(new Set([...this.roomSubs, roomId]));
+      this.roomSubs.add(roomId);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(`[wukkiemail] subscribeRoom failed for ${roomId}; will retry on next open`, e);
+    }
   }
 
 
@@ -1130,13 +1133,19 @@ export class MatrixSource implements Source {
         window.addEventListener('online', poke);
         window.addEventListener('focus', poke);
       }
-      // Continuwuity's sliding long-poll doesn't wake on data, so a foreground tab
-      // would otherwise wait out the full ~3s timeout for every update. Run the
-      // wake heartbeat (a fast classic /sync that pokes the sliding connection on
-      // activity) so messages / inbox reordering / unread land near-instantly.
-      if (this.slidingSync && !this.syncHeartbeatStop) {
-        this.syncHeartbeatStop = startSyncWakeHeartbeat(client);
-      }
+      // The /sync wake heartbeat is GONE — it was a to-device shredder. Every
+      // classic /sync with an advancing since token makes Continuwuity DELETE the
+      // device's to-device messages up to that token (v3 remove_to_device_events),
+      // and the heartbeat discarded what it received — so megolm key shares and
+      // verification events were eaten before the encryption sliding-sync could
+      // read them (its own long-poll loses the ms-scale race against the
+      // heartbeat's immediate re-poll). The bootstrap call even shredded the
+      // entire offline to-device queue on every app start. Continuwuity's v5
+      // long-poll DOES wake on data (it returns an empty response, and the SDK
+      // re-polls immediately), so the heartbeat's premise was a misdiagnosis:
+      // room-conn slowness comes from the missing conn_id (full recompute per
+      // request), which a heartbeat poke cannot fix. NEVER reintroduce an
+      // unconsumed /sync loop — to-device is delete-on-ack.
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[wukkiemail] startClient threw', e);
@@ -1182,8 +1191,6 @@ export class MatrixSource implements Source {
   }
 
   async stop(): Promise<void> {
-    this.syncHeartbeatStop?.();
-    this.syncHeartbeatStop = undefined;
     if (this.reorderTimer) clearTimeout(this.reorderTimer);
     this.reorderTimer = undefined;
     if (this.syncStatePollTimer) clearInterval(this.syncStatePollTimer);

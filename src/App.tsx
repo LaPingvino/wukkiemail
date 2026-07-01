@@ -2692,6 +2692,12 @@ function Inbox({
         const backItem = backRoom ? items.find((x) => x.id === `matrix:${backRoom}`) : undefined;
         return (
           <RoomPanel
+            // Remount per room: Next/Back triage keeps the panel mounted across room
+            // switches, and the composer's DOM-level paste/typing listeners (plus
+            // replyTo/editing/hasMore state) close over the FIRST room — a pasted
+            // image after switching rooms uploaded to the PREVIOUS room, replies
+            // could target foreign events, and pagination state leaked across rooms.
+            key={selectedRoom}
             matrix={matrixSrc}
             roomId={selectedRoom}
             focusEventId={focusEvent && focusEvent.eventId ? focusEvent.eventId : undefined}
@@ -2734,6 +2740,7 @@ function Inbox({
       })()}
       {openThread && matrixSrc && (
         <RoomPanel
+          key={`${openThread.roomId}:${openThread.rootId}`}
           matrix={matrixSrc}
           roomId={openThread.roomId}
           threadRootId={openThread.rootId}
