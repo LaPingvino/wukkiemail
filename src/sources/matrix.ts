@@ -2900,9 +2900,16 @@ export class MatrixSource implements Source {
         // Skip backfill — only notify for events that arrived after we
         // hooked the listener.
         if (event.getTs() < startedAt) return;
-        // Only highlight events: a mention/keyword, or any message in a DM.
+        // Only highlight events: a mention, or any message in a DM. Judge THIS
+        // event's m.mentions, not the room's server highlight_count — a stale
+        // room count notified for non-mentions and missed real ones.
         const isDm = !!this.buildBundleIndex().get(room.roomId)?.includes('dm');
-        const highlight = (room.getUnreadNotificationCount?.('highlight' as never) ?? 0) > 0;
+        const mentions = (event.getContent() as {
+          'm.mentions'?: { user_ids?: string[]; room?: boolean };
+        })['m.mentions'];
+        const highlight = !!mentions
+          && (mentions.room === true
+            || (Array.isArray(mentions.user_ids) && !!selfId && mentions.user_ids.includes(selfId)));
         if (!isDm && !highlight) return;
         // Don't double-fire when the tab is focused.
         if (document.visibilityState === 'visible') return;
@@ -3328,13 +3335,10 @@ export class MatrixSource implements Source {
     if (this.getTriageState().manuallyUnread.includes(itemId)) {
       void this.setManuallyUnread(itemId, false);
     }
-    // Zero the local unread counts FIRST, regardless of whether a receipt gets
-    // sent. getUnreadNotificationCount otherwise stays stale until /sync echoes
-    // back, so the inbox keeps showing the room unread — and a room with a
-    // server unread count but ZERO loaded timeline events (lean sliding sync)
-    // has nothing to receipt, so this is the only thing that clears it.
-    room.setUnreadNotificationCount('total' as never, 0);
-    room.setUnreadNotificationCount('highlight' as never, 0);
+    // No SDK-counter mutation here any more: unread AND highlights are computed
+    // client-side in roomToItem (receipt-position + m.mentions walk), so zeroing
+    // the server-fed counters is pointless — and it used to FIGHT the server
+    // (next sliding poll re-delivered the stale count → badge flapped back).
     this.notify();
     const events = room.getLiveTimeline().getEvents();
     const last = events[events.length - 1];
@@ -4131,10 +4135,21 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // Unread is computed CLIENT-SIDE from the read receipt, mirroring Wally's
   // getUnreadInfo. We do NOT gate on the server's getUnreadNotificationCount:
   // Continuwuity UNDER-reports it under sliding sync, so trusting it made WukkieMail
-  // show far fewer unreads than Wally (the reported discrepancy). Count renderable,
-  // other-sender messages after the read marker; highlights still come from the
-  // server count (mentions report reliably) and are OR'd in.
-  const highlights = room.getUnreadNotificationCount?.('highlight' as never) ?? 0;
+  // show far fewer unreads than Wally (the reported discrepancy).
+  //
+  // Highlights are ALSO client-side now (m.mentions walk over the same post-marker
+  // events). The server highlight_count is computed blind over m.room.encrypted and
+  // does not clear promptly — markRoomRead used to zero the SDK counter locally and
+  // the next sliding poll re-delivered the stale server count, flipping mention
+  // rooms back to unread ("unreads that come back"). In encrypted rooms a mention
+  // is only visible after decrypt; the Decrypted listener re-notifies and we
+  // recount — a briefly-late badge beats a phantom that never clears.
+  const mentionsSelf = (ev: MatrixEvent): boolean => {
+    const m = (ev.getContent() as { 'm.mentions'?: { user_ids?: string[]; room?: boolean } })['m.mentions'];
+    if (!m) return false;
+    return m.room === true || (Array.isArray(m.user_ids) && !!selfId && m.user_ids.includes(selfId));
+  };
+  let highlights = 0;
   let unreadTotal = 0;
   let markerLoaded = false;
   let anyAfterMarker = false;
@@ -4146,7 +4161,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
       markerLoaded = true;
       for (let i = live.length - 1; i > markerIdx; i -= 1) {
         anyAfterMarker = true;
-        if (rendersInRoomView(live[i]) && live[i].getSender() !== selfId) unreadTotal += 1;
+        if (live[i].getSender() === selfId) continue;
+        if (rendersInRoomView(live[i])) unreadTotal += 1;
+        if (mentionsSelf(live[i])) highlights += 1;
       }
     } else {
       // Marker not loaded → decide read by the RAW receipt id (receipt at the last
@@ -4163,7 +4180,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
         for (let i = live.length - 1; i >= 0; i -= 1) {
           const ev = live[i];
           if (receiptTs > 0 && ev.getTs() <= receiptTs) continue; // at/older than marker → read
-          if (rendersInRoomView(ev) && ev.getSender() !== selfId) unreadTotal += 1;
+          if (ev.getSender() === selfId) continue;
+          if (rendersInRoomView(ev)) unreadTotal += 1;
+          if (mentionsSelf(ev)) highlights += 1;
         }
       }
     }
