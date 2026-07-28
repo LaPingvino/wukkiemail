@@ -29,12 +29,18 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240821.1",
+    "@eslint/js": "^9.39.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript/native-preview": "^7.0.0-dev.20260604.1",
     "@vitejs/plugin-react-oxc": "^0.4.3",
     "eslint": "^9.9.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
     "typescript": "^5.5.3",
+    "typescript-eslint": "^8.65.0",
     "vite": "npm:rolldown-vite@^7.3.1",
     "wrangler": "^3.72.0"
   }

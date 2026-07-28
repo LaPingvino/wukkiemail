@@ -12,7 +12,7 @@ export interface MessageDoc {
   ts: number;
 }
 
-export interface MessageHit extends MessageDoc {}
+export type MessageHit = MessageDoc;
 
 export class SearchIndex {
   private worker: Worker | null = null;
