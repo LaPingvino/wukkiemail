@@ -1796,6 +1796,14 @@ body {
 .send-error-x:hover { background: rgba(127,127,127,0.25); }
 .send-error-x .material-symbols-outlined { font-size: 16px; }
 
+/* Screen-reader-only: present in the a11y tree, absent from the visual layout.
+   Used for live regions that announce something the UI shows another way. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+
 /* Tombstone banner — sits where the composer would be in an upgraded room, so the
    absence of a composer is explained rather than just felt. */
 .tombstone-banner {

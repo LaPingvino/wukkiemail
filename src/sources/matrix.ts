@@ -1210,6 +1210,28 @@ export class MatrixSource implements Source {
     this.notify();
   }
 
+  // Harder "catch up now": drop the connection's pos and make the server re-send
+  // everything as initial:true. bumpSync() only reissues the CURRENT request, so
+  // it cannot recover something the server believes it already delivered — which
+  // is exactly the failure mode for a missing invite (invite_state is sent once,
+  // and if it arrived malformed or was dropped, resending the same request never
+  // brings it back). Rate-limited to once per 10s because it resends the world.
+  //
+  // Deliberately NOT a /sync call: every /sync that advances `since` deletes this
+  // device's to-device queue, which shreds megolm keys and verification events.
+  private lastHardRefresh = 0;
+  hardRefresh(): boolean {
+    const now = Date.now();
+    if (now - this.lastHardRefresh < 10_000) {
+      this.bumpSync();
+      return false;
+    }
+    this.lastHardRefresh = now;
+    try { this.slidingSync?.reinitialize(); } catch { this.bumpSync(); }
+    this.notify();
+    return true;
+  }
+
   async listBundles(): Promise<BundleSpec[]> {
     if (!this.client) return [];
     const spaces = this.client.getRooms().filter((r) => isSpace(r));
@@ -2121,15 +2143,57 @@ export class MatrixSource implements Source {
   // Accept a pending invite (join the room) / decline it (leave). Both notify
   // so the row updates immediately. acceptInvite doubles as "join" for the
   // joinable space rooms surfaced from the hierarchy.
+  // Servers worth trying when joining a room by ID. Joining by room id (as an
+  // invite row does) is NOT self-describing the way an alias is: the server has
+  // to be told where the room lives. Synapse usually resolves it from the invite
+  // it already holds, so a bare joinRoom() appears to work — other servers return
+  // M_NOT_FOUND / "not invited" instead, which is most of why accepting an invite
+  // "works on one server and not the other". Always send via.
+  private joinViaFor(roomId: string): string[] {
+    const via: string[] = [];
+    const push = (s?: string) => { if (s && !via.includes(s)) via.push(s); };
+    // The room id's own domain — the room's origin server, and the one most
+    // likely to still have it.
+    push(roomId.split(':')[1]);
+    const room = this.client?.getRoom(roomId);
+    if (room) {
+      // Whoever invited us is definitionally in the room right now.
+      const selfId = this.client?.getUserId() ?? '';
+      push(room.getMember(selfId)?.events?.member?.getSender()?.split(':')[1]);
+      // …then the servers best represented among the members we can see. On a
+      // thin stripped state this is often empty, which is fine — the two above
+      // are the load-bearing ones.
+      for (const s of viaServersFor(room)) push(s);
+    }
+    return via.slice(0, 3);
+  }
+
   async acceptInvite(roomId: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
-    await this.client.joinRoom(roomId);
+    const via = this.joinViaFor(roomId);
+    const attempt = () => this.client!.joinRoom(roomId, via.length ? { viaServers: via } : undefined);
+    try {
+      await attempt();
+    } catch (e) {
+      // A join issued straight off an invite can land before the inviting server
+      // has settled the membership, which reads back as "not invited"/not found.
+      // One retry after a beat turns that race into a successful join instead of
+      // an error the user has to understand. A second failure is real — surface it.
+      console.warn(`[wukkiemail] join ${roomId} failed, retrying once`, e);
+      await new Promise((r) => setTimeout(r, 1500));
+      await attempt();
+    }
+    this.everJoined.add(roomId);
+    // The room has to move from the invite bucket into the joined lists; nudge the
+    // connection rather than waiting for the next long-poll to notice.
+    this.bumpSync();
     this.notify();
   }
 
   async rejectInvite(roomId: string): Promise<void> {
     if (!this.client) throw new Error('client not started');
     await this.client.leave(roomId);
+    this.bumpSync();
     this.notify();
   }
 
@@ -4222,7 +4286,15 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   // offer Accept / Decline.
   const isInvite = room.getMyMembership?.() === 'invite';
   const inviteEvent = isInvite ? room.getMember(selfId)?.events?.member : undefined;
-  const inviterId = inviteEvent?.getSender();
+  // Normally the inviter is the sender of OUR member event. Servers differ on how
+  // complete the stripped invite_state is, though, so when that event is missing
+  // fall back to whoever is visibly in the room, then to the room's creator —
+  // "Someone invited you" is a last resort, not the first thing we reach for.
+  const inviterId = isInvite
+    ? (inviteEvent?.getSender()
+      ?? room.getMembersWithMembership('join' as never)[0]?.userId
+      ?? room.currentState.getStateEvents('m.room.create', '')?.getSender())
+    : undefined;
   const inviterName = inviterId ? (room.getMember(inviterId)?.name ?? inviterId) : undefined;
 
   const senderId = (isInvite ? inviterId : last?.getSender()) ?? '?';

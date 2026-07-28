@@ -720,6 +720,10 @@ function Inbox({
   }, []);
   // Search compose helper (predicate chips under the search box).
   const [composerOpen, setComposerOpen] = useState(false);
+  // Transient feedback for the toolbar Refresh button. A hard refresh has no
+  // visible output of its own (things just quietly become correct), so without
+  // this the button feels dead — and the rate-limit needs to say so out loud.
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   // Bundle-level bulk-action sheet (keyed by bundle key).
   const [bundleActionFor, setBundleActionFor] = useState<string | null>(null);
   const [bundleSnoozeFor, setBundleSnoozeFor] = useState<string | null>(null);
@@ -2414,6 +2418,22 @@ function Inbox({
             >
               <span aria-hidden="true" className="material-symbols-outlined">tune</span>
             </button>
+            {matrixSrc && (
+              <button
+                type="button"
+                className="hamburger"
+                aria-label="Refresh — re-fetch everything from the server"
+                title={refreshNote ?? 'Refresh (re-fetch everything, incl. missed invites)'}
+                onClick={() => {
+                  const hard = matrixSrc.hardRefresh();
+                  setRefreshNote(hard ? 'Refreshing…' : 'Just refreshed — try again in a moment');
+                  setTimeout(() => setRefreshNote(null), 3000);
+                }}
+              >
+                <span aria-hidden="true" className="material-symbols-outlined">refresh</span>
+              </button>
+            )}
+            <span className="sr-only" role="status" aria-live="polite">{refreshNote ?? ''}</span>
             {settingsInTopBar && (
               <button
                 type="button"
