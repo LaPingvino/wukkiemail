@@ -36,7 +36,7 @@ Separate noted bug: WukkieMail console floods with `threadRootId`/`compareEventO
 Joop's framing: these are all the same theme — **completeness under sliding sync**. Two live
 regressions + the standing audit backlog. Joop tests on **wukkie.uk (= latest)**; cinny.kiefte.eu
 is just the VPS the agent runs on. Both apps deploy from the SDK fork (`matrix-js-sdk-jj`,
-`wally-dist`); cinny via `cinny-web-git/push-to-codeberg.sh` (FOREGROUND — bg deploys die), both
+`wally-dist`); cinny via `cinny-web-git/push-to-github.sh` (FOREGROUND — bg deploys die), both
 via `deploy-sdk.sh` (FOREGROUND). cinny commits need a kebab family (`ux-fixes:`).
 
 ### Live regressions (priority)
@@ -103,7 +103,7 @@ SDK fork is clean (lean lists, window growth, forceLoadMembers, account-data see
   `useRoomMembers.ts`); `getRoomMembers`/`searchUsers` inherit it. NOTE while here: WukkieMail's
   `package-lock.json` is **git-ignored**, so CF always re-resolves `#wally-dist` to branch HEAD —
   the npm git-dep pin-trap does NOT bite WukkieMail (it does bite Wally, handled in
-  push-to-codeberg.sh). Also de-binaried matrix.ts: `reactionKey` held a raw NUL byte delimiter
+  push-to-github.sh). Also de-binaried matrix.ts: `reactionKey` held a raw NUL byte delimiter
   (made git/grep/diff treat the file as binary); replaced with the `\u0000` escape, runtime-identical
   (`c6085db`). VERIFY live: @-mention autocomplete + person picker now list everyone in a bridged
   Signal group, not just recent senders.
@@ -477,8 +477,8 @@ SDK pin / branch HEAD: `3333bb7a1`.** Both consumers deploy from it.
 
 **Deploy tooling:** `/home/joop/matrix-stuff/deploy-sdk.sh` — ONE command pushes
 the SDK (`wally-dist`) to BOTH consumers: triggers WukkieMail's Cloudflare rebuild
-FIRST (runs in parallel), then re-pins cinny-wally + runs `push-to-codeberg.sh`.
-`push-to-codeberg.sh` now FORCE-refreshes the git-pinned fork (`rm -rf
+FIRST (runs in parallel), then re-pins cinny-wally + runs `push-to-github.sh`.
+`push-to-github.sh` now FORCE-refreshes the git-pinned fork (`rm -rf
 node_modules/matrix-js-sdk` before `npm install`) — npm does NOT re-fetch a
 github: dep on a pin bump, and `--package-lock-only` poisons any metadata check,
 so a pin bump silently shipped stale SDK twice before this. ALWAYS grep the built
@@ -611,7 +611,7 @@ forced instance). Builds clean both sides.
     of assumptions inside the SDK, no app-side tuning to drift).
   - **WALLY TRANSPARENT TEST DEPLOYED (2026-05-30):** cinny-wally `sdk-pin:`
     bump `d466a1c3e → 1c66e2df8` (commit e54d90065), pushed to Codeberg + built +
-    deployed to wukkie.uk via push-to-codeberg.sh. This is the first live cinny
+    deployed to wukkie.uk via push-to-github.sh. This is the first live cinny
     test: plain `startClient()`, no app glue, should auto-enable sliding sync.
     **NEXT: Joop smoke-tests Wally on wukkie.uk** (rooms/spaces populate, no
     start-of-room glitch, console says sliding sync). If clean, the port is
