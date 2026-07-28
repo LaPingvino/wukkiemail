@@ -1867,6 +1867,7 @@ function Inbox({
     const ariaLabel = [
       it.unread ? 'Unread' : null,
       it.invite ? 'Invite' : it.joinable ? 'Joinable room' : null,
+      it.replacedBy ? 'Replaced by a newer room' : null,
       it.subject || null,
       it.from && it.from !== it.subject ? `from ${it.from}` : null,
       it.snippet || null,
@@ -1893,6 +1894,11 @@ function Inbox({
       <div className="from">
         {it.invite && <span className="invite-badge">Invite</span>}
         {it.joinable && <span className="invite-badge joinable-badge">Join</span>}
+        {it.replacedBy && (
+          <span className="invite-badge replaced-badge" title="This room was upgraded; the conversation continues elsewhere">
+            Replaced
+          </span>
+        )}
         {it.bundles.includes('pinned') && <span title="Pinned" style={{ marginRight: 4 }}>📌</span>}
         {hasDraft && (
           <span className="draft-badge" title="You have an unsent draft here">
@@ -2712,6 +2718,7 @@ function Inbox({
             onOpenThread={(rootId) => setOpenThread({ roomId: selectedRoom, rootId })}
             onOpenProfile={(uid) => setSelectedProfile({ userId: uid, roomId: selectedRoom })}
             onOpenSettings={() => setRoomSettings(selectedRoom)}
+            onOpenRoom={(rid) => setSelectedRoom(rid)}
             incomingCall={incomingCalls[0]}
             onPickUp={(rid, name) => { matrixSrc.setActiveCallRoom(rid); setCallRoom({ roomId: rid, name }); }}
             headerExtra={fullBarItems.length > 0 ? (

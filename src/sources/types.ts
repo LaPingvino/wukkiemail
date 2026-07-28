@@ -38,6 +38,10 @@ export interface InboxItem {
   // the inbox can surface these as a distinct "only updates" fold rather than
   // lumping them with genuinely-quiet rooms.
   onlyUpdates?: boolean;
+  // This room was upgraded (m.room.tombstone) and lives on as the room id given
+  // here. The row stays visible — its history is still worth reaching — but it is
+  // marked "Replaced" and demoted so the successor sorts above it.
+  replacedBy?: string;
   invite?: boolean;      // a pending invite (you're invited but haven't joined) — shows Accept/Decline
   joinable?: boolean;    // a room listed in a space you're in but haven't joined — shows Join
   threadCount: number;

@@ -731,6 +731,13 @@ body {
   color: var(--md-sys-color-primary, #6750a4) !important;
   border: 1px solid var(--md-sys-color-primary, #6750a4);
 }
+/* Upgraded-room badge — same shape as "Join", but muted: this row is history,
+   not something to act on. */
+.replaced-badge {
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border, rgba(0,0,0,0.2));
+}
 .invite-actions { display: inline-flex; align-items: center; gap: 6px; }
 .invite-accept {
   display: inline-flex; align-items: center; gap: 4px;
@@ -1788,6 +1795,30 @@ body {
 }
 .send-error-x:hover { background: rgba(127,127,127,0.25); }
 .send-error-x .material-symbols-outlined { font-size: 16px; }
+
+/* Tombstone banner — sits where the composer would be in an upgraded room, so the
+   absence of a composer is explained rather than just felt. */
+.tombstone-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--md-sys-color-surface-variant, rgba(127,127,127,0.08));
+}
+.tombstone-icon { font-size: 20px; flex: 0 0 auto; color: var(--muted); }
+.tombstone-text { flex: 1; min-width: 0; }
+.tombstone-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.tombstone-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.tombstone-error {
+  font-size: 12px; margin-top: 4px;
+  color: var(--md-sys-color-error, #b3261e); overflow-wrap: anywhere;
+}
+.tombstone-follow {
+  flex: 0 0 auto;
+  border: none; border-radius: 999px; cursor: pointer;
+  padding: 8px 16px; font: inherit; font-weight: 600; font-size: 13px;
+  background: var(--md-sys-color-primary, #6750a4); color: #fff;
+}
+.tombstone-follow:disabled { opacity: 0.6; cursor: default; }
 
 /* @-mention autocomplete dropdown — floats above the composer. */
 .mention-menu {

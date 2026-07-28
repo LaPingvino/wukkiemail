@@ -2164,6 +2164,39 @@ export class MatrixSource implements Source {
     return room.roomId;
   }
 
+  // Is this room dead (upgraded to a successor)? Everything the room view needs
+  // to explain it and offer the way forward. `replacementJoined` decides whether
+  // the successor needs joining first or can just be opened.
+  getTombstone(roomId: string): {
+    body?: string;
+    replacementRoomId: string;
+    replacementJoined: boolean;
+    via: string[];
+  } | null {
+    const room = this.client?.getRoom(roomId);
+    if (!room) return null;
+    const t = readTombstone(room);
+    if (!t) return null;
+    const replacement = this.client?.getRoom(t.replacementRoomId);
+    return {
+      ...t,
+      replacementJoined: replacement?.getMyMembership() === 'join',
+      // The successor may be on a server we know nothing about. The old room's
+      // members are the best via candidates we have without a directory lookup:
+      // whoever is here is overwhelmingly likely to be there too.
+      via: viaServersFor(room),
+    };
+  }
+
+  // Join the room that replaced a tombstoned one, returning its room id so the
+  // caller can navigate. Idempotent — joining a room you're in is a no-op.
+  async joinReplacementRoom(roomId: string): Promise<string> {
+    const t = this.getTombstone(roomId);
+    if (!t) throw new Error('this room has not been replaced');
+    if (t.replacementJoined) return t.replacementRoomId;
+    return this.joinRoomByIdOrAlias(t.replacementRoomId, t.via);
+  }
+
   // Create a persistent voice/video call room (Element-style "video room":
   // m.room.create type org.matrix.msc3417.call). The call-membership state
   // events must be sendable by everyone, so we lower their power level to 0 in
@@ -4038,6 +4071,7 @@ const SUMMARIZABLE_STATE = new Set([
   'm.room.topic',
   'm.room.avatar',
   'm.room.canonical_alias',
+  'm.room.tombstone',
 ]);
 
 // Human one-liner for a foldable membership change. Returns null for no-op
@@ -4089,9 +4123,42 @@ function formatStateEvent(ev: MatrixEvent, room: Room): string | null {
       return `${who} changed the room avatar`;
     case 'm.room.canonical_alias':
       return `${who} changed the main address`;
+    case 'm.room.tombstone': {
+      // Without this the timeline of an upgraded room just dead-ends: the last
+      // message, then nothing, with no hint that the conversation moved.
+      const body = (ev.getContent() as { body?: string }).body;
+      return body ? `${who} replaced this room: ${body}` : `${who} replaced this room with a new one`;
+    }
     default:
       return null;
   }
+}
+
+// The room's tombstone, if it has been upgraded. Reading state (not the timeline)
+// so it survives reload — this needs `["m.room.tombstone", ""]` in the sliding-sync
+// required_state, which the SDK fork now requests.
+// Candidate `via` servers for reaching a room we may not know: the servers with
+// the most joined members here, most-represented first, capped at 3 (what the
+// permalink spec recommends). Used when joining a tombstone's replacement room.
+export function viaServersFor(room: Room): string[] {
+  const counts = new Map<string, number>();
+  for (const m of room.getJoinedMembers()) {
+    const server = m.userId.split(':')[1];
+    if (!server) continue;
+    counts.set(server, (counts.get(server) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([server]) => server);
+}
+
+export function readTombstone(room: Room): { body?: string; replacementRoomId: string } | null {
+  const ev = room.currentState.getStateEvents('m.room.tombstone', '');
+  if (!ev) return null;
+  const c = ev.getContent() as { body?: string; replacement_room?: string };
+  if (!c.replacement_room) return null;
+  return { body: c.body, replacementRoomId: c.replacement_room };
 }
 
 function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], client?: MatrixClient, weights: PriorityWeights = DEFAULT_WEIGHTS): InboxItem | null {
@@ -4258,6 +4325,9 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
   }
   // A room favourited in Wally/Element (m.favourite tag) is "pinned" here.
   const isFavourite = !!(room.tags && room.tags['m.favourite']);
+  // An upgraded room keeps its row (the history is still worth reaching) but must
+  // never outrank the room that replaced it, and must never look live.
+  const tombstone = readTombstone(room);
   return {
     id: `matrix:${room.roomId}`,
     flavor,
@@ -4277,8 +4347,11 @@ function roomToItem(room: Room, selfId: string, extraBundles: string[] = [], cli
     unreadHasText,
     onlyUpdates: unreadOnlyFiltered || undefined,
     invite: isInvite || undefined,
+    replacedBy: tombstone?.replacementRoomId,
     threadCount: live.length,
-    priority: computePriority(room, flavor, isDm, msgUnread, highlights > 0, lastTs, senderId, weights, catAdjust) + (isInvite ? 50 : 0),
+    priority: computePriority(room, flavor, isDm, msgUnread, highlights > 0, lastTs, senderId, weights, catAdjust)
+      + (isInvite ? 50 : 0)
+      - (tombstone ? 20 : 0),
     eventCategory: category,
     openPath: `/m/${encodeURIComponent(room.roomId)}`,
     senderPresence,

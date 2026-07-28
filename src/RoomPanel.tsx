@@ -144,6 +144,7 @@ export function RoomPanel({
   onOpenThread,
   onOpenProfile,
   onOpenSettings,
+  onOpenRoom,
   headerExtra,
 }: {
   matrix: MatrixSource;
@@ -174,6 +175,9 @@ export function RoomPanel({
   onOpenProfile?: (userId: string) => void;
   // Open this room's settings (header button). Undefined in thread view.
   onOpenSettings?: () => void;
+  // Navigate to another room — used by the tombstone banner to follow an upgraded
+  // room to its replacement. Undefined leaves the banner informational only.
+  onOpenRoom?: (roomId: string) => void;
   // Optional node rendered in the header between the title and the nav buttons
   // (the pinned quick-access bar). Yields space first — see .header-pinned-bar.
   headerExtra?: ReactNode;
@@ -191,6 +195,11 @@ export function RoomPanel({
   const [editHistoryFor, setEditHistoryFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ eventId: string; originalBody: string } | null>(null);
   const selfId = matrix.id;
+  // Has this room been replaced by an upgrade? Read on every render (it's a cheap
+  // currentState lookup) so a live upgrade swaps the composer for the banner
+  // immediately, without waiting for a remount. Never in thread view — a thread
+  // overlay is a sub-view of the room, which already shows the banner.
+  const tombstone = threadRootId ? null : matrix.getTombstone(roomId);
   const canRedactOthers = matrix.canRedactOthers(roomId);
   const pinned = threadRootId ? [] : matrix.getPinnedMessages(roomId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1028,22 +1037,29 @@ export function RoomPanel({
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.count}</span>
                     </button>
                   ))}
-                  <ReactionAdder
-                    onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)}
-                    customEmojis={customEmojis}
-                    mxcToHttp={(mxc) => matrix.mxcToHttp(mxc, 32, 32)}
-                  />
+                  {/* In an upgraded room there is no composer, so every affordance
+                      that would produce a NEW event is hidden: react, reply, edit.
+                      Reading, copying and deleting still work. */}
+                  {!tombstone && (
+                    <ReactionAdder
+                      onAdd={(key) => void matrix.toggleReaction(roomId, m.id, key)}
+                      customEmojis={customEmojis}
+                      mxcToHttp={(mxc) => matrix.mxcToHttp(mxc, 32, 32)}
+                    />
+                  )}
                   {/* Reply / edit / delete: after the react button, always shown
                       (no hover reveal, so the message never reflows). */}
-                  <button
-                    type="button"
-                    className="msg-reply"
-                    aria-label="Reply"
-                    title="Reply"
-                    onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
-                  >
-                    <span aria-hidden="true" className="material-symbols-outlined">reply</span>
-                  </button>
+                  {!tombstone && (
+                    <button
+                      type="button"
+                      className="msg-reply"
+                      aria-label="Reply"
+                      title="Reply"
+                      onClick={() => setReplyTo({ eventId: m.id, senderName: m.senderName, body: m.body })}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">reply</span>
+                    </button>
+                  )}
                   {!m.image && !m.file && !m.utd && m.body && (
                     <button
                       type="button"
@@ -1064,7 +1080,7 @@ export function RoomPanel({
                   >
                     <span aria-hidden="true" className="material-symbols-outlined">link</span>
                   </button>
-                  {!threadRootId && onOpenThread && (
+                  {!tombstone && !threadRootId && onOpenThread && (
                     <button
                       type="button"
                       className="msg-reply"
@@ -1075,7 +1091,7 @@ export function RoomPanel({
                       <span aria-hidden="true" className="material-symbols-outlined">forum</span>
                     </button>
                   )}
-                  {m.senderId === selfId && (
+                  {!tombstone && m.senderId === selfId && (
                     <button
                       type="button"
                       className="msg-reply"
@@ -1163,6 +1179,14 @@ export function RoomPanel({
           </button>
         </div>
       )}
+      {tombstone ? (
+        <TombstoneBanner
+          matrix={matrix}
+          roomId={roomId}
+          tombstone={tombstone}
+          onOpenRoom={onOpenRoom}
+        />
+      ) : (
       <div className="composer">
         {sendError && (
           <div className="send-error">
@@ -1406,6 +1430,57 @@ export function RoomPanel({
           <md-icon>send</md-icon>
         </md-icon-button>
       </div>
+      )}
+    </div>
+  );
+}
+
+// Shown in place of the composer when the room has been upgraded. The room stays
+// readable — its history doesn't move — but there is nowhere to send, so the only
+// affordance is the way forward.
+function TombstoneBanner({ matrix, roomId, tombstone, onOpenRoom }: {
+  matrix: MatrixSource;
+  roomId: string;
+  tombstone: { body?: string; replacementRoomId: string; replacementJoined: boolean; via: string[] };
+  onOpenRoom?: (roomId: string) => void;
+}) {
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const follow = async () => {
+    if (!onOpenRoom) return;
+    if (tombstone.replacementJoined) { onOpenRoom(tombstone.replacementRoomId); return; }
+    setJoining(true);
+    setError(null);
+    try {
+      onOpenRoom(await matrix.joinReplacementRoom(roomId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <div className="tombstone-banner" role="status">
+      <span aria-hidden="true" className="material-symbols-outlined tombstone-icon">archive</span>
+      <div className="tombstone-text">
+        <div className="tombstone-title">
+          {tombstone.body || 'This conversation continues in a new room.'}
+        </div>
+        <div className="tombstone-sub">This room is read-only — you can still read the history here.</div>
+        {error && <div className="tombstone-error">Could not join: {error}</div>}
+      </div>
+      {onOpenRoom && (
+        <button
+          type="button"
+          className="tombstone-follow"
+          onClick={() => void follow()}
+          disabled={joining || undefined}
+        >
+          {tombstone.replacementJoined ? 'Open new room' : (joining ? 'Joining…' : 'Join new room')}
+        </button>
+      )}
     </div>
   );
 }
