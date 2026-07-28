@@ -239,6 +239,21 @@ export function RoomPanel({
   // This panel's own composer field (set in its ref callback), so the draft
   // restore targets the right one even when a thread overlay adds a 2nd composer.
   const composerFieldRef = useRef<(HTMLElement & { value: string }) | null>(null);
+  // Set the composer text from CODE (not from typing). The `value` React prop
+  // lands as an ATTRIBUTE on the custom element, and md-outlined-text-field
+  // ignores the value attribute once it's `dirty` (i.e. after the user has ever
+  // typed in it) — native <input value> semantics. So every programmatic change
+  // must write the .value PROPERTY too, or the box shows stale text while React
+  // state says something else. Never call setComposeText on its own.
+  const setComposerValue = (text: string, focus = false) => {
+    setComposeText(text);
+    composeTextRef.current = text;
+    const field = composerFieldRef.current;
+    if (field) {
+      field.value = text;
+      if (focus) field.focus();
+    }
+  };
   // Display name → userId for mentions the user picked, so send() can build
   // matrix.to pills + m.mentions even though the composer is plain text.
   const acceptedMentions = useRef<Map<string, string>>(new Map());
@@ -599,20 +614,14 @@ export function RoomPanel({
       }
       acceptedMentions.current.clear();
       usedCustomEmojis.current.clear();
-      setComposeText('');
+      setComposerValue('', true);
       try { localStorage.removeItem(draftKeyRef.current); } catch { /* ignore */ }
-      // Imperatively clear the Material field too — its `value` property
-      // doesn't track React state directly across renders.
-      const field = document.querySelector('.composer md-outlined-text-field') as HTMLElement | null;
-      if (field) { (field as unknown as { value: string }).value = ''; field.focus(); }
     } catch (e) {
       setSendError(e instanceof Error ? e.message : String(e));
       // Remove the failed echo (so it doesn't look sent / block the queue).
       // The composer still holds `body`, so the user can edit and retry.
       matrix.cancelFailedEvents(roomId);
-      setComposeText(body);
-      const field = document.querySelector('.composer md-outlined-text-field') as (HTMLElement & { value: string }) | null;
-      if (field) { field.value = body; field.focus(); }
+      setComposerValue(body, true);
     } finally {
       setSending(false);
       sendingRef.current = false;
@@ -1074,7 +1083,7 @@ export function RoomPanel({
                       title="Edit"
                       onClick={() => {
                         setEditing({ eventId: m.id, originalBody: m.body });
-                        setComposeText(m.body);
+                        setComposerValue(m.body, true);
                         setReplyTo(null);
                       }}
                     >
@@ -1147,7 +1156,7 @@ export function RoomPanel({
           </div>
           <button
             type="button"
-            onClick={() => { setEditing(null); setComposeText(''); }}
+            onClick={() => { setEditing(null); setComposerValue(''); }}
             aria-label="Cancel edit"
           >
             <span aria-hidden="true" className="material-symbols-outlined">close</span>

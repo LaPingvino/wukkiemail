@@ -2961,7 +2961,11 @@ export class MatrixSource implements Source {
     };
     if (isImage) {
       const dims = await readImageDimensions(file);
-      if (dims) (content.info as Record<string, unknown>).w = dims.w, (content.info as Record<string, unknown>).h = dims.h;
+      if (dims) {
+        const info = content.info as Record<string, unknown>;
+        info.w = dims.w;
+        info.h = dims.h;
+      }
     }
     await this.safeSend(roomId, () => this.client!.sendMessage(roomId, content as never));
   }
@@ -3247,7 +3251,10 @@ export class MatrixSource implements Source {
     const versions: { body: string; ts: number }[] = [];
     const original = this.client.getRoom(roomId)?.findEventById(eventId);
     if (original) {
-      const c = original.getContent() as { body?: string };
+      // getOriginalContent(), not getContent(): once the SDK aggregates an edit,
+      // getContent() returns the LATEST body — which would list the newest version
+      // twice and never show what was actually first written.
+      const c = original.getOriginalContent() as { body?: string };
       versions.push({ body: c.body ?? '', ts: original.getTs() });
     }
     try {
@@ -3432,12 +3439,22 @@ export class MatrixSource implements Source {
     }
     const selfId = this.client.getUserId() ?? '';
 
-    // Edits index: targetEventId -> latest replacement content. We pick
-    // the highest-ts m.replace from the original sender (per spec).
+    // Edits: the SDK is the source of truth. Once it aggregates an m.replace it
+    // calls makeReplaced() on the target, so getContent() already returns the
+    // edited body and replacingEventId() tells us to show "(edited)" — including
+    // for edits the server only bundled (unsigned m.relations) and for edits whose
+    // event has since scrolled out of the lean sliding-sync slice. That's the same
+    // fix the reactions window-scan needed.
+    //
+    // The index below stays as a FALLBACK for the one case the SDK can miss under
+    // this sliding-sync fork: the m.replace event sits in our window but never got
+    // aggregated onto its target (relation seen before the target landed). It is
+    // applied only when the SDK has NOT aggregated — never on top of it.
+    // targetEventId -> latest replacement, highest-ts from the original sender (per spec).
     const editIdx = new Map<string, { body: string; html?: string; ts: number; senderId: string }>();
     for (const ev of all) {
       if (ev.getType() !== 'm.room.message') continue;
-      const c = ev.getContent() as {
+      const c = ev.getOriginalContent() as {
         body?: string; format?: string; formatted_body?: string;
         'm.new_content'?: { body?: string; format?: string; formatted_body?: string };
         'm.relates_to'?: { rel_type?: string; event_id?: string };
@@ -3527,7 +3544,15 @@ export class MatrixSource implements Source {
       const st = (ev as unknown as { status?: string }).status;
       if (st === 'not_sent' || st === 'cancelled') continue;
       // Skip the edit events themselves — they're applied via editIdx.
-      const earlyContent = ev.getContent() as { 'm.relates_to'?: { rel_type?: string; event_id?: string } };
+      // RELATIONS MUST COME FROM THE ORIGINAL CONTENT. Once the SDK aggregates an
+      // edit, getContent() returns the replacement's `m.new_content`, which per spec
+      // carries NO m.relates_to — so reading relations off getContent() makes an
+      // edited thread reply lose its thread (it jumps into the main timeline) and an
+      // edited reply lose its reply chip. getOriginalContent() keeps the relation
+      // (and still returns decrypted content for E2EE rooms).
+      const earlyContent = ev.getOriginalContent() as {
+        'm.relates_to'?: { rel_type?: string; event_id?: string; 'm.in_reply_to'?: { event_id?: string } };
+      };
       if (earlyContent['m.relates_to']?.rel_type === 'm.replace') continue;
       // Thread routing. A thread reply has rel_type 'm.thread'; its root is
       // event_id. In thread mode we keep only the root event and its replies;
@@ -3549,7 +3574,9 @@ export class MatrixSource implements Source {
       // When the message is a rich reply, strip the spec's '> quoted'
       // fallback prefix from the plain body; the formatted_body keeps
       // the styled <mx-reply> block so the quote still shows.
-      const replyId = content['m.relates_to']?.['m.in_reply_to']?.event_id;
+      // Reply target from the ORIGINAL content too (see the relations note above).
+      const replyId = earlyContent['m.relates_to']?.['m.in_reply_to']?.event_id
+        ?? content['m.relates_to']?.['m.in_reply_to']?.event_id;
       const isReply = !!replyId;
       const stripReplyFallback = (s: string) => {
         const lines = s.split('\n');
@@ -3704,11 +3731,20 @@ export class MatrixSource implements Source {
           });
         }
       }
-      const edit = editIdx.get(msg.id);
-      if (edit && edit.senderId === msg.senderId) {
-        msg.body = edit.body;
-        msg.html = edit.html;
+      // Edited? Ask the SDK first: replacingEventId() covers both the aggregated
+      // edit event and a server-bundled m.relations entry whose event we never saw.
+      // When it aggregated, getContent() already gave us the new body above, so we
+      // only set the marker. The window-scan index is the fallback for the
+      // not-aggregated case (see the editIdx comment).
+      if (ev.replacingEventId?.()) {
         msg.edited = true;
+      } else {
+        const edit = editIdx.get(msg.id);
+        if (edit && edit.senderId === msg.senderId) {
+          msg.body = edit.body;
+          msg.html = edit.html;
+          msg.edited = true;
+        }
       }
       const byKey = reactionTimelineSet.relations
         ?.getChildEventsForEvent(msg.id, 'm.annotation', 'm.reaction')
