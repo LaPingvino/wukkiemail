@@ -1200,7 +1200,9 @@ export class MatrixSource implements Source {
   }
 
   // Manual "catch up now" — invoked from a user click (a REAL activity signal, never a
-  // timer; blind/periodic pokes were reverted because resend aborts the in-flight load).
+  // timer; blind/periodic pokes were reverted, and a resend is now QUEUED behind the
+  // in-flight request rather than aborting it — aborting lost whatever Continuwuity had
+  // already committed as delivered, which is why rooms came up late or half-empty).
   // Reissues the sliding-sync request so Continuwuity recomputes the room's latest state
   // (a poll can return just before a message settles), then re-renders the open chat from
   // the live timeline (which also fixes the case where the event arrived but a snapshot
