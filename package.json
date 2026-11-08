@@ -21,7 +21,7 @@
     "emojibase-data": "^15.3.2",
     "lit": "^3.2.0",
     "livekit-client": "^2.18.0",
-    "matrix-js-sdk": "github:LaPingvino/matrix-js-sdk#414611d95b5c22c16f47a503a3976de62236499a",
+    "matrix-js-sdk": "github:LaPingvino/matrix-js-sdk#708082714e59b00837fabde767daa79c4d3c41f0",
     "matrix-widget-api": "^1.17.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
