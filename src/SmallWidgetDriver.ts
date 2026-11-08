@@ -56,16 +56,19 @@ export class SmallWidgetDriver extends WidgetDriver {
 
   private readonly mxClient: MatrixClient;
 
+  private readonly widgetName: string;
+
   public constructor(
     mx: MatrixClient,
     allowedCapabilities: Capability[],
-    _forWidget: Widget,
+    forWidget: Widget,
     _forWidgetKind: WidgetKind,
     _virtual: boolean,
     private inRoomId?: string,
   ) {
     super();
     this.mxClient = mx;
+    this.widgetName = forWidget.name || forWidget.templateUrl || 'A widget';
 
     this.allowedCapabilities = new Set([
       ...allowedCapabilities,
@@ -167,7 +170,11 @@ export class SmallWidgetDriver extends WidgetDriver {
   }
 
   public async validateCapabilities(requested: Set<Capability>): Promise<Set<Capability>> {
-    const granted = new Set(requested);
+    // Only what the widget asks for AND we allow (audit 2026-11-08): granting every request let any
+    // widget a room member adds read the decrypted timeline of every room and send as the user
+    // anywhere (org.matrix.msc2762.timeline:* plus send capabilities). The allowed set is the
+    // widget's own room plus the call events.
+    const granted = new Set([...requested].filter((c) => this.allowedCapabilities.has(c)));
     const supportsDelayed = await this.checkDelayedEventSupport();
     if (!supportsDelayed) {
       granted.delete(MatrixCapabilities.MSC4157SendDelayedEvent);
@@ -318,6 +325,12 @@ export class SmallWidgetDriver extends WidgetDriver {
   }
 
   public async askOpenID(observer: SimpleObservable<IOpenIDUpdate>): Promise<void> {
+    // An OpenID token proves the user's identity to the widget's own server: ask, every time.
+    const who = this.mxClient.getUserId() ?? 'you';
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`${this.widgetName} wants to confirm your identity (${who}) to its own server. Allow?`)) {
+      return observer.update({ state: OpenIDRequestState.Blocked });
+    }
     try {
       const token = await this.mxClient.getOpenIdToken();
       return observer.update({ state: OpenIDRequestState.Allowed, token });

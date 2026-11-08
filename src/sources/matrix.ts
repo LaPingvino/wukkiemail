@@ -2523,7 +2523,6 @@ export class MatrixSource implements Source {
     if (!ok) throw new Error('That recovery key does not match this account.');
     storePrivateKey(keyId, decoded);
     // Keep the legacy stash too — some callbacks/paths still read it.
-    (window as unknown as { _wukkieKey?: Uint8Array })._wukkieKey = decoded;
 
     // The rust OlmMachine can only import our cross-signing PRIVATE keys (from 4S)
     // if it ALREADY holds our cross-signing PUBLIC keys — otherwise the import
@@ -2880,7 +2879,6 @@ export class MatrixSource implements Source {
     // storage with it. Order matters: cross-signing wants to write
     // its keys into an existing SSSS, not the other way around.
     const recoveryKey = await crypto.createRecoveryKeyFromPassphrase();
-    (window as unknown as { _wukkieKey?: Uint8Array })._wukkieKey = recoveryKey.privateKey;
     await crypto.bootstrapSecretStorage({
       createSecretStorageKey: async () => recoveryKey,
       setupNewKeyBackup: true,

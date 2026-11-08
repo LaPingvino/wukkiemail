@@ -25,6 +25,7 @@ function substituteTemplateVars(url: string, matrix: MatrixSource, roomId: strin
 
 function WidgetView({ matrix, roomId, widget }: { matrix: MatrixSource; roomId: string; widget: RoomWidget }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const smallWidgetRef = useRef<SmallWidget | null>(null);
 
   useEffect(() => {
@@ -37,7 +38,20 @@ function WidgetView({ matrix, roomId, widget }: { matrix: MatrixSource; roomId: 
       smallWidgetRef.current = null;
     }
 
-    const resolvedUrl = new URL(substituteTemplateVars(widget.url, matrix, roomId, widget.id));
+    // Only https widgets (audit 2026-11-08): the URL comes from room state, and a javascript: URL in an
+    // allow-same-origin iframe would run with this app's origin (and its localStorage token).
+    let resolvedUrl: URL;
+    try {
+      resolvedUrl = new URL(substituteTemplateVars(widget.url, matrix, roomId, widget.id));
+    } catch {
+      setUrlError('This widget\'s address is not a valid URL.');
+      return undefined;
+    }
+    if (resolvedUrl.protocol !== 'https:') {
+      setUrlError(`This widget uses a ${resolvedUrl.protocol} address; only https widgets are opened.`);
+      return undefined;
+    }
+    setUrlError(null);
     resolvedUrl.searchParams.set('widgetId', widget.id);
     resolvedUrl.searchParams.set('parentUrl', window.location.origin);
 
@@ -64,13 +78,17 @@ function WidgetView({ matrix, roomId, widget }: { matrix: MatrixSource; roomId: 
   }, [matrix, roomId, widget.id, widget.url]);
 
   return (
+    <>
+    {urlError && <p className="widget-error" role="alert">{urlError}</p>}
     <iframe
+      hidden={!!urlError}
       ref={iframeRef}
       title={widget.name}
       className="widget-iframe"
       sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads"
       allow="microphone; camera; fullscreen; clipboard-write"
     />
+    </>
   );
 }
 

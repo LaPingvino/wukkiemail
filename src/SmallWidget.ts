@@ -14,6 +14,8 @@ import {
 } from 'matrix-js-sdk';
 import {
   ClientWidgetApi,
+  EventDirection,
+  WidgetEventCapability,
   IRoomEvent,
   IStickyActionRequest,
   IWidget,
@@ -81,6 +83,11 @@ export class SmallWidget {
       const room = this.client.getRoom(this.roomId);
       const events: Partial<IEvent>[] = [];
       const { type } = ev.detail.data;
+      // Answer only what the widget may read; otherwise leave it to widget-api's own checked handler.
+      const canRead = this.messaging?.hasCapability(
+        WidgetEventCapability.forStateEvent(EventDirection.Receive, type).raw,
+      );
+      if (!canRead) return undefined;
 
       ev.preventDefault();
       if (room === null) return this.messaging?.transport.reply(ev.detail, { events });
